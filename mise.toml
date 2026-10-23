@@ -26,6 +26,6 @@ description = "The Go tests: no Cloudflare account, nothing deployed"
 run = "go vet ./... && go test ./..."
 
 [tasks.prove]
-description = "One real deploy, before a release (a few minutes): in example/, on its own login (the first time, an Allow), a local Worker with no login at all, a deploy, the live Worker's D1, KV, R2 and secret, stray tokens refused, everything deleted again; and a brand-new repo from GitHub (MISE_CLOUDFLARE_REF, default main) set up by init alone. --clean also logs the login out"
+description = "The end-to-end tests, on a real Cloudflare account, before a release (about 40 minutes): example/ as a developer uses it, following the guide (secret, deploy, live D1, KV, R2 and secret, stray tokens refused); a new repo set up from GitHub by init alone; Cloudflare deploying every push (production from a throwaway branch, a pull request's preview, gone with its branch); GitHub Actions deploying (a push, a pull request's preview, gone when it closes). Everything deleted after. The first time, an Allow"
 usage = 'flag "--clean" help="also log the example login out and delete it; the next run logs in again"'
-run = "CLOUDFLARE_E2E=1 PROVE_CLEAN=${usage_clean:-false} go test ./e2e -run '^(TestProve|TestOtherRepo)$' -count=1 -v -timeout 30m"
+run = "CLOUDFLARE_E2E=1 PROVE_CLEAN=${usage_clean:-false} go test ./e2e -run '^(TestProve|TestOtherRepo|TestGitHub|TestActions)$' -count=1 -v -timeout 120m"

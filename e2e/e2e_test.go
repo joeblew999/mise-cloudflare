@@ -98,6 +98,19 @@ type status struct {
 	Profile  string   `json:"profile"`
 	LoggedIn bool     `json:"loggedIn"`
 	Needs    []string `json:"needs"`
+	Deployed bool     `json:"deployed"`
+	URL      string   `json:"url"`
+	GitHub   string   `json:"github"`
+	Next     string   `json:"next"`
+}
+
+// next is what the guide (mise run cloudflare) says to run next, failing unless it says want.
+func (r repo) next(want string) {
+	r.t.Helper()
+	if s := r.status(); !strings.Contains(s.Next, want) {
+		r.t.Fatalf("the guide says next: %q, not %q", s.Next, want)
+	}
+	r.pass("the guide says next: %s", want)
 }
 
 func (r repo) status() status {
@@ -269,12 +282,31 @@ func (r repo) leftovers() []string {
 	if r.r2() {
 		left = append(left, "R2 "+r.worker+"-bucket")
 	}
+	if !strings.HasSuffix(r.worker, "-previews") {
+		left = append(left, repo{t: r.t, dir: r.dir, worker: r.worker + "-previews", tool: r.tool}.leftovers()...)
+	}
 	return left
 }
 
-// deleteAll deletes the Worker, its D1, KV and R2, with wrangler on the repo's login. Errors are ignored: it also runs
-// as cleanup after a failure, when some of them may not exist.
+// putSecret runs a wrangler secret command (secret put, preview base-config secret put) through the task a developer
+// would, its value typed in as wrangler asks for it.
+func (r repo) putSecret(args ...string) {
+	r.t.Helper()
+	cmd := exec.Command("mise", append([]string{"run", "cloudflare", "wrangler"}, args...)...)
+	cmd.Dir = r.dir
+	cmd.Stdin = strings.NewReader("set-by-prove")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		r.t.Fatalf("wrangler %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	r.pass("wrangler %s", strings.Join(args, " "))
+}
+
+// deleteAll deletes the Worker, its D1, KV and R2, and its previews' own, with wrangler on the repo's login. Errors
+// are ignored: it also runs as cleanup after a failure, when some of them may not exist.
 func (r repo) deleteAll() {
+	if !strings.HasSuffix(r.worker, "-previews") {
+		defer repo{t: r.t, dir: r.dir, worker: r.worker + "-previews", tool: r.tool}.deleteAll()
+	}
 	if r.env != "" {
 		r.try(nil, "wrangler", "delete", "--force", "--env", r.env)
 	} else {
@@ -321,12 +353,14 @@ func prove(t *testing.T, r repo, clean bool) {
 		}
 	})
 	before := r.must(nil, "git", "status", "--porcelain", ".")
-	secrets := filepath.Join(t.TempDir(), "secrets.json")
-	os.WriteFile(secrets, []byte(`{"GREETING":"set-by-prove"}`), 0o600)
-	r.cf([]string{"WRANGLER_OUTPUT_FILE_PATH=.wrangler/output.json"}, "wrangler", "deploy", "--secrets-file", secrets)
+	// As a developer does it: what the guide says, each time.
+	r.next("wrangler secret put GREETING")
+	r.putSecret("secret", "put", "GREETING")
+	r.next("mise run cloudflare:deploy")
+	r.must(nil, "mise", "run", "cloudflare:deploy")
 	s := r.status()
-	if !s.LoggedIn {
-		t.Fatalf("no login %s", r.worker)
+	if !s.LoggedIn || !s.Deployed {
+		t.Fatalf("not deployed on the login %s: %+v", r.worker, s)
 	}
 	r.pass("deployed on the repo's own login, %s", s.Profile)
 
@@ -340,6 +374,7 @@ func prove(t *testing.T, r repo, clean bool) {
 		t.Fatalf("the repo changed:\n%s", after)
 	}
 	r.pass("deploying wrote nothing into the repo: no IDs")
+	r.next("mise run cloudflare:github")
 
 	r.step("4. A stray CLOUDFLARE_API_TOKEN is refused, in the shell and in a .env")
 	if out, err := r.try([]string{"CLOUDFLARE_API_TOKEN=dummy-not-a-real-token"}, "wrangler", "deploy"); err == nil || !strings.Contains(out, "refusing:") {
