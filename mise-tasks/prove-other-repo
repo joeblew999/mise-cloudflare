@@ -4,7 +4,8 @@
 set -euo pipefail
 . "$(dirname "$0")/../shared/cloudflare/.helpers.sh"
 src="$(cd "$(dirname "$0")/../example" && pwd)"
-repo=$(mktemp -d)/other-repo; mkdir -p "$repo"; cd "$repo"
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+repo=$tmp/other-repo; mkdir -p "$repo"; cd "$repo"
 step() { printf '\n=== %s\n' "$*"; }
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; exit 1; }
@@ -44,5 +45,4 @@ step "Teardown and clean"
 mise run cloudflare:teardown
 mise run cloudflare:clean
 [ ! -f "$(CF_PROFILE=cloudflare-zero-other profile_file)" ] && pass "its login is gone" || fail "its login is still there"
-cd / && rm -rf "$(dirname "$repo")"
 echo; echo "ALL PASSED"
