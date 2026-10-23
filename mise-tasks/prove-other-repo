@@ -31,9 +31,6 @@ CF_SCOPES = "$scopes"
 includes = ["git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=$CF_ZERO_REF", "mise-tasks"]
 TOML
 git init -q && git add -A
-# Work in the new repo as a developer's own shell would. `mise run prove-other-repo` sets MISE_CONFIG_ROOT,
-# MISE_PROJECT_ROOT and more to this repo, and the new repo's mise then can't find its git-included tasks.
-for v in $(compgen -e | grep '^MISE_'); do unset "$v"; done
 # mise keeps a copy of git-included tasks and doesn't fetch them again, so this run would test a stale copy.
 export MISE_TASK_REMOTE_NO_CACHE=true
 mise trust -q mise.toml
