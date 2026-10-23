@@ -13,6 +13,7 @@ deletes what it made even when it fails.
 | `mise run prove-other-repo` | A new repo gets mise-cloudflare from GitHub (`go get -tool`, ref `MISE_CLOUDFLARE_REF`), runs `init`, then the same proof on a login of its own | Yes |
 | `mise run prove-builds` | Workers Builds, with Cloudflare's own token: staging from one throwaway branch, production from another, both with KV and R2 working; a preview of a pull request's branch, on the previews' own KV and R2 (`cloudflare:previews`); the preview gone once its branch is deleted; then all of it removed. main is never touched | Yes |
 | `mise run prove-actions` | GitHub Actions deploying: `ci-token` stores CI's token; a throwaway branch with the stamped workflow deploys a Worker nothing else deploys, with its KV; a pull request gets its `pr-<number>` preview, on the previews' own KV, URL commented; closing it deletes the preview; then all of it removed | Yes |
+| `mise run prove-bindings` | The scopes worked out from a Worker's bindings: one of each kind Cloudflare makes for nothing (Queues, Vectorize, Workers AI, Durable Objects, Workflows, Analytics Engine, rate limits, Browser, Images), on its own login holding exactly those scopes, makes its queue and index, deploys, and uses every binding live; then all of it deleted | Yes |
 | `mise run prove-basin` | Basin on a repo's own login: works up to a Basin Pipeline's catalog sink, which needs a stored API token Cloudflare keeps ("The sink token is expired or invalid") | Yes |
 
 

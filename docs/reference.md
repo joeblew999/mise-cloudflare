@@ -76,14 +76,15 @@ is [config.BindingScopes](../config/config.go).
 | `kv_namespaces` | `workers_kv:write` | Yes (`prove`, `prove-builds`) |
 | `d1_databases` | `d1:write` | Yes (`prove`) |
 | `r2_buckets` | none: `workers:write` covers it | Yes (`prove`, `prove-builds`) |
-| `queues` | `queues:write` | Not yet |
+| `queues` | `queues:write` | Yes (`prove-bindings`) |
 | `pipelines` | `pipelines:write` | Its streams, by `prove-basin`; the binding not yet |
-| `ai` | `ai:write` | Not yet |
+| `ai` | `ai:write` | Yes (`prove-bindings`) |
 | `secrets_store_secrets` | `secrets_store:write` | Not yet |
 | `containers` | `containers:write`, `cloudchamber:write` | Not yet |
-| `browser` | `browser:write` | Not yet |
+| `browser` | `browser:write` | Yes (`prove-bindings`) |
 | `route`, `routes` | `workers_routes:write`, `zone:read` | Not yet |
-| `durable_objects`, `workflows`, `services`, `vectorize`, `hyperdrive`, `analytics_engine_datasets`, `dispatch_namespaces`, `images`, `ratelimits`, `send_email` | none beyond the four | Not yet |
+| `durable_objects`, `workflows`, `vectorize`, `analytics_engine_datasets`, `images`, `ratelimits` | none beyond the four | Yes (`prove-bindings`) |
+| `services`, `hyperdrive`, `dispatch_namespaces`, `send_email` | none beyond the four | Not yet: each needs something outside the Worker (another Worker, a database, Workers for Platforms, a zone with Email Routing) |
 
 If a binding is refused anyway, wrangler names the Cloudflare API call it was refused: add the scope to
 `cloudflare.toml`'s `scopes`.
