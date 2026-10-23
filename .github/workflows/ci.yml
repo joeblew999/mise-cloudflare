@@ -26,6 +26,7 @@ jobs:
       - name: Check out with git (no actions/checkout)
         run: |
           git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
           git checkout -q --detach FETCH_HEAD
           git log --oneline -1

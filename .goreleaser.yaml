@@ -19,5 +19,9 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: checksums.txt
+release:
+  github:
+    owner: joeblew999
+    name: mise-cloudflare
 changelog:
   disable: true
