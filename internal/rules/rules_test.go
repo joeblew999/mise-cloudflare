@@ -27,7 +27,7 @@ func repo(t *testing.T, files map[string]string) string {
 func good() map[string]string {
 	return map[string]string{
 		".dev.vars.example": "GREETING=dummy\n",
-		".gitignore":        ".dev.vars\n.env*\nnode_modules/\n",
+		".gitignore":        ".dev.vars\n.env*\n.cloudflare/\nnode_modules/\n",
 		"package.json":      `{ "devDependencies": { "wrangler": "4.151.3" } }`,
 		"README.md":         "Never run wrangler login here.\n",
 		"src/worker.js":     "export default {}\n",
@@ -73,7 +73,7 @@ func TestCheckFinds(t *testing.T) {
 	}
 	got := strings.Join(p, "\n")
 	for _, want := range []string{"no previews block", "an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
-		"notes.txt holds a Cloudflare token", ".dev.vars isn't", ".env isn't", "secrets.required lists [GREETING KEY]", "isn't pinned"} {
+		"notes.txt holds a Cloudflare token", ".dev.vars isn't", ".env isn't", ".cloudflare/ isn't", "secrets.required lists [GREETING KEY]", "isn't pinned"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}

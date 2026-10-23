@@ -9,7 +9,7 @@ mise-cloudflare writes, how the logins work, Workers Builds and GitHub Actions i
 |---|---|
 | A wrangler config with no account or resource IDs, in any environment; its secrets in `"secrets": { "required": [...] }` | `cloudflare:check` |
 | For Worker Previews (`cloudflare:builds`, or `[workflow] deploy`), a `previews` block in it (`"previews": {}` will do). Previews inherit nothing from production, and Cloudflare creates no KV, D1 or R2 for them (only Durable Objects and Containers), so `cloudflare:previews` makes their own and the block leaves KV, D1 and R2 out (one it names, it must name an existing resource of). Every other storage binding (Queues, Vectorize, …) goes in it, pointed at a preview-safe resource. A repo with no previews needs no block | `cloudflare:check`, `cloudflare:builds` |
-| `.dev.vars.example` with a dummy for each required secret; `.dev.vars` and `.env` git-ignored | `cloudflare:check` |
+| `.dev.vars.example` with a dummy for each required secret; `.dev.vars`, `.env` and `.cloudflare/` (where Cloudflare's `cf` caches the account it logged into, when it isn't told one and there's no `node_modules`) git-ignored | `cloudflare:check` |
 | wrangler pinned exactly in `package.json`; a lockfile, if any, committed (Workers Builds installs from git) | `cloudflare:check`, `cloudflare:builds` |
 | The tasks, skill, workflow and Claude Code hook mise-cloudflare wrote, current for its version | `cloudflare:check` |
 | For Workers Builds: Cloudflare's GitHub app on the repository, a build token on the account | `cloudflare:builds` says which is missing and how to add it |
@@ -40,7 +40,7 @@ them; after upgrading, write them again (`cloudflare:check` fails while they're 
 | `mise run cloudflare:workflow` | Writes the GitHub Actions workflow | Never |
 | `mise run cloudflare:claude` | Writes the Claude Code cloud session hook | Never |
 | `mise run cloudflare:status` | The repo's login, its account and scopes, stray tokens, this machine's other wrangler logins | Never |
-| `mise run cloudflare:check` | The repo's rules: no account or resource IDs (in any environment), no tokens, `.dev.vars` and `.env` git-ignored, `.dev.vars.example` matching `secrets.required`, wrangler pinned | Never |
+| `mise run cloudflare:check` | The repo's rules: no account or resource IDs (in any environment), no tokens, `.dev.vars`, `.env` and `.cloudflare/` git-ignored, `.dev.vars.example` matching `secrets.required`, wrangler pinned | Never |
 | `mise run cloudflare:logout` | Logs the repo's logins out on Cloudflare and deletes them | Never |
 
 Each runs `cloudflare …` (or `go tool cloudflare …`); `--json` gives one JSON document. Deploying and deleting are

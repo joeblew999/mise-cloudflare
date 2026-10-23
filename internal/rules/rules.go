@@ -52,7 +52,8 @@ func Check(dir string, w wconfig.Config, previews bool) ([]string, error) {
 		}
 	}
 	// Only the repo's own ignore files count: another developer doesn't have this machine's global gitignore.
-	for _, f := range []string{".dev.vars", ".env"} {
+	// .cloudflare/ is where Cloudflare's cf CLI caches the account it logged into (its ID and name).
+	for _, f := range []string{".dev.vars", ".env", ".cloudflare/"} {
 		if exec.Command("git", "-C", dir, "-c", "core.excludesFile=", "check-ignore", "-q", f).Run() != nil {
 			bad("%s isn't git-ignored", f)
 		}
