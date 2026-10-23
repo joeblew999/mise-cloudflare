@@ -1,0 +1,65 @@
+# mise-cloudflare's mise tasks: the repo's own Cloudflare login, and the repo's wrangler on it (github.com/joeblew999/
+# mise-cloudflare). In a repo, go tool cloudflare tasks writes this file to .mise/tasks/cloudflare.toml, one of mise's
+# default task directories, from the mise-cloudflare version in its go.mod: don't edit it, run that again after
+# upgrading. --json prints one JSON document for a program; exit codes: 0 ok, 1 problems.
+
+["cloudflare:login"]
+description = "The repo's own Cloudflare login, with exactly cloudflare.toml's scopes: a browser on this machine, or a link to open on any device (Claude Code cloud sessions, CLOUDFLARE_LOGIN=device). Once, then again only when the scopes change"
+run = "go tool cloudflare login"
+
+["cloudflare:deploy"]
+description = "wrangler deploy on the repo's own login (logs in first if needed); what it deployed, URLs included, goes to .wrangler/output.json"
+env = { WRANGLER_OUTPUT_FILE_PATH = ".wrangler/output.json" }
+run = "go tool cloudflare wrangler deploy"
+
+["cloudflare:wrangler"]
+description = "Any wrangler command, with the repo's pinned wrangler on its own login: mise run cloudflare:wrangler -- d1 list"
+usage = 'arg "<args>" var=#true help="the wrangler command and its arguments"'
+run = "go tool cloudflare wrangler ${usage_args}"
+
+["cloudflare:builds"]
+description = "Set Cloudflare's Workers Builds up for the Worker: a push to the branch deploys production, every other branch gets a preview with its URL on the pull request; with cloudflare.toml's staging, a push to that branch deploys staging (env.staging). All with Cloudflare's own build token: GitHub holds no Cloudflare credential. Once per repo; the first time, a cf login approved on any device. Deploy each Worker once first"
+tools = { "npm:cf" = "1.0.0-beta.20", gh = "2.103.0" }
+usage = '''
+flag "--off" help="remove the Workers Builds setup"
+flag "--branch <branch>" help="the branch whose pushes deploy production; default cloudflare.toml's, else the repository's default, or production with staging"
+flag "--staging <branch>" help="the branch whose pushes deploy staging (env.staging); default cloudflare.toml's"
+flag "--json" help="one JSON document on stdout"
+'''
+run = "go tool cloudflare -off=${usage_off:-false} -branch=${usage_branch:-} -staging=${usage_staging:-} -json=${usage_json:-false} builds"
+
+["cloudflare:ci-token"]
+description = "For cloudflare.toml's [workflow] deploy: make the Cloudflare API token GitHub Actions deploys with (Cloudflare's usual Workers permissions and [workflow] permissions) and store it as the repository's GitHub secrets, never shown. The first time, a cf login approved on any device; gh must be logged in. --off deletes the token and the secrets"
+tools = { "npm:cf" = "1.0.0-beta.20", gh = "2.103.0" }
+usage = 'flag "--off" help="delete the token and its GitHub secrets"'
+run = "go tool cloudflare -off=${usage_off:-false} ci-token"
+
+["cloudflare:status"]
+description = "The repo's login (logged in or not, its account and scopes), stray tokens, and this machine's other wrangler logins (a checksum, never their contents)"
+usage = 'flag "--json" help="one JSON document on stdout"'
+run = "go tool cloudflare -json=${usage_json:-false} status"
+
+["cloudflare:check"]
+description = "The repo's rules: no account or resource IDs in its wrangler config, no tokens in its files and nothing calling the machine's own login, .dev.vars and .env git-ignored, .dev.vars.example matching secrets.required, wrangler pinned. No account needed"
+usage = 'flag "--json" help="one JSON document on stdout"'
+run = "go tool cloudflare -json=${usage_json:-false} check"
+
+["cloudflare:logout"]
+description = "Log the repo's login out on Cloudflare and delete it, with its folder binding; the next task logs in again"
+run = "go tool cloudflare logout"
+
+["cloudflare:skill"]
+description = "Install or update the cloudflare agent skill (.claude/skills/cloudflare), which Claude Code uses to work on Cloudflare from this repo"
+run = "go tool cloudflare skill"
+
+["cloudflare:workflow"]
+description = "Write the GitHub Actions workflow for this Worker (.github/workflows/cloudflare.yml at the repository's root, cloudflare-<folder>.yml for a Worker in a subfolder): its setup and test tasks, then cloudflare:check, on every push and pull request, with no Cloudflare credentials. Run it again after upgrading"
+run = "go tool cloudflare workflow"
+
+["cloudflare:claude"]
+description = "Set the repository up for Claude Code cloud sessions: the hook that installs mise, every pinned tool and this Worker's setup when a session starts (.claude/hooks/mise-cloudflare-session-start.sh, and its entry in .claude/settings.json). Run it again after upgrading"
+run = "go tool cloudflare claude"
+
+["cloudflare:tasks"]
+description = "Write this file again from the mise-cloudflare version in go.mod: run it after upgrading"
+run = "go tool cloudflare tasks"
