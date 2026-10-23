@@ -55,6 +55,10 @@ You also need:
 - **R2:** works with `workers:write`. wrangler has no R2 scope, yet creating, using and emptying buckets all worked, as the proofs show.
 - **Basin, tested 23 Oct 2026 with a repo's own login:** turning on Basin Catalog, Basin SQL queries (through wrangler and through Cloudflare's API) and creating a Basin Pipeline stream all work, with no API token. A fake token gets HTTP 403. One thing needs a stored API token: a Basin Pipeline's sink into Basin Catalog. Cloudflare keeps that token and uses it itself, and it rejected the login's token: the pipeline went to `failed` with "The sink token is expired or invalid". `mise run prove-basin` shows this.
 
+## Claude Code cloud sessions
+
+A cloud session (claude.ai/code, or the Claude iOS app) starts on a bare Linux machine. [.claude/settings.json](.claude/settings.json) runs [.claude/hooks/session-start.sh](.claude/hooks/session-start.sh) at the start of each session. It installs mise, then every tool the repo pins, so `mise run …` works straight away. On your own machine it does nothing. The cloud environment's network settings must allow mise's downloads: mise.run, GitHub, nodejs.org and the npm registry.
+
 ## Why it's safe
 
 - The login is a [wrangler auth profile](https://developers.cloudflare.com/workers/wrangler/profiles/) (beta), named after the repo and bound to its folder. The machine's default `wrangler login` and other repos' logins are untouched.
