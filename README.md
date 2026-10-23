@@ -78,6 +78,17 @@ Rather have GitHub Actions deploy instead of Cloudflare? Set `[workflow] deploy 
 | GitHub Actions deploying instead, once per repo | Make CI's token from the link `cloudflare:ci-token` prints |
 | Anything else: deploys, previews, merges, GitHub Actions | Nothing |
 
+## Logins and tokens
+
+| | What it is | Where | What you do |
+|---|---|---|---|
+| **The repo's login** | What you get by clicking Allow: a token on your machine that can do only what the repo's bindings need | Your machine, Claude Code | Allow, once |
+| **Cloudflare's build token** | Cloudflare's own, which never leaves Cloudflare | Workers Builds: previews, staging, production | Nothing |
+| **CI's API token** | A secret made in Cloudflare's dashboard | GitHub Actions, only if you have it deploy | Make it once, from the link `cloudflare:ci-token` gives |
+
+A `CLOUDFLARE_API_TOKEN` in your shell or a `.env` would override every login, so outside CI the tasks refuse one.
+The [reference](docs/reference.md#cloudflares-three-kinds-of-credential) has the whole story.
+
 ## Claude Code
 
 The Claude skill (`.claude/skills/cloudflare`) teaches Claude to use these tasks. In a Claude Code cloud session, the

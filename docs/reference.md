@@ -46,6 +46,26 @@ them; after upgrading, write them again (`cloudflare:check` fails while they're 
 Each runs `cloudflare …` (or `go tool cloudflare …`); `--json` gives one JSON document. Deploying and deleting are
 wrangler's own job, done by the repo's own wrangler; `wrangler dev` needs no login at all.
 
+## Cloudflare's three kinds of credential
+
+- **A login (OAuth).** wrangler opens Cloudflare's page, you click Allow and pick your account, and wrangler gets a
+  token that can do only what the page listed: its scopes, such as `workers_kv:write`. It lasts about an hour, and
+  wrangler renews it by itself. It lives in wrangler's folder on your machine, never in the repo. Each repo gets its own,
+  with exactly the scopes its bindings need: that's the repo's login, below.
+- **An API token.** A long secret string made by hand in Cloudflare's dashboard, its permissions picked there ("Workers
+  Scripts Edit", "D1 Edit": the same idea as scopes, by other names). Using one needs no click, so it's for machines with
+  no one there to click: GitHub Actions. Whoever has the string has its power, so it's kept as a GitHub secret. It can
+  belong to a person or to the account; CI's should be the account's, so it outlives anyone leaving. Used here only if
+  GitHub Actions deploys ([below](#github-actions)).
+- **Cloudflare's build token.** Workers Builds deploys with a token Cloudflare made and keeps itself, so it never leaves
+  Cloudflare and GitHub holds no Cloudflare credential at all ([below](#workers-builds-production-staging-previews-and-pull-requests)).
+
+A credential is only needed to change things on Cloudflare: creating a KV namespace, deploying, deleting. A running
+Worker uses none: Cloudflare connects its bindings itself. That's why deploying needs only Workers Scripts, and a
+product's own scope or permission is for creating and managing its resources. And a `CLOUDFLARE_API_TOKEN` in a shell
+or a `.env` beats every login (wrangler uses it, silently, instead), so outside CI the tasks refuse one. Cloudflare's
+old Global API Key, which can do everything, is never used.
+
 ## The login: where it comes from, where it lives
 
 - **What it may do:** exactly what the Worker's bindings need, worked out from its wrangler config (the table below),
