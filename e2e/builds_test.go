@@ -33,6 +33,9 @@ func TestBuilds(t *testing.T) {
 	} else if !strings.Contains(out, "10007") {
 		t.Fatalf("couldn't tell whether %s is deployed", r.worker)
 	}
+	if left := r.leftovers(); len(left) > 0 {
+		t.Fatalf("%s is left over from another run: delete it first", strings.Join(left, ", "))
+	}
 	t.Cleanup(func() {
 		r.step("Removing everything: the Workers Builds setup, the branches, the Worker, its KV and R2")
 		r.try(nil, "-off", "builds")
@@ -74,9 +77,14 @@ func TestBuilds(t *testing.T) {
 	}
 	r.pass("%s: still built from %s", url, prod)
 
-	r.step("go tool cloudflare builds -off removes the setup")
+	r.step("go tool cloudflare builds -off removes the setup; then the Worker, its KV and R2 go")
 	r.cf(nil, "-off", "builds")
 	r.pass("removed")
+	r.deleteAll()
+	if left := r.leftovers(); len(left) > 0 {
+		t.Fatalf("left on the account: %s", strings.Join(left, ", "))
+	}
+	r.pass("nothing left on the account")
 	fmt.Println("\nALL PASSED")
 }
 

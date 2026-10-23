@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -230,22 +231,41 @@ func (r repo) kv() string {
 	return ""
 }
 
-// r2 reports whether the Worker's bucket (<worker>-bucket) exists.
+// r2 reports whether the Worker's bucket (<worker>-bucket) exists. wrangler lists each as "name:" and the name, padded.
 func (r repo) r2() bool {
 	for _, line := range strings.Split(r.wrangler("r2", "bucket", "list"), "\n") {
-		if strings.TrimSpace(line) == "name: "+r.worker+"-bucket" {
+		if f := strings.Fields(line); len(f) == 2 && f[0] == "name:" && f[1] == r.worker+"-bucket" {
 			return true
 		}
 	}
 	return false
 }
 
-// jsonPart is wrangler's output from its first [ or {, past the banner it prints first.
+// jsonStart is where JSON starts in wrangler's output: the first line that begins with [ or {. A line like
+// "▲ [WARNING] …", which wrangler prints first on some machines, isn't it.
+var jsonStart = regexp.MustCompile(`(?m)^[\[{]`)
+
+// jsonPart is wrangler's JSON, past anything it prints before it.
 func jsonPart(out string) string {
-	if i := strings.IndexAny(out, "[{"); i >= 0 {
-		return out[i:]
+	if loc := jsonStart.FindStringIndex(out); loc != nil {
+		return out[loc[0]:]
 	}
 	return ""
+}
+
+// leftovers names the Worker's D1, KV and R2 that exist, which a proof must start without and end without.
+func (r repo) leftovers() []string {
+	var left []string
+	if r.d1() != "" {
+		left = append(left, "D1 "+r.worker+"-db")
+	}
+	if r.kv() != "" {
+		left = append(left, "KV "+r.worker+"-kv")
+	}
+	if r.r2() {
+		left = append(left, "R2 "+r.worker+"-bucket")
+	}
+	return left
 }
 
 // deleteAll deletes the Worker, its D1, KV and R2, with wrangler on the repo's login. Errors are ignored: it also runs
@@ -285,7 +305,10 @@ func prove(t *testing.T, r repo, clean bool) {
 	} else if !strings.Contains(out, "10007") {
 		t.Fatalf("couldn't tell whether %s is deployed", r.worker)
 	}
-	r.pass("the Worker isn't deployed on this account yet, so nothing else is using it")
+	if left := r.leftovers(); len(left) > 0 {
+		t.Fatalf("%s is left over from another run: delete it first", strings.Join(left, ", "))
+	}
+	r.pass("neither the Worker nor its D1, KV or R2 is on this account yet, so nothing else is using them")
 	t.Cleanup(func() {
 		if t.Failed() {
 			r.step("Cleaning up after the failure")
@@ -353,8 +376,8 @@ func prove(t *testing.T, r repo, clean bool) {
 		t.Fatalf("%s still answers", url)
 	}
 	r.pass("%s no longer answers", url)
-	if r.d1() != "" || r.kv() != "" || r.r2() {
-		t.Fatal("D1, KV or R2 left")
+	if left := r.leftovers(); len(left) > 0 {
+		t.Fatalf("left on the account: %s", strings.Join(left, ", "))
 	}
 	r.pass("no D1, KV or R2 left")
 
@@ -419,4 +442,12 @@ func TestOtherRepo(t *testing.T) {
 	}
 	r.pass("cloudflare.toml's defaults: the login is named after the Worker, %s", r.worker)
 	prove(t, r, os.Getenv("PROVE_CLEAN") == "true")
+}
+
+// TestJSONPart: wrangler's JSON is found past a warning that has brackets in it.
+func TestJSONPart(t *testing.T) {
+	out := "\u25b2 [WARNING] auth activate is experimental\n\n[\n  {\"uuid\": \"x\"}\n]\n"
+	if got := jsonPart(out); !strings.HasPrefix(got, "[\n  {") {
+		t.Errorf("got %q", got)
+	}
 }
