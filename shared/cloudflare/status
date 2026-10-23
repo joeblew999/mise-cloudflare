@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#MISE description="This machine's Cloudflare logins as wrangler stores them (never their contents), this repo's profile {{env.CF_PROFILE}}, and stray tokens. --baseline saves it; later runs say what changed since"
+#MISE timeout="1m"
+#USAGE flag "--baseline" help="Save this as the baseline (in .wrangler/, git-ignored) that later runs compare against"
+set -euo pipefail
+. "$(dirname "$0")/.helpers.sh"
+home=$(wrangler_home)
+baseline=.wrangler/cloudflare-baseline
+
+snapshot() {
+  echo "wrangler folder      ${home/#$HOME/~}"
+  echo "default login        config/default.toml $(file_hash "$home/config/default.toml")"
+  local profiles=none
+  [ -d "$home/config" ] && profiles=$(cd "$home/config" && ls *.toml 2>/dev/null | grep -v '^default\.toml$' | sed 's/\.toml$//' | tr '\n' ' ')
+  echo "other profiles       ${profiles:-none}"
+  local bindings="$home/profiles/directory-bindings.json"
+  if [ -f "$bindings" ]; then echo "folder bindings      $(jq -c . "$bindings" | sed "s#$HOME#~#g")"; else echo "folder bindings      none"; fi
+  echo "this repo's profile  $CF_PROFILE: $([ -f "$home/config/$CF_PROFILE.toml" ] && echo "logged in" || echo "not logged in")"
+  echo "CLOUDFLARE_API_TOKEN $([ -n "${CLOUDFLARE_API_TOKEN:-}" ] && echo "SET in this shell (would override every login)" || echo "not set")"
+  local envs; envs=$(grep -ls '^CLOUDFLARE_API_TOKEN=' .env .env.* 2>/dev/null | tr '\n' ' ' || true)
+  echo ".env with a token    ${envs:-none}"
+}
+
+now=$(snapshot)
+echo "$now"
+if [ "${usage_baseline:-false}" = true ]; then
+  mkdir -p .wrangler && echo "$now" > "$baseline"
+  echo "saved as the baseline: $PWD/$baseline"
+elif [ -f "$baseline" ]; then
+  if diff <(grep -v "^this repo's profile" "$baseline") <(grep -v "^this repo's profile" <<<"$now") > /dev/null; then
+    echo "machine logins: unchanged since the baseline"
+  else
+    echo "machine logins: CHANGED since the baseline:"; diff "$baseline" <(echo "$now") || true
+  fi
+fi

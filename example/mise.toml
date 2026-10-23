@@ -1,0 +1,15 @@
+# A minimal repo that uses the shared Cloudflare tasks in ../shared, as any other repo would.
+# It never refers to the basin-cube repo around it. Plan: ../PLAN.md
+
+[tools]
+node = "26.11.1"   # runs wrangler
+aube = "2.8.1"     # installs wrangler from package.json
+jq = "1.8.2"       # reads wrangler's JSON
+
+[env]
+CF_PROFILE = "cloudflare-zero-example"   # this repo's own Cloudflare login (a wrangler profile)
+
+[task_config]
+# Another repo writes git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=<tag>
+# here (and sets [settings] experimental = true, which mise needs for git includes).
+includes = ["{{config_root}}/../shared", "mise-tasks"]
