@@ -89,12 +89,21 @@ refuse_stray_tokens() {
   fi
 }
 
+# Bind this repo's profile to this folder, and make sure wrangler really uses it here. wrangler finds a folder's profile
+# by the folder's real path, so the binding uses that too: bound by a path through a symlink (macOS's /var is
+# /private/var), it would never match, and wrangler would quietly use the machine's default login instead.
+bind_repo_login() {
+  wrangler auth activate "$CF_PROFILE" "$(pwd -P)" > /dev/null
+  wrangler whoami </dev/null 2>&1 | grep -qE "Active profile: $CF_PROFILE([^A-Za-z0-9_-]|\$)" \
+    || { echo "refusing: wrangler isn't using this repo's login ($CF_PROFILE) in $(pwd -P), so it would run on another login" >&2; exit 1; }
+}
+
 # Log this repo in if it isn't yet, bind its profile to this folder, and log in again whenever the login's scopes
 # differ from the repo's CF_SCOPES: a scope added to CF_SCOPES, or one removed from it. Then check they match.
 ensure_login() {
   refuse_stray_tokens
   [ -f "$(profile_file)" ] || repo_login
-  wrangler auth activate "$CF_PROFILE" "$PWD" > /dev/null
+  bind_repo_login
   [ -n "${CF_SCOPES:-}" ] || return 0
   local want have add drop
   want=$(tr ' ' '\n' <<<"$CF_SCOPES" | grep . | sort -u)
@@ -104,7 +113,7 @@ ensure_login() {
   drop=$(comm -13 <(echo "$want") <(echo "$have") | tr '\n' ' ')
   echo "This repo's CF_SCOPES changed.${add:+ Needs: ${add% }.}${drop:+ No longer needs: ${drop% }.}"
   repo_login
-  wrangler auth activate "$CF_PROFILE" "$PWD" > /dev/null
+  bind_repo_login
   [ "$(granted_scopes | sort -u)" = "$want" ] || { echo "the new login's scopes still don't match CF_SCOPES ($CF_SCOPES)" >&2; exit 1; }
 }
 

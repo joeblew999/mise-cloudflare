@@ -30,8 +30,8 @@ esac
 repo_before=$(git status --porcelain .)
 GREETING=set-by-prove mise run cloudflare:deploy
 [ -f "$(profile_file)" ] && pass "profile $CF_PROFILE exists" || fail "no profile $CF_PROFILE"
-jq -e --arg d "$PWD" --arg p "$CF_PROFILE" '.[$d] == $p' "$home/profiles/directory-bindings.json" > /dev/null \
-  && pass "profile $CF_PROFILE is bound to ${PWD/#$HOME/~}" || fail "profile not bound to $PWD"
+jq -e --arg d "$(pwd -P)" --arg p "$CF_PROFILE" '.[$d] == $p' "$home/profiles/directory-bindings.json" > /dev/null \
+  && pass "profile $CF_PROFILE is bound to ${PWD/#$HOME/~}" || fail "profile not bound to $(pwd -P)"
 [ "$(file_hash "$home/config/default.toml")" = "$default_login" ] && pass "default login untouched" || fail "default login changed"
 
 step "3. The live Worker: D1, KV, R2 and the secret"
@@ -67,7 +67,7 @@ if [ "${usage_clean:-false}" = true ]; then
   step "7. Clean removes the login and its folder binding"
   mise run cloudflare:clean
   [ ! -f "$(profile_file)" ] && pass "profile $CF_PROFILE gone" || fail "profile still there"
-  jq -e --arg d "$PWD" 'has($d) | not' "$home/profiles/directory-bindings.json" > /dev/null 2>&1 || [ ! -f "$home/profiles/directory-bindings.json" ] \
+  jq -e --arg d "$(pwd -P)" 'has($d) | not' "$home/profiles/directory-bindings.json" > /dev/null 2>&1 || [ ! -f "$home/profiles/directory-bindings.json" ] \
     && pass "folder binding gone" || fail "folder binding still there"
 fi
 

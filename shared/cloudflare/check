@@ -8,8 +8,8 @@ fail=0
 bad() { echo "FAIL $*"; fail=1; }
 # The repo's own files. These shared tasks are left out when they sit inside the repo (as in cloudflare-zero itself),
 # because their helpers call `wrangler login` on purpose, into a temporary folder, in a Claude Code cloud session.
-self=$(cd "$(dirname "$0")" && pwd)
-files=$(git ls-files --cached --others --exclude-standard . | while read -r f; do case "$PWD/$f" in ("$self"/*) ;; (*) echo "$f" ;; esac; done)
+self=$(cd "$(dirname "$0")" && pwd -P); here=$(pwd -P)
+files=$(git ls-files --cached --others --exclude-standard . | while read -r f; do case "$here/$f" in ("$self"/*) ;; (*) echo "$f" ;; esac; done)
 for f in $(grep -E '(^|/)wrangler\.(json|jsonc|toml)$' <<<"$files" || true); do
   grep -nE '"?(account_id|database_id|preview_id)"?[[:space:]]*[:=]' "$f" && bad "$f holds an account or resource ID"
   grep -nE '"id"[[:space:]]*:|^[[:space:]]*id[[:space:]]*=' "$f" && bad "$f holds a resource ID"
