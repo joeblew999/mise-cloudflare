@@ -47,9 +47,10 @@ wrangler's own job, done by the repo's own wrangler; `wrangler dev` needs no log
 
 ## The login: where it comes from, where it lives
 
-- **What it may do:** `scopes` in the repo's [cloudflare.toml](../example/cloudflare.toml), OAuth scope names as
-  `wrangler login --scopes-list` gives them. Without that line: `account:read user:read workers:write workers_kv:write
-  workers_scripts:write d1:write`, enough for a Worker with D1, KV and R2.
+- **What it may do:** exactly what the Worker's bindings need, worked out from its wrangler config (the table below),
+  and any `scopes` in the repo's [cloudflare.toml](../example/cloudflare.toml) for what isn't a binding (OAuth scope
+  names as `wrangler login --scopes-list` gives them). `cloudflare:status` shows both: what the login holds, and what
+  it needs.
 - **Its name:** `profile` in `cloudflare.toml`, else the Worker's name. It's a
   [wrangler auth profile](https://developers.cloudflare.com/workers/wrangler/profiles/).
 - **Where it lives:** wrangler's folder in the person's home directory, never the repo:
@@ -58,14 +59,33 @@ wrangler's own job, done by the repo's own wrangler; `wrangler dev` needs no log
 - **The first time:** the first task that needs it asks. On a machine with a browser, Cloudflare's consent page opens,
   listing exactly the repo's scopes: click Allow and pick your account. In a Claude Code cloud session, or with
   `CLOUDFLARE_LOGIN=device`, it prints a link with the code already in it: open it on any device, your phone included.
-- **Every time after:** each task compares the scopes the login holds with the repo's. Equal: nothing is asked. A scope
-  added or removed: it logs in once more, so the login always holds exactly the repo's scopes.
+- **Every time after:** each task compares the scopes the login holds with what the repo needs. Equal: nothing is
+  asked. A binding or a scope added or removed: it logs in once more, so the login always holds exactly that.
 
 ### Bindings and their permissions
 
-There's no complete list of which permission each binding needs, not even Cloudflare's, so nothing here guesses. The
-repo states what its login may do (`scopes`); a binding that needs more fails with wrangler naming the Cloudflare API call
-that was refused, and you add the scope. R2 works with `workers:write`: wrangler has no R2 scope.
+Neither wrangler nor Cloudflare publishes which scope each kind of binding needs. wrangler's own login asks for one
+scope per product, each described by what it covers ("`workers_kv:write`: See and change Cloudflare Workers KV Storage
+data…"), so each binding gets the scope that names its product; a binding no scope names needs none beyond the four
+every Worker has (`account:read user:read workers:write workers_scripts:write`), as with wrangler's own login. The table
+is [config.BindingScopes](../config/config.go).
+
+| Binding (wrangler config) | Scope | Proven on a real account |
+|---|---|---|
+| `kv_namespaces` | `workers_kv:write` | Yes (`prove`, `prove-builds`) |
+| `d1_databases` | `d1:write` | Yes (`prove`) |
+| `r2_buckets` | none: `workers:write` covers it | Yes (`prove`, `prove-builds`) |
+| `queues` | `queues:write` | Not yet |
+| `pipelines` | `pipelines:write` | Its streams, by `prove-basin`; the binding not yet |
+| `ai` | `ai:write` | Not yet |
+| `secrets_store_secrets` | `secrets_store:write` | Not yet |
+| `containers` | `containers:write`, `cloudchamber:write` | Not yet |
+| `browser` | `browser:write` | Not yet |
+| `route`, `routes` | `workers_routes:write`, `zone:read` | Not yet |
+| `durable_objects`, `workflows`, `services`, `vectorize`, `hyperdrive`, `analytics_engine_datasets`, `dispatch_namespaces`, `images`, `ratelimits`, `send_email` | none beyond the four | Not yet |
+
+If a binding is refused anyway, wrangler names the Cloudflare API call it was refused: add the scope to
+`cloudflare.toml`'s `scopes`.
 
 ## Workers Builds: production, staging, previews and pull requests
 
@@ -102,12 +122,16 @@ stops at once saying so.
 With `[workflow] deploy = true` it deploys too: production from `[workflow] branch` (default `main`), a preview
 `pr-<number>` for each pull request from the repository, its URL commented on the pull request (one comment, kept
 current), deleted when the pull request closes. It deploys with a Cloudflare API token, the one token in the whole
-setup, because GitHub has no one to click Allow. Make it once at
-[dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) from the "Edit Cloudflare
-Workers" template (adding, say, D1 Edit for a Worker with D1; `[workflow] permissions` notes which), with no expiry
-unless you want one; Cloudflare lets no login make API tokens (tried: it leaves `account_api_tokens:create` out of every
-grant). `mise run cloudflare:ci-token` then takes it, hidden, checks it against the account's Workers, and stores it and
-the account id as the repository's GitHub secrets with gh. It's never shown or written into the repo; `--off` deletes
+setup, because GitHub has no one to click Allow. You make it once in Cloudflare's dashboard, since Cloudflare lets no
+login make API tokens (tried: it leaves `account_api_tokens:create` out of every grant). `mise run cloudflare:ci-token`
+prints the link: an account's token (it outlives anyone leaving), no expiry unless you want one, with the permissions
+already picked from the Worker's bindings ([config.TokenPermissions](../config/config.go)). Deploying needs only
+Workers Scripts: Cloudflare's own words are "You do not need separate permissions on the bound resources to deploy the
+Worker". KV, D1 and R2 add their own, because wrangler creates them on a first deploy, and routes add Workers Routes
+and Zone Read; Secrets Store, which Cloudflare says deploying needs, the link can't pick, so `ci-token` names it. A new
+kind of binding means a new token from the new link. Proven so far: the deploy path, on the repo login's own token;
+a token made from the link, not yet. `ci-token` then takes the token, hidden, checks it against the account's Workers,
+and stores it and the account id as the repository's GitHub secrets with gh. It's never shown or written into the repo; `--off` deletes
 the secrets. This repo's own [ci.yml](../.github/workflows/ci.yml) runs its Go tests and checks its release config;
 example/'s [workflow](../.github/workflows/cloudflare-example.yml) is stamped by the tool, as any repo's is.
 

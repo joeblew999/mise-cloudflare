@@ -4,7 +4,7 @@
 //
 //	# cloudflare.toml
 //	profile = "my-worker"                                   # the login, a wrangler auth profile; default the Worker's name
-//	scopes = ["account:read", "user:read", "workers:write"] # exactly what it may do; default DefaultScopes
+//	scopes = ["pipelines:write"]                            # what it may do beyond what the Worker's bindings need
 //
 // The repo never holds an account ID, a resource ID, a token or a secret value: the login picks the account, wrangler
 // creates the resources, and Cloudflare keeps the secrets.
@@ -13,6 +13,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -21,13 +22,65 @@ import (
 // File is the config file's name.
 const File = "cloudflare.toml"
 
-// DefaultScopes is what a Worker with D1, KV and R2 needs (R2 comes with workers:write).
-var DefaultScopes = []string{"account:read", "user:read", "workers:write", "workers_kv:write", "workers_scripts:write", "d1:write"}
+// BaseScopes are what every Worker's login needs: the account, the user, and Workers and their scripts.
+var BaseScopes = []string{"account:read", "user:read", "workers:write", "workers_scripts:write"}
+
+// BindingScopes are the OAuth scopes a kind of binding (its wrangler config key) needs beyond BaseScopes. Neither
+// wrangler nor Cloudflare publishes this; each is the scope whose description in wrangler's own login names the product
+// ("workers_kv:write: See and change Cloudflare Workers KV Storage data…"). A kind that no scope names needs none, as
+// with wrangler's own login, which asks for no other: R2 (workers:write), Durable Objects (workers_scripts:write),
+// Vectorize, Hyperdrive, Workflows, service bindings, …. docs/reference.md says which are proven on a real account.
+var BindingScopes = map[string][]string{
+	"kv_namespaces":         {"workers_kv:write"},
+	"d1_databases":          {"d1:write"},
+	"queues":                {"queues:write"},
+	"pipelines":             {"pipelines:write"},
+	"ai":                    {"ai:write"},
+	"secrets_store_secrets": {"secrets_store:write"},
+	"containers":            {"containers:write", "cloudchamber:write"},
+	"browser":               {"browser:write"},
+	"routes":                {"workers_routes:write", "zone:read"},
+}
+
+// TokenPermissions are the permissions CI's token needs for a kind of binding beyond Workers Scripts, which deploying
+// needs ("You do not need separate permissions on the bound resources to deploy the Worker", Cloudflare's Workers
+// authorization docs): for what wrangler does to the resources themselves, creating KV, D1 and R2 on a first deploy and
+// routes on a zone. Each is key:type in Cloudflare's token links (fundamentals/api/how-to/account-owned-token-template).
+var TokenPermissions = map[string][]string{
+	"kv_namespaces": {"workers_kv_storage:edit"},
+	"r2_buckets":    {"workers_r2:edit"},
+	"d1_databases":  {"d1:edit"},
+	"routes":        {"workers_routes:edit", "zone:read"},
+}
+
+// TokenByHand are the permissions CI's token needs for a kind of binding that Cloudflare's token links have no key for,
+// by their names in the dashboard: Secrets Store's, which Cloudflare says deploying a Worker bound to it needs.
+var TokenByHand = map[string][]string{
+	"secrets_store_secrets": {"Secrets Store Edit"},
+}
+
+// Scopes is what a repo's login holds: BaseScopes, what each kind of binding its Worker has needs (BindingScopes), and
+// extra, cloudflare.toml's scopes, for what isn't a binding.
+func Scopes(kinds, extra []string) []string {
+	out := slices.Clone(BaseScopes)
+	add := func(ss []string) {
+		for _, s := range ss {
+			if !slices.Contains(out, s) {
+				out = append(out, s)
+			}
+		}
+	}
+	for _, k := range kinds {
+		add(BindingScopes[k])
+	}
+	add(extra)
+	return out
+}
 
 // Config is a repo's cloudflare.toml, with its defaults filled in.
 type Config struct {
 	Profile  string   `toml:"profile"` // "" until the caller fills in the Worker's name
-	Scopes   []string `toml:"scopes"`
+	Scopes   []string `toml:"scopes"`  // what the login may do beyond what the Worker's bindings need (see Scopes)
 	Builds   Builds   `toml:"builds"`
 	Workflow Workflow `toml:"workflow"`
 	Path     string   `toml:"-"` // the file read, "" without one
@@ -36,11 +89,10 @@ type Config struct {
 // Workflow is the GitHub Actions workflow go tool cloudflare workflow writes. Without deploy it checks the repo on every
 // push and pull request, and Workers Builds deploys. With deploy, GitHub Actions deploys too: production from Branch,
 // a preview per pull request, with the CLOUDFLARE_API_TOKEN go tool cloudflare ci-token stores as a GitHub secret.
-// Permissions lists what that token needs beyond Workers Scripts, KV and R2, as a reminder for whoever makes it.
+// The token's permissions come from the Worker's bindings (TokenPermissions).
 type Workflow struct {
-	Deploy      bool     `toml:"deploy"`
-	Branch      string   `toml:"branch"`      // default: the repository's default branch, else main
-	Permissions []string `toml:"permissions"` // more than Workers Scripts, KV, R2 and Account Settings
+	Deploy bool   `toml:"deploy"`
+	Branch string `toml:"branch"` // default: the repository's default branch, else main
 }
 
 // Builds is how Cloudflare's Workers Builds builds and deploys the Worker from its GitHub repository (go tool cloudflare
@@ -79,9 +131,6 @@ func Find(dir string) (Config, error) {
 		}
 		dir = parent
 	}
-	if c.Scopes == nil {
-		c.Scopes = DefaultScopes
-	}
 	return c, nil
 }
 
@@ -94,9 +143,11 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 # The repo's own Cloudflare login, a wrangler auth profile. Default: the Worker's name (its wrangler config's name).
 # profile = "my-worker"
 
-# What the login may do: OAuth scopes, named as wrangler lists them (its login command, with --scopes-list). The login
-# holds exactly these; change them and the next task logs in once more. Default: what a Worker with D1, KV and R2 needs.
-# scopes = ["account:read", "user:read", "workers:write", "workers_kv:write", "workers_scripts:write", "d1:write"]
+# What the login may do beyond what the Worker's bindings need. It holds exactly what they need, worked out from the
+# wrangler config (KV: workers_kv:write, D1: d1:write, Queues: queues:write, …), and these: OAuth scopes as wrangler
+# names them (its login command, with --scopes-list), for what isn't a binding, such as Basin's pipelines:write.
+# Add a binding or a scope and the next task logs in once more.
+# scopes = ["pipelines:write"]
 
 # Workers Builds (go tool cloudflare builds): Cloudflare builds and deploys the Worker from its GitHub repository, with
 # its own token, so GitHub never holds a Cloudflare credential. A push to branch deploys; every other branch gets a
@@ -116,11 +167,10 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 # The GitHub Actions workflow (go tool cloudflare workflow). It checks the repo on every push and pull request. With
 # deploy, GitHub Actions also deploys, instead of Workers Builds: production from branch, a preview pr-<number> per pull
 # request, deleted when it closes, with a token made once in Cloudflare's dashboard and stored by go tool cloudflare
-# ci-token as a GitHub secret.
+# ci-token as a GitHub secret. ci-token gives the link that makes it, with what the Worker's bindings need picked.
 [workflow]
 # deploy = true
 # branch = "main"
-# permissions = ["D1 Edit"]                    # what that token needs beyond Workers Scripts, KV and R2: a reminder
 `
 
 // TemplateFor is Template with profile set, for go tool cloudflare init -profile.

@@ -1,6 +1,7 @@
-# The prove-builds Worker, on example/'s own logins (the same profile, the same scopes), so proving it asks for none.
+# The prove-builds Worker, on example/'s own logins (the same profile, the same scopes), so proving it asks for none:
+# its KV and R2 need less than example/'s D1, KV and R2 and Basin, so it adds the rest.
 profile = "cloudflare-zero-example"
-scopes = ["account:read", "user:read", "workers:write", "workers_kv:write", "workers_scripts:write", "d1:write", "pipelines:write"]
+scopes = ["d1:write", "pipelines:write"]
 
 # Each build says which branch it came from, so the proof can tell Workers Builds' deploys from its own. The proof
 # passes its throwaway branches as --branch and --staging.

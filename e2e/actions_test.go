@@ -113,13 +113,16 @@ func TestActions(t *testing.T) {
 	fmt.Println("\nALL PASSED")
 }
 
-// waitRun waits for the newest run of workflow on branch, for event, to finish, and fails unless it succeeded.
+// waitRun waits for the newest run of workflow on branch, for event, to finish, and fails unless it succeeded. It asks
+// for the branch's runs and picks the workflow by its file: gh run list --workflow finds only workflows on the default
+// branch, and this one is only on the throwaway branch.
 func waitRun(t *testing.T, r repo, workflow, branch, event string) string {
 	t.Helper()
 	var id string
+	runs := "repos/{owner}/{repo}/actions/runs?branch=" + branch + "&event=" + event + "&per_page=20"
+	pick := `[.workflow_runs[] | select(.path == ".github/workflows/` + workflow + `")][0].id // empty`
 	for end := time.Now().Add(3 * time.Minute); id == "" && time.Now().Before(end); time.Sleep(10 * time.Second) {
-		id = strings.TrimSpace(r.must(nil, "gh", "run", "list", "--workflow", workflow, "--branch", branch, "--event", event,
-			"--limit", "1", "--json", "databaseId", "--jq", ".[0].databaseId // empty"))
+		id = strings.TrimSpace(r.must(nil, "gh", "api", runs, "--jq", pick))
 	}
 	if id == "" {
 		t.Fatalf("no %s run of %s on %s", event, workflow, branch)

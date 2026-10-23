@@ -20,6 +20,7 @@ are. README.md is the whole picture; read it first.
 - Never create, ask for or store a Cloudflare API token for a person: the repo's login is a wrangler auth profile, and
   Workers Builds deploys with Cloudflare's own build token. The one token is CI's, as a GitHub secret.
 - Never parse a wrangler config here: wrangler reads it (`internal/wconfig`).
-- Never guess which permissions a binding needs: there's no complete list, not even Cloudflare's. The repo states them
-  (`cloudflare.toml`'s scopes).
+- The login's scopes come from the Worker's bindings (`config.BindingScopes`): each kind gets the scope whose
+  description in wrangler's own login names its product. Never add an entry from a guess, and mark in
+  docs/reference.md which are proven on a real account. `cloudflare.toml`'s scopes are only for what isn't a binding.
 - Work with the cloud session through pull request comments, never through the owner copying text between devices.

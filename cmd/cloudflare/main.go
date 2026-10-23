@@ -219,7 +219,8 @@ func openRepo(ctx context.Context, dir string, cfg config.Config, profile string
 		fail(err)
 	}
 	w.Profile = cmp.Or(profile, wc.Name)
-	return repo{dir: dir, scopes: cfg.Scopes, workflow: cfg.Workflow, wc: wc, w: w}
+	// The login holds what the Worker's bindings need, and cloudflare.toml's scopes for anything else.
+	return repo{dir: dir, scopes: config.Scopes(wc.Kinds, cfg.Scopes), workflow: cfg.Workflow, wc: wc, w: w}
 }
 
 // login logs the repo in if it isn't yet, and again whenever the login's scopes differ from the repo's (a scope added
@@ -316,6 +317,8 @@ type statusReport struct {
 	LoggedIn       bool               `json:"loggedIn"`
 	Accounts       []wrangler.Account `json:"accounts"`
 	Scopes         []string           `json:"scopes"`
+	Bindings       []string           `json:"bindings"` // the kinds of binding the Worker has, as its wrangler config names them
+	Needs          []string           `json:"needs"`    // the scopes the login must hold: what those need, and cloudflare.toml's
 	TokenInShell   bool               `json:"tokenInShell"`
 	TokenInEnv     []string           `json:"tokenInEnvFiles"`
 	WranglerFolder string             `json:"wranglerFolder"`
@@ -327,6 +330,7 @@ type statusReport struct {
 func (r repo) status(ctx context.Context, jsonOut bool) {
 	rep := statusReport{
 		Profile: r.w.Profile, LoggedIn: r.w.LoggedIn(), Accounts: []wrangler.Account{}, Scopes: []string{},
+		Bindings: append([]string{}, r.wc.Kinds...), Needs: r.scopes,
 		TokenInShell: os.Getenv("CLOUDFLARE_API_TOKEN") != "", TokenInEnv: tokenEnvFiles(r.dir),
 		WranglerFolder: wrangler.Home(), DefaultLogin: fileHash(wrangler.DefaultLogin()), OtherProfiles: []string{},
 		FolderBindings: map[string]string{},
@@ -363,6 +367,7 @@ func (r repo) status(ctx context.Context, jsonOut bool) {
 	if len(rep.Scopes) > 0 {
 		fmt.Printf("scopes               %s\n", strings.Join(rep.Scopes, " "))
 	}
+	fmt.Printf("needs                %s (for its %s, and cloudflare.toml's)\n", strings.Join(rep.Needs, " "), cmp.Or(strings.Join(rep.Bindings, " "), "no bindings"))
 	fmt.Printf("CLOUDFLARE_API_TOKEN %s\n", map[bool]string{true: "SET in this shell (would override every login)", false: "not set"}[rep.TokenInShell])
 	fmt.Printf(".env with a token    %s\n", cmp.Or(strings.Join(rep.TokenInEnv, " "), "none"))
 	fmt.Printf("wrangler folder      %s\n", short(rep.WranglerFolder))

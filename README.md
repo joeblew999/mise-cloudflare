@@ -69,7 +69,7 @@ Rather have GitHub Actions deploy instead of Cloudflare? Set `[workflow] deploy 
 |---|---|
 | First deploy on your machine | **Allow**, in your browser |
 | `cloudflare:builds`, once per repo | **Allow**, once more (Cloudflare's own CLI asks for Workers Builds) |
-| You change the permissions in `cloudflare.toml` | **Allow**, once |
+| You add a kind of binding (Queues, say), or a scope in `cloudflare.toml` | **Allow**, once |
 | Anything else: deploys, previews, merges, GitHub Actions | Nothing |
 
 ## Claude Code

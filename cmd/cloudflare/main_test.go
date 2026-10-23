@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -190,5 +192,30 @@ func TestClaude(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(top, ".claude", "settings.json"))
 	if !strings.Contains(string(b), `"Bash(ls)"`) || strings.Count(string(b), hookFile) != 1 || !strings.Contains(string(b), hookFile+" worker") {
 		t.Errorf("settings:\n%s", b)
+	}
+}
+
+// TestCITokenHelp: the dashboard link picks Workers Scripts and what the Worker's bindings need, and names what it can't.
+func TestCITokenHelp(t *testing.T) {
+	help := ciTokenHelp("w", []string{"d1_databases", "kv_namespaces", "r2_buckets", "secrets_store_secrets"})
+	link := regexp.MustCompile(`https://dash\.cloudflare\.com/\S+`).FindString(help)
+	u, err := url.Parse(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var perms []struct{ Key, Type string }
+	if err := json.Unmarshal([]byte(u.Query().Get("permissionGroupKeys")), &perms); err != nil {
+		t.Fatalf("%s: %v", link, err)
+	}
+	var got []string
+	for _, p := range perms {
+		got = append(got, p.Key+":"+p.Type)
+	}
+	want := []string{"workers_scripts:edit", "d1:edit", "workers_kv_storage:edit", "workers_r2:edit"}
+	if !slices.Equal(got, want) || u.Query().Get("name") != "w GitHub Actions" {
+		t.Errorf("link picks %q named %q, want %q", got, u.Query().Get("name"), want)
+	}
+	if !strings.Contains(help, "Add Secrets Store Edit there too") {
+		t.Errorf("Secrets Store Edit isn't named:\n%s", help)
 	}
 }

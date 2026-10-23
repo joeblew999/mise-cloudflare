@@ -6,7 +6,8 @@ description: Use when working on this repo's Cloudflare Worker with wrangler (de
 # Cloudflare from this repo
 
 The repo has its own Cloudflare login: a wrangler auth profile named in `cloudflare.toml` (default: the Worker's name),
-with exactly the OAuth scopes listed there. Every wrangler command runs on that login through `go tool cloudflare`, never
+with exactly the OAuth scopes the Worker's bindings need (worked out from its wrangler config), and any more listed
+there. Every wrangler command runs on that login through `go tool cloudflare`, never
 on the machine's own `wrangler login`, and never with an API token. Run everything from the repo's root.
 
 ## Run wrangler
@@ -34,10 +35,11 @@ repository, the person gives Cloudflare's GitHub app access to it on GitHub.
 
 `mise run cloudflare:workflow` writes the repo's workflow (checks on every push and pull request, no Cloudflare
 credential). With `[workflow] deploy = true` in `cloudflare.toml` it also deploys: production from its branch, a preview
-`pr-<number>` per pull request, its URL commented, deleted when the pull request closes. Then
-`mise run cloudflare:ci-token` makes the token it deploys with and stores it as the repository's GitHub secrets: never
-ask the person for a token, and never print one. A binding beyond Workers Scripts, KV and R2 (D1, Queues, …) needs its
-permission group in `[workflow] permissions` (`"D1 Write"`), then `ci-token` again.
+`pr-<number>` per pull request, its URL commented, deleted when the pull request closes. It deploys with a token the
+person makes once in Cloudflare's dashboard: `mise run cloudflare:ci-token`, run by the person in their own terminal,
+prints a link with the permissions the Worker's bindings need already picked, takes the token hidden, and stores it as
+the repository's GitHub secrets. Never ask the person for a token, and never print one. When the Worker gets a new kind
+of binding (D1, say), the person makes the token again from the new link.
 
 ## Files mise-cloudflare writes
 
@@ -53,8 +55,9 @@ pointed at an existing, preview-safe resource such as staging's: Cloudflare make
 `CLOUDFLARE_LOGIN=device`) wrangler prints a link and a code instead. Give the person the link: they open it on any
 device, their phone included, click Allow and pick the account. You can't click Allow for them, and must never try.
 
-When `cloudflare.toml`'s scopes change, the next task logs in once more, so the login always holds exactly those
-scopes. A task that fails with a permission error needs a scope: add it to `cloudflare.toml` (the names come from
+When the Worker gets a new kind of binding, or `cloudflare.toml`'s scopes change, the next task logs in once more, so
+the login always holds exactly what's needed (`mise run cloudflare:status` shows it). A task that fails with a
+permission error needs a scope: add it to `cloudflare.toml`'s `scopes` (the names come from
 `wrangler login --scopes-list`), then run the task again, and tell the person a login is coming.
 
 ## When something is refused
