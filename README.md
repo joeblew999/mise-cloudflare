@@ -48,7 +48,7 @@ includes = [".mise/tasks/cloudflare.toml"]
 | Needs | Checked by |
 |---|---|
 | A wrangler config with no account or resource IDs, in any environment; its secrets in `"secrets": { "required": [...] }` | `cloudflare:check` |
-| `"previews": {}` in it (Worker Previews need the block; it can stay empty) | `cloudflare:check` |
+| A `previews` block in it, declaring every storage binding the Worker has (D1, KV, R2, …): Worker Previews inherit nothing from production, so a preview without them fails on its first use of one. Bindings with no IDs get their own preview resources | `cloudflare:check` |
 | `.dev.vars.example` with a dummy for each required secret; `.dev.vars` and `.env` git-ignored | `cloudflare:check` |
 | wrangler pinned exactly in `package.json`; a lockfile, if any, committed (Workers Builds installs from git) | `cloudflare:check`, `cloudflare:builds` |
 | The tasks, skill, workflow and Claude Code hook mise-cloudflare wrote, current for its version | `cloudflare:check` |
@@ -151,10 +151,14 @@ stops at once saying so.
 
 With `[workflow] deploy = true` it deploys too: production from `[workflow] branch` (default `main`), a preview
 `pr-<number>` for each pull request from the repository, its URL commented on the pull request (one comment, kept
-current), deleted when the pull request closes. `mise run cloudflare:ci-token` makes the token it deploys with, on the
-repo's cf login, with Cloudflare's usual Workers permissions plus `[workflow] permissions` for other bindings (such as
-`"D1 Write"`), and stores it and the account id as the repository's GitHub secrets with gh: it's never shown, and a rerun
-replaces it. This repo's own [ci.yml](.github/workflows/ci.yml) runs its Go tests and checks its release config;
+current), deleted when the pull request closes. It deploys with a Cloudflare API token, the one token in the whole
+setup, because GitHub has no one to click Allow. Make it once at
+[dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) from the "Edit Cloudflare
+Workers" template (adding, say, D1 Edit for a Worker with D1; `[workflow] permissions` notes which), with no expiry
+unless you want one; Cloudflare lets no login make API tokens (tried: it leaves `account_api_tokens:create` out of every
+grant). `mise run cloudflare:ci-token` then takes it, hidden, checks it against the account's Workers, and stores it and
+the account id as the repository's GitHub secrets with gh. It's never shown or written into the repo; `--off` deletes
+the secrets. This repo's own [ci.yml](.github/workflows/ci.yml) runs its Go tests and checks its release config;
 example/'s [workflow](.github/workflows/cloudflare-example.yml) is stamped by the tool, as any repo's is.
 
 ## Why it's safe
@@ -174,7 +178,8 @@ A cloud session starts on a bare Linux machine with only the repo. `mise run clo
 [.claude/hooks/mise-cloudflare-session-start.sh](.claude/hooks/mise-cloudflare-session-start.sh) and adds it to
 `.claude/settings.json` (keeping what's there): when a session starts, it installs mise and every pinned tool, then runs
 the Worker folder's own `setup` task, so the tasks work straight away. This repo's settings name `. example`. On your
-own machine it does nothing. The cloud environment's network settings must allow mise.run,
+own machine it does nothing. After a repository is renamed, attach it to a cloud session by its new name: GitHub
+redirects the old one through paths the cloud session's GitHub access refuses. The cloud environment's network settings must allow mise.run,
 GitHub, nodejs.org, the npm registry, proxy.golang.org and sum.golang.org.
 
 ## Releases
