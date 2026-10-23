@@ -27,9 +27,15 @@ deploys (`wrangler deploy`), and every other branch gets a preview (`wrangler pr
 request. Cloudflare does both with its own build token, so GitHub never holds a Cloudflare credential. Deploy once
 first (`mise run cloudflare:deploy`): Workers Builds attaches to a deployed Worker. The first time it needs a cf login
 (Cloudflare's own CLI, whose login can have Workers Builds' scope): give the person its link and code, as below. For
-staging, a wrangler environment (`env.staging`) is its own Worker: run it again with `CLOUDFLARE_ENV=staging` and
-`--branch main`, and the production Worker with its own branch. `--off` removes the setup. If Cloudflare can't see the
-repository, the person gives Cloudflare's GitHub app access to it on GitHub.
+staging, `staging = "main"` under `[builds]` in `cloudflare.toml`, with a wrangler environment `env.staging` (its own
+Worker): a push to `main` deploys staging, a push to `production` deploys production. `--off` removes the setup. If
+Cloudflare can't see the repository, the person gives Cloudflare's GitHub app access to it on GitHub.
+
+Previews get no KV, D1 or R2 from Cloudflare, so `cloudflare:builds` runs `mise run cloudflare:previews`: it makes the
+previews' own (`<worker>-previews-<binding>`) and puts them in the Worker's Previews Base on Cloudflare, which every new
+preview starts from. Leave KV, D1 and R2 out of the wrangler config's `previews` block for that; every other storage
+binding (Queues, Vectorize, …) goes in it, pointed at a preview-safe resource. After adding a KV, D1 or R2 binding, run
+`mise run cloudflare:previews` again.
 
 ## GitHub Actions
 
@@ -46,8 +52,7 @@ of binding (D1, say), the person makes the token again from the new link.
 `.mise/tasks/cloudflare.toml`, `.claude/skills/cloudflare/SKILL.md`, the workflow and
 `.claude/hooks/mise-cloudflare-session-start.sh` are stamped from mise-cloudflare at its version: never edit them. After
 upgrading, run `mise run cloudflare:tasks`, `cloudflare:skill`, `cloudflare:workflow` and `cloudflare:claude`;
-`cloudflare:check` names any that are out of date. For Worker Previews, a wrangler config needs a `previews` block with each storage binding in it, every KV, D1 and R2 one
-pointed at an existing, preview-safe resource such as staging's: Cloudflare makes previews none of their own.
+`cloudflare:check` names any that are out of date, and what a `previews` block lacks.
 
 ## Logging in
 

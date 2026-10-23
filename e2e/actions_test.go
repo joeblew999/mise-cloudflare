@@ -16,14 +16,16 @@ import (
 
 // TestActions proves the GitHub Actions deploy path (cloudflare.toml's [workflow] deploy): go tool cloudflare ci-token
 // stores CI's token as this repository's GitHub secrets; on a throwaway branch carrying the stamped workflow, GitHub
-// Actions deploys testdata/actions, a Worker nothing else ever deploys; a pull request gets a preview pr-<number>, its
-// URL commented by the workflow; closing it deletes the preview. Then the branches, the Worker, the token and the
+// Actions deploys testdata/actions, a Worker nothing else ever deploys, its KV made by wrangler; a pull request gets a
+// preview pr-<number> on the previews' own KV (go tool cloudflare previews, in GitHub Actions), its URL commented by the
+// workflow; closing it deletes the preview. Then the branches, the Worker, its KV and the previews', the token and the
 // secrets go. main is never touched.
 func TestActions(t *testing.T) {
 	needAccount(t)
 	src, _ := filepath.Abs("testdata/actions")
 	bin := buildTool(t)
 	r := repo{t: t, dir: src, worker: "cloudflare-zero-actions", tool: []string{bin}}
+	pv := repo{t: t, dir: src, worker: r.worker + "-previews", tool: []string{bin}} // the previews' own KV, <worker>-previews-kv
 	stamp := time.Now().Unix()
 	prod, pr := fmt.Sprintf("cfz-actions-prod-%d", stamp), fmt.Sprintf("cfz-actions-pr-%d", stamp)
 	const workflow = "cloudflare-e2e-testdata-actions.yml"
@@ -34,6 +36,9 @@ func TestActions(t *testing.T) {
 		t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it", r.worker)
 	} else if !strings.Contains(out, "10007") {
 		t.Fatalf("couldn't tell whether %s is deployed", r.worker)
+	}
+	if left := append(r.leftovers(), pv.leftovers()...); len(left) > 0 {
+		t.Fatalf("%s is left over from another run: delete it first", strings.Join(left, ", "))
 	}
 	// CI's token, for the proof: the repo login's own OAuth token, good for about an hour, which is long enough; a repo
 	// stores one made in Cloudflare's dashboard instead. Its value is never printed.
@@ -55,7 +60,9 @@ func TestActions(t *testing.T) {
 			r.run(nil, "git", "push", "-q", "origin", "--delete", b)
 		}
 		r.try(nil, "wrangler", "preview", "delete", "--name", "pr-"+prNumber(r, pr), "--skip-confirmation")
-		r.try(nil, "wrangler", "delete", "--force")
+		r.try(nil, "-off", "previews")
+		r.deleteAll()
+		r.sweep(r.worker)
 		r.try(nil, "-off", "ci-token")
 		r.run(nil, "git", "worktree", "remove", "--force", wt)
 		r.run(nil, "git", "branch", "-D", prod, pr)
@@ -77,10 +84,10 @@ func TestActions(t *testing.T) {
 	if url == "" {
 		t.Fatal("the deploy's log has no workers.dev URL")
 	}
-	if !answers(url, 2*time.Minute) {
-		t.Fatalf("%s doesn't answer", url)
+	if !answersWith(url, `"kv":true`, 2*time.Minute) {
+		t.Fatalf("%s doesn't answer with its KV working", url)
 	}
-	r.pass("%s answers, deployed by GitHub Actions (run %s)", url, run)
+	r.pass("%s answers, its KV working, deployed by GitHub Actions (run %s)", url, run)
 
 	r.step("A pull request: GitHub Actions deploys the preview pr-<number> and comments its URL")
 	w.must(nil, "git", "checkout", "-q", "-b", pr)
@@ -99,10 +106,13 @@ func TestActions(t *testing.T) {
 	if preview == "" {
 		t.Fatal("no preview URL commented on the pull request")
 	}
-	if !answersWith(preview, `"pr":true`, 2*time.Minute) {
-		t.Fatalf("%s doesn't answer with the pull request's change", preview)
+	if !answersWith(preview, `"pr":true,"kv":true`, 2*time.Minute) {
+		t.Fatalf("%s doesn't answer with the pull request's change and its KV working", preview)
 	}
-	r.pass("pull request #%s: preview pr-%s at %s, with its change", n, n, preview)
+	if id := pv.kv(); id == "" || !strings.Contains(pv.wrangler("kv", "key", "get", "stamp", "--namespace-id", id, "--remote"), "T") {
+		t.Fatalf("the preview didn't use the previews' own KV %s-kv", pv.worker)
+	}
+	r.pass("pull request #%s: preview pr-%s at %s, with its change, on the previews' own KV %s-kv", n, n, preview, pv.worker)
 
 	r.step("Closing the pull request: GitHub Actions deletes the preview")
 	w.must(nil, "gh", "pr", "close", n)
@@ -111,6 +121,14 @@ func TestActions(t *testing.T) {
 		t.Fatalf("%s still answers after the pull request closed", preview)
 	}
 	r.pass("%s is gone", preview)
+
+	r.step("go tool cloudflare previews -off, then the Worker and its KV: nothing left")
+	r.cf(nil, "-off", "previews")
+	r.deleteAll()
+	if left := append(r.sweep(r.worker), r.leftovers()...); len(left) > 0 {
+		t.Fatalf("left on the account: %s", strings.Join(left, ", "))
+	}
+	r.pass("nothing left on the account")
 	fmt.Println("\nALL PASSED")
 }
 

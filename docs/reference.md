@@ -8,7 +8,7 @@ mise-cloudflare writes, how the logins work, Workers Builds and GitHub Actions i
 | Needs | Checked by |
 |---|---|
 | A wrangler config with no account or resource IDs, in any environment; its secrets in `"secrets": { "required": [...] }` | `cloudflare:check` |
-| For Worker Previews (`cloudflare:builds`, or `[workflow] deploy`), a `previews` block in it, declaring every storage binding the Worker has (D1, KV, R2, …), each KV, D1 and R2 one naming the resource it uses: an existing, preview-safe one, such as staging's (a KV namespace's `id`, a D1's `database_id`, a bucket's `bucket_name`). Previews inherit nothing from production, and Cloudflare creates no KV, D1 or R2 for them (only Durable Objects and Containers). A repo with no previews needs no block | `cloudflare:check`, `cloudflare:builds` |
+| For Worker Previews (`cloudflare:builds`, or `[workflow] deploy`), a `previews` block in it (`"previews": {}` will do). Previews inherit nothing from production, and Cloudflare creates no KV, D1 or R2 for them (only Durable Objects and Containers), so `cloudflare:previews` makes their own and the block leaves KV, D1 and R2 out (one it names, it must name an existing resource of). Every other storage binding (Queues, Vectorize, …) goes in it, pointed at a preview-safe resource. A repo with no previews needs no block | `cloudflare:check`, `cloudflare:builds` |
 | `.dev.vars.example` with a dummy for each required secret; `.dev.vars` and `.env` git-ignored | `cloudflare:check` |
 | wrangler pinned exactly in `package.json`; a lockfile, if any, committed (Workers Builds installs from git) | `cloudflare:check`, `cloudflare:builds` |
 | The tasks, skill, workflow and Claude Code hook mise-cloudflare wrote, current for its version | `cloudflare:check` |
@@ -35,7 +35,8 @@ them; after upgrading, write them again (`cloudflare:check` fails while they're 
 | `mise run cloudflare:deploy` | `wrangler deploy` on that login; what it deployed, URLs included, goes to `.wrangler/output.json` | If needed |
 | `mise run cloudflare:wrangler -- <args>` | Any wrangler command on that login: `d1 list`, `secret put`, `delete`, `tail`, `preview`, … | If needed |
 | `mise run cloudflare:builds` | Workers Builds for the Worker: a push to the branch deploys production, any other branch gets a preview; with `[builds] staging`, its branch deploys staging; `--off` removes it | A cf login, the first time |
-| `mise run cloudflare:ci-token` | For GitHub Actions deploying: CI's Cloudflare token, made and stored as the repository's GitHub secrets, never shown; `--off` deletes it | A cf login, the first time |
+| `mise run cloudflare:previews` | The previews' own KV, D1 and R2 (`<worker>-previews-<binding>`), made once and put in the Worker's Previews Base on Cloudflare; `cloudflare:builds` and the deploy workflow run it; `--off` deletes them | If needed |
+| `mise run cloudflare:ci-token` | For GitHub Actions deploying: the dashboard link that makes CI's Cloudflare token with the Worker's permissions picked, then the token stored as the repository's GitHub secrets, never shown; `--off` deletes them | Making the token, once, in the dashboard |
 | `mise run cloudflare:workflow` | Writes the GitHub Actions workflow | Never |
 | `mise run cloudflare:claude` | Writes the Claude Code cloud session hook | Never |
 | `mise run cloudflare:status` | The repo's login, its account and scopes, stray tokens, this machine's other wrangler logins | Never |
@@ -99,11 +100,22 @@ branch gets a preview. Then:
 - **A push to the deploy branch** is built and deployed by Cloudflare, with Cloudflare's own build token.
 - **Any other branch** gets a [Worker Preview](https://developers.cloudflare.com/workers/previews/) at
   `https://<branch>-<worker>.<subdomain>.workers.dev`, its own logs and metrics, and Cloudflare's GitHub app posts its
-  URL on the pull request and keeps the comment current. It uses the KV, D1 and R2 the `previews` block names, usually
-  staging's: wrangler made those at staging's first deploy (`<worker>-staging-kv`, …), and
-  `mise run cloudflare:wrangler -- kv namespace list` (`d1 list`, `r2 bucket list`) shows their ids.
+  URL on the pull request and keeps the comment current. Previews have their own KV, D1 and R2, which `builds` makes
+  (`cloudflare:previews`, below), so a preview never touches production's or staging's data.
 - **A merged pull request's preview** goes when its branch does: `builds` switches on GitHub's "Automatically delete head
   branches" (with `GITHUB_TOKEN` or gh's login).
+
+### The previews' own KV, D1 and R2
+
+Cloudflare makes previews no KV, D1 or R2 (only Durable Objects and Containers), and `wrangler preview` creates none,
+as `wrangler deploy` does for production. So `mise run cloudflare:previews` makes `<worker>-previews-<binding>` for each
+KV, D1 and R2 binding, once, with the repo's own wrangler, and puts them in the Worker's Previews Base on Cloudflare,
+the settings every new preview starts from. Nothing goes into the repo, which is why the `previews` block leaves KV, D1
+and R2 out. All previews share them, as they share staging's settings; production's and staging's stay theirs.
+`cloudflare:builds` runs it, and so does the deploy workflow's preview job; after adding a KV, D1 or R2 binding, run it
+again (it makes only what's new). `--off` takes them out and deletes them (an R2 bucket only once it's empty). Proven
+on the account: a preview on its own KV and R2 from Workers Builds (`prove-builds`) and on its own KV from GitHub
+Actions (`prove-actions`).
 
 It needs, once: Cloudflare's GitHub app on the repository (a click on GitHub, by its owner), and a build token on the
 account, which Cloudflare makes the first time any repository is connected in its dashboard. Its permissions are

@@ -17,9 +17,9 @@ goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
 "npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI: prove-builds' Workers Builds (a repo gets it from the cloudflare:builds task)
 
 [tasks.example]
-description = "Stamp example/ the way any repo gets mise-cloudflare: go tool cloudflare tasks, skill, workflow and claude there, from this version (the Go tests and cloudflare:check fail while it's stale)"
+description = "Stamp example/ the way any repo gets mise-cloudflare: go tool cloudflare tasks, skill, workflow and claude there, from this version, and prove-actions' Worker's tasks (the Go tests and cloudflare:check fail while either is stale)"
 dir = "example"
-run = ["go tool cloudflare tasks", "go tool cloudflare skill", "go tool cloudflare workflow", "go tool cloudflare claude"]
+run = ["go tool cloudflare tasks", "go tool cloudflare skill", "go tool cloudflare workflow", "go tool cloudflare claude", "cd ../e2e/testdata/actions && go tool cloudflare tasks"]
 
 [tasks.test]
 description = "The Go tests: no Cloudflare account, nothing deployed"

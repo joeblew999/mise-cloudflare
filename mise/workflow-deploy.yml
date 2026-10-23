@@ -55,6 +55,9 @@
           curl -fsSL https://mise.run | MISE_QUIET=1 sh
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
+      - name: The previews' own KV, D1 and R2, in the Worker's Previews Base
+        working-directory: DIR
+        run: mise run cloudflare:previews
       - name: Deploy the preview pr-${{ github.event.number }}, and comment its URL
         working-directory: DIR
         env:

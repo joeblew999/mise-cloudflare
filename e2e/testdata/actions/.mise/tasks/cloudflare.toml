@@ -32,8 +32,16 @@ flag "--json" help="one JSON document on stdout"
 '''
 run = "go tool cloudflare -off=${usage_off:-false} -branch=${usage_branch:-} -staging=${usage_staging:-} -json=${usage_json:-false} builds"
 
+["cloudflare:previews"]
+description = "Give the Worker's previews their own KV, D1 and R2, which wrangler preview doesn't make: <worker>-previews-<binding>, made once and put in the Worker's Previews Base on Cloudflare, which every new preview starts from. Nothing goes into the repo. cloudflare:builds and the deploy workflow run it; run it after adding a KV, D1 or R2 binding. Deploy the Worker once first"
+usage = '''
+flag "--off" help="take them out of the Previews Base and delete them"
+flag "--json" help="one JSON document on stdout"
+'''
+run = "go tool cloudflare -off=${usage_off:-false} -json=${usage_json:-false} previews"
+
 ["cloudflare:ci-token"]
-description = "For cloudflare.toml's [workflow] deploy: store the Cloudflare API token GitHub Actions deploys with as the repository's GitHub secrets (with gh), checked first and never shown. Make the token once in Cloudflare's dashboard (the Edit Cloudflare Workers template): no login may make API tokens. --off deletes the secrets"
+description = "For cloudflare.toml's [workflow] deploy: store the Cloudflare API token GitHub Actions deploys with as the repository's GitHub secrets (with gh), checked first and never shown. It gives the dashboard link that makes the token, with the permissions the Worker's bindings need picked: no login may make API tokens. --off deletes the secrets"
 tools = { gh = "2.103.0" }
 usage = 'flag "--off" help="delete the secrets"'
 run = "go tool cloudflare -off=${usage_off:-false} ci-token"

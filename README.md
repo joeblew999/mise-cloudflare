@@ -57,8 +57,9 @@ From then on, Cloudflare builds and deploys every push by itself:
 | Merge `main` into `production` | Deploys **production** |
 
 For staging, add `staging = "main"` under `[builds]` in `cloudflare.toml`; without it, `main` deploys production
-directly. Previews don't get a KV, D1 or R2 of their own: the `previews` block in `wrangler.jsonc` says which ones they
-use, usually staging's, and `cloudflare:check` tells you if one is missing. Cloudflare's GitHub app needs to be on the repository: if it isn't, `builds` says so.
+directly. Previews get a KV, D1 and R2 of their own, shared by all previews and never production's or staging's:
+Cloudflare gives previews none, so `builds` makes them (`<worker>-previews-…`), and nothing goes into your repo. Cloudflare's GitHub app needs to be on
+the repository: if it isn't, `builds` says so.
 
 Rather have GitHub Actions deploy instead of Cloudflare? Set `[workflow] deploy = true`; the
 [reference](docs/reference.md#github-actions) has the one-time steps.

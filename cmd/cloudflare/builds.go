@@ -29,6 +29,10 @@ type buildsReport struct {
 	Token      string        `json:"token"`
 	Workers    []buildWorker `json:"workers"`
 	Removed    bool          `json:"removed,omitempty"`
+	// The previews' own KV, D1 and R2, in the Worker's Previews Base (cloudflare previews).
+	Previews []previewResource `json:"previews,omitempty"`
+	// What the build token needs added in the dashboard for the Worker's bindings, beyond what Cloudflare gives it.
+	TokenNeeds []string `json:"tokenNeeds,omitempty"`
 	// GitHub deletes merged pull requests' branches, and Workers Builds their previews with them.
 	DeleteMergedBranches bool `json:"deleteMergedBranches"`
 }
@@ -106,6 +110,7 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 			}
 		}
 		rep.Removed = true
+		rep.Previews = r.previews(ctx, true, jsonOut)
 		if jsonOut {
 			emit(rep)
 		} else {
@@ -184,6 +189,11 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 			fail(fmt.Errorf("%s: %w\nIf Cloudflare can't see the repository, give Cloudflare's GitHub app access to %s on GitHub (Settings, Applications, Cloudflare Workers and Pages), then run this again", w.Worker, err, rep.Repository))
 		}
 	}
+	// Previews get their own KV, D1 and R2, which wrangler preview doesn't make.
+	if strings.Contains(workers[0].Preview, "wrangler preview") {
+		rep.Previews = r.previews(ctx, false, jsonOut)
+	}
+	rep.TokenNeeds = buildTokenNeeds(r.wc.Kinds)
 	// A branch's preview goes when the branch does; GitHub deletes a pull request's branch when it merges, with this on.
 	rep.DeleteMergedBranches = deleteMergedBranches(ctx, gh)
 	if jsonOut {
@@ -200,11 +210,30 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	}
 	fmt.Printf("  previews   any other branch: %s, its URL on the pull request\n", workers[0].Preview)
 	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", b.Token)
+	if len(rep.TokenNeeds) > 0 {
+		fmt.Printf("  · the Worker's bindings need %s on that token too: add it in the dashboard (Manage account, Account API tokens)\n", strings.Join(rep.TokenNeeds, ", "))
+	}
 	if rep.DeleteMergedBranches {
 		fmt.Printf("  GitHub deletes a pull request's branch when it merges, and Workers Builds its preview with it\n")
 	} else {
 		fmt.Printf("  · log gh in (gh auth login), or switch on GitHub's \"Automatically delete head branches\" (%s's Settings, General), so merged pull requests' previews go too\n", rep.Repository)
 	}
+}
+
+// buildTokenNeeds is what the build token needs added for the Worker's kinds of binding: Cloudflare's covers Workers
+// Scripts, KV, R2 and Workers Routes; wrangler creates a D1 on a first deploy, and deploying a Secrets Store binding
+// needs Secrets Store Edit.
+func buildTokenNeeds(kinds []string) []string {
+	var out []string
+	for _, k := range kinds {
+		switch k {
+		case "d1_databases":
+			out = append(out, "D1 Edit")
+		case "secrets_store_secrets":
+			out = append(out, "Secrets Store Edit")
+		}
+	}
+	return out
 }
 
 func workerNames(ws []buildWorker) string {

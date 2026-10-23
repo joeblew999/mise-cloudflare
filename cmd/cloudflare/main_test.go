@@ -16,7 +16,7 @@ import (
 	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
-var commands = []string{"dev", "login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "workflow", "claude", "ci-token", "version"}
+var commands = []string{"dev", "login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "workflow", "claude", "ci-token", "previews", "version"}
 
 // TestTasks: every command the tasks run is one cloudflare has, and tasks writes them.
 func TestTasks(t *testing.T) {
@@ -50,8 +50,10 @@ func TestSkill(t *testing.T) {
 // TestExampleIsCurrent: example/ has the tasks and the skill this version writes, as any repo would after
 // go tool cloudflare tasks and skill.
 func TestExampleIsCurrent(t *testing.T) {
-	if b, err := os.ReadFile("../../example/.mise/tasks/cloudflare.toml"); err != nil || string(b) != string(mise.Tasks) {
-		t.Errorf("example/.mise/tasks/cloudflare.toml is stale: run go tool cloudflare tasks in example/ (%v)", err)
+	for _, d := range []string{"example", "e2e/testdata/actions"} {
+		if b, err := os.ReadFile("../../" + d + "/.mise/tasks/cloudflare.toml"); err != nil || string(b) != string(mise.Tasks) {
+			t.Errorf("%s/.mise/tasks/cloudflare.toml is stale: run mise run example (%v)", d, err)
+		}
 	}
 	want, _ := os.ReadFile("../../skills/cloudflare/SKILL.md")
 	if b, err := os.ReadFile("../../example/.claude/skills/cloudflare/SKILL.md"); err != nil || string(b) != string(want) {

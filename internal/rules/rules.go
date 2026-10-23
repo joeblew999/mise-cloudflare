@@ -112,8 +112,9 @@ func IDs(raw map[string]any) []string {
 
 // Previews returns the problems with the Worker's previews block, which Worker Previews (wrangler preview) run on; with
 // no block, none unless need. Previews inherit nothing from production, and Cloudflare makes them no KV, D1 or R2 of
-// their own (only Durable Objects and Containers): each storage binding is declared there again, and a KV, D1 or R2
-// one names the existing, preview-safe resource it uses, such as staging's.
+// their own (only Durable Objects and Containers). A KV, D1 or R2 binding left out of the block comes from the Worker's
+// Previews Base, where go tool cloudflare previews puts the previews' own; one in it names an existing resource, since
+// wrangler preview sends it as it is. Every other storage binding (Queues, Vectorize, …) is declared there again.
 func Previews(w wconfig.Config, need bool) []string {
 	previews, ok := w.Raw["previews"].(map[string]any)
 	if !ok {
@@ -127,7 +128,7 @@ func Previews(w wconfig.Config, need bool) []string {
 		problems = append(problems, fmt.Sprintf("%s's previews block lacks the bindings %s: Worker Previews don't inherit them from production (a preview would fail on its first use of one); add them there, pointed at preview-safe resources", filepath.Base(w.Path), strings.Join(missing, ", ")))
 	}
 	if unnamed := unnamedResources(previews); len(unnamed) > 0 {
-		problems = append(problems, fmt.Sprintf("%s's previews block doesn't say which %s to use: Cloudflare makes previews no KV, D1 or R2 of their own; point each at an existing, preview-safe one, such as staging's (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name: mise run cloudflare:wrangler -- kv namespace list, d1 list, r2 bucket list)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
+		problems = append(problems, fmt.Sprintf("%s's previews block has %s with no resource named, which wrangler preview sends as it is and Cloudflare refuses: leave it out, and mise run cloudflare:previews gives previews their own, or name an existing one (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
 	}
 	return problems
 }
@@ -148,9 +149,9 @@ func unnamedResources(previews map[string]any) []string {
 	return out
 }
 
-// storageKinds are the bindings to resources that Worker Previews don't inherit: each needs its own in the previews block.
-var storageKinds = []string{"d1_databases", "kv_namespaces", "r2_buckets", "vectorize", "hyperdrive", "analytics_engine_datasets",
-	"pipelines", "secrets_store_secrets"}
+// storageKinds are the bindings to resources that Worker Previews don't inherit and that their Previews Base doesn't
+// give them (go tool cloudflare previews gives KV, D1 and R2): each needs its own in the previews block.
+var storageKinds = []string{"vectorize", "hyperdrive", "analytics_engine_datasets", "pipelines", "secrets_store_secrets"}
 
 // previewBindings names the storage bindings the Worker has that its previews block doesn't declare.
 func previewBindings(raw, previews map[string]any) []string {

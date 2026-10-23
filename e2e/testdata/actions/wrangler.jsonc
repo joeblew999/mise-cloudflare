@@ -8,5 +8,8 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
   "preview_urls": true,
+  // A KV namespace, so its previews prove go tool cloudflare previews in GitHub Actions: they get their own, from the
+  // Worker's Previews Base, which the block leaves KV out for.
+  "kv_namespaces": [{ "binding": "KV" }],
   "previews": {}
 }

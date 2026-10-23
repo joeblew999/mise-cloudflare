@@ -91,13 +91,15 @@ func TestInitPasses(t *testing.T) {
 	}
 }
 
-// TestPreviewBindings: a storage binding the previews block doesn't declare is named; previews inherit none.
+// TestPreviewBindings: a storage binding the previews block doesn't declare is named, but for KV, D1 and R2, which the
+// Previews Base gives (go tool cloudflare previews).
 func TestPreviewBindings(t *testing.T) {
 	c := cfg()
 	c.Raw["r2_buckets"] = []any{map[string]any{"binding": "BUCKET"}}
+	c.Raw["vectorize"] = []any{map[string]any{"binding": "INDEX", "index_name": "i"}}
 	c.Raw["queues"] = map[string]any{"producers": []any{map[string]any{"binding": "JOBS"}}}
 	p, err := Check(repo(t, good()), c, false)
-	if err != nil || len(p) != 1 || !strings.Contains(p[0], "lacks the bindings BUCKET, JOBS") {
+	if err != nil || len(p) != 1 || !strings.Contains(p[0], "lacks the bindings INDEX, JOBS") {
 		t.Errorf("problems %q, %v", p, err)
 	}
 }
@@ -113,7 +115,7 @@ func TestPreviewResources(t *testing.T) {
 		"r2_buckets":    []any{map[string]any{"binding": "BUCKET"}},
 	}
 	p := Previews(c, false)
-	if len(p) != 1 || !strings.Contains(p[0], "which KV KV, R2 BUCKET to use") {
+	if len(p) != 1 || !strings.Contains(p[0], "has KV KV, R2 BUCKET with no resource named") {
 		t.Errorf("problems %q", p)
 	}
 }

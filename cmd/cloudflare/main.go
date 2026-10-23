@@ -63,12 +63,12 @@ func main() {
 	profile := flag.String("profile", cfg.Profile, "the repo's login, a wrangler auth profile (default the Worker's name)")
 	jsonOut := flag.Bool("json", false, "print one JSON document on stdout instead of text")
 	out := flag.String("o", filepath.Join(".mise", "tasks", "cloudflare.toml"), "tasks: the file to write")
-	off := flag.Bool("off", false, "builds: remove the Workers Builds setup; ci-token: delete CI's token and its secrets")
+	off := flag.Bool("off", false, "builds: remove the Workers Builds setup; ci-token: delete CI's token and its secrets; previews: delete the previews' own KV, D1 and R2")
 	showVersion := flag.Bool("version", false, "print this build's version")
 	branch := flag.String("branch", "", "builds: the branch whose pushes deploy production (default cloudflare.toml's, else the repository's default, or production with staging)")
 	staging := flag.String("staging", "", "builds: the branch whose pushes deploy staging, the wrangler environment env.staging (default cloudflare.toml's)")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill|workflow|claude, cloudflare [-off] [-branch b] [-staging b] builds|ci-token, or cloudflare wrangler <args>")
+		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill|workflow|claude, cloudflare [-off] [-branch b] [-staging b] builds|ci-token|previews, or cloudflare wrangler <args>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -168,6 +168,14 @@ func main() {
 		}
 	case "ci-token":
 		r.ciToken(ctx, *off)
+	case "previews":
+		res := r.previews(ctx, *off, *jsonOut)
+		if *jsonOut {
+			emit(struct {
+				Worker   string            `json:"worker"`
+				Previews []previewResource `json:"previews"`
+			}{r.wc.Name, res})
+		}
 	case "builds":
 		b := cfg.Builds
 		if *branch != "" {
