@@ -18,14 +18,15 @@ usage = 'arg "<args>" var=#true help="the wrangler command and its arguments"'
 run = "go tool cloudflare wrangler ${usage_args}"
 
 ["cloudflare:builds"]
-description = "Set Cloudflare's Workers Builds up for the Worker: a push to the branch deploys it, every other branch gets a preview with its URL on the pull request, all with Cloudflare's own build token (GitHub holds no Cloudflare credential). Once per repo; the first time, a cf login approved on any device. Deploy once first"
-tools = { "npm:cf" = "1.0.0-beta.20" }
+description = "Set Cloudflare's Workers Builds up for the Worker: a push to the branch deploys production, every other branch gets a preview with its URL on the pull request; with cloudflare.toml's staging, a push to that branch deploys staging (env.staging). All with Cloudflare's own build token: GitHub holds no Cloudflare credential. Once per repo; the first time, a cf login approved on any device. Deploy each Worker once first"
+tools = { "npm:cf" = "1.0.0-beta.20", gh = "2.103.0" }
 usage = '''
 flag "--off" help="remove the Workers Builds setup"
-flag "--branch <branch>" help="the branch whose pushes deploy; default cloudflare.toml's, else the repository's default"
+flag "--branch <branch>" help="the branch whose pushes deploy production; default cloudflare.toml's, else the repository's default, or production with staging"
+flag "--staging <branch>" help="the branch whose pushes deploy staging (env.staging); default cloudflare.toml's"
 flag "--json" help="one JSON document on stdout"
 '''
-run = "go tool cloudflare -off=${usage_off:-false} -branch=${usage_branch:-} -json=${usage_json:-false} builds"
+run = "go tool cloudflare -off=${usage_off:-false} -branch=${usage_branch:-} -staging=${usage_staging:-} -json=${usage_json:-false} builds"
 
 ["cloudflare:status"]
 description = "The repo's login (logged in or not, its account and scopes), stray tokens, and this machine's other wrangler logins (a checksum, never their contents)"

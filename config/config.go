@@ -41,6 +41,9 @@ type Builds struct {
 	Deploy  string `toml:"deploy"`  // default npx wrangler deploy (with --env when CLOUDFLARE_ENV is set)
 	Preview string `toml:"preview"` // every other branch's preview: default npx wrangler preview (with --env)
 	Token   string `toml:"token"`   // the name of the account's build token it deploys with: default the first
+	// Staging, if set, is the branch that deploys the wrangler environment staging: its own Worker (env.staging, with
+	// its own bindings), deployed with --env staging. Production's branch then defaults to "production".
+	Staging string `toml:"staging"`
 }
 
 // Find reads the nearest cloudflare.toml at or above dir, and fills in the defaults; without one, it is every default.
@@ -94,6 +97,10 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 # deploy = "npx wrangler deploy"
 # preview = "npx wrangler preview"
 # token = "My Build Token"                     # which of the account's build tokens; default: the first
+# For staging and production: a push to main deploys staging (the wrangler environment env.staging, its own Worker),
+# a push to production deploys production, and every other branch gets a preview.
+# staging = "main"
+# branch = "production"
 `
 
 // TemplateFor is Template with profile set, for go tool cloudflare init -profile.

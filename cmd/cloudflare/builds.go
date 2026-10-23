@@ -10,34 +10,43 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/joeblew999/mise-cloudflare/config"
 	"github.com/joeblew999/mise-cloudflare/internal/cf"
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-// buildsReport is go tool cloudflare builds -json: how Workers Builds builds the Worker now.
+// buildsReport is go tool cloudflare builds -json: how Workers Builds builds each of the repo's Workers now.
 type buildsReport struct {
-	Worker     string `json:"worker"`
-	ScriptTag  string `json:"scriptTag"`
-	Repository string `json:"repository"`
-	Branch     string `json:"branch"`
-	Root       string `json:"root"`
-	Build      string `json:"build"`
-	Deploy     string `json:"deploy"`
-	Preview    string `json:"preview"`
-	Token      string `json:"token"`
-	Removed    bool   `json:"removed,omitempty"`
+	Repository string        `json:"repository"`
+	Root       string        `json:"root"`
+	Build      string        `json:"build"`
+	Token      string        `json:"token"`
+	Workers    []buildWorker `json:"workers"`
+	Removed    bool          `json:"removed,omitempty"`
 	// GitHub deletes merged pull requests' branches, and Workers Builds their previews with them.
 	DeleteMergedBranches bool `json:"deleteMergedBranches"`
 }
 
-// builds sets Cloudflare's Workers Builds up for the repo's Worker: a push to the branch deploys it, every other branch
-// gets a preview with its URL on the pull request, and Cloudflare does both with its own build token, so GitHub never
-// holds a Cloudflare credential. It runs on the repo's cf login (Workers Builds' scope, which wrangler's login can't
-// have), made the first time with the device flow. With off it removes the setup again.
+// buildWorker is one Worker Workers Builds deploys: production, or a wrangler environment's (staging).
+type buildWorker struct {
+	Env       string `json:"env,omitempty"` // "" for production
+	Worker    string `json:"worker"`
+	ScriptTag string `json:"scriptTag"`
+	Branch    string `json:"branch"`
+	Deploy    string `json:"deploy"`
+	Preview   string `json:"preview,omitempty"` // every other branch's preview; production only
+}
+
+// builds sets Cloudflare's Workers Builds up for the repo's Workers: a push to the branch deploys production, and every
+// other branch gets a preview with its URL on the pull request; with cloudflare.toml's staging, a push to that branch
+// deploys staging (the wrangler environment env.staging, its own Worker). Cloudflare does all of it with its own build
+// token, so GitHub never holds a Cloudflare credential. It runs on the repo's cf login (Workers Builds' scope, which
+// wrangler's login can't have), made the first time with the device flow. With off it removes the setup again.
 func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	if ci() {
 		fail(errors.New("Workers Builds is set up once, from a machine or a Claude Code session, not in CI"))
@@ -64,18 +73,42 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		fail(fmt.Errorf("the cf login %s can use %d accounts; log it in again and pick one", c.Profile, len(who.Accounts)))
 	}
 	c.Account = who.Accounts[0].ID
-	tag := r.workerTag(ctx, c)
-	rep := buildsReport{Worker: r.wc.Name, ScriptTag: tag}
+
+	// The Workers: production, the Worker CLOUDFLARE_ENV picks (none, usually), and staging's if cloudflare.toml has it.
+	env := os.Getenv("CLOUDFLARE_ENV")
+	envFlag := func(e string) string {
+		if e == "" {
+			return ""
+		}
+		return " --env " + e
+	}
+	workers := []buildWorker{{Env: env, Worker: r.wc.Name}}
+	if b.Staging != "" {
+		if !slices.Contains(r.wc.Envs(), "staging") {
+			fail(fmt.Errorf("cloudflare.toml's [builds] staging needs the wrangler environment staging in %s (env.staging, with its own bindings)", filepath.Base(r.wc.Path)))
+		}
+		sc, err := wconfig.ReadEnv(ctx, r.dir, "staging")
+		if err != nil {
+			fail(err)
+		}
+		workers = append(workers, buildWorker{Env: "staging", Worker: sc.Name, Branch: b.Staging, Deploy: orDefault(b.Deploy, "npx wrangler deploy") + " --env staging"})
+	}
+	for i := range workers {
+		workers[i].ScriptTag = workerTag(ctx, c, workers[i].Worker, workers[i].Env)
+	}
+	rep := buildsReport{Workers: workers}
 
 	if off {
-		if err := c.JSON(ctx, nil, "builds", "workers", "delete", tag, "--force"); err != nil && !cf.NotFound(err) {
-			fail(err)
+		for _, w := range workers {
+			if err := c.JSON(ctx, nil, "builds", "workers", "delete", w.ScriptTag, "--force"); err != nil && !cf.NotFound(err) {
+				fail(err)
+			}
 		}
 		rep.Removed = true
 		if jsonOut {
 			emit(rep)
 		} else {
-			fmt.Printf("✓ Workers Builds no longer builds %s\n", r.wc.Name)
+			fmt.Println("✓ Workers Builds no longer builds " + workerNames(workers))
 		}
 		return
 	}
@@ -103,40 +136,46 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		}
 		fail(errors.New("the account has no Workers Builds token yet: connect any repository once in Cloudflare's dashboard (a Worker's Settings, Builds), which makes one, then run this again"))
 	}
-	env := ""
-	if e := os.Getenv("CLOUDFLARE_ENV"); e != "" {
-		env = " --env " + e
-	}
 	rep.Repository = gh.Owner.Login + "/" + gh.Name
-	rep.Branch = orDefault(b.Branch, gh.DefaultBranch)
 	rep.Root = orDefault(b.Root, gh.root)
 	rep.Build = orDefault(b.Build, installCommand(r.dir))
-	rep.Deploy = orDefault(b.Deploy, "npx wrangler deploy"+env)
-	rep.Preview = orDefault(b.Preview, "npx wrangler preview"+env)
-	settings := []string{
-		"--git-repository-branch", rep.Branch,
-		"--git-repository-provider-type", "github",
-		"--git-repository-provider-account-id", fmt.Sprint(gh.Owner.ID),
-		"--git-repository-provider-account-name", gh.Owner.Login,
-		"--git-repository-repo-id", fmt.Sprint(gh.ID),
-		"--git-repository-repo-name", gh.Name,
-		"--production-settings-build-command", rep.Build,
-		"--production-settings-deploy-command", rep.Deploy,
-		"--production-settings-build-token-uuid", rep.Token,
-		"--production-settings-root-directory", rep.Root,
-		"--previews-enabled",
-		"--previews-base-config-build-command", rep.Build,
-		"--previews-base-config-deploy-command", rep.Preview,
-		"--previews-base-config-build-token-uuid", rep.Token,
-		"--previews-base-config-root-directory", rep.Root,
+	prodBranch := gh.DefaultBranch
+	if b.Staging != "" {
+		prodBranch = "production"
 	}
-	if c.JSON(ctx, nil, "builds", "workers", "get", tag) == nil {
-		err = c.JSON(ctx, nil, append([]string{"builds", "workers", "update", tag}, settings...)...)
-	} else {
-		err = c.JSON(ctx, nil, append([]string{"builds", "workers", "create", "--script-tag", tag}, settings...)...)
+	workers[0].Branch = orDefault(b.Branch, prodBranch)
+	workers[0].Deploy = orDefault(b.Deploy, "npx wrangler deploy") + envFlag(env)
+	workers[0].Preview = orDefault(b.Preview, "npx wrangler preview") + envFlag(env)
+	if len(workers) > 1 && workers[0].Branch == workers[1].Branch {
+		fail(fmt.Errorf("production and staging both deploy from %s: give them different branches", workers[0].Branch))
 	}
-	if err != nil {
-		fail(fmt.Errorf("%w\nIf Cloudflare can't see the repository, give Cloudflare's GitHub app access to %s on GitHub (Settings, Applications, Cloudflare Workers and Pages), then run this again", err, rep.Repository))
+	for _, w := range workers {
+		previews := w.Preview != ""
+		settings := []string{
+			"--git-repository-branch", w.Branch,
+			"--git-repository-provider-type", "github",
+			"--git-repository-provider-account-id", fmt.Sprint(gh.Owner.ID),
+			"--git-repository-provider-account-name", gh.Owner.Login,
+			"--git-repository-repo-id", fmt.Sprint(gh.ID),
+			"--git-repository-repo-name", gh.Name,
+			"--production-settings-build-command", rep.Build,
+			"--production-settings-deploy-command", w.Deploy,
+			"--production-settings-build-token-uuid", rep.Token,
+			"--production-settings-root-directory", rep.Root,
+			fmt.Sprintf("--previews-enabled=%v", previews),
+			"--previews-base-config-build-command", rep.Build,
+			"--previews-base-config-deploy-command", orDefault(w.Preview, "npx wrangler preview"+envFlag(w.Env)),
+			"--previews-base-config-build-token-uuid", rep.Token,
+			"--previews-base-config-root-directory", rep.Root,
+		}
+		if c.JSON(ctx, nil, "builds", "workers", "get", w.ScriptTag) == nil {
+			err = c.JSON(ctx, nil, append([]string{"builds", "workers", "update", w.ScriptTag}, settings...)...)
+		} else {
+			err = c.JSON(ctx, nil, append([]string{"builds", "workers", "create", "--script-tag", w.ScriptTag}, settings...)...)
+		}
+		if err != nil {
+			fail(fmt.Errorf("%s: %w\nIf Cloudflare can't see the repository, give Cloudflare's GitHub app access to %s on GitHub (Settings, Applications, Cloudflare Workers and Pages), then run this again", w.Worker, err, rep.Repository))
+		}
 	}
 	// A branch's preview goes when the branch does; GitHub deletes a pull request's branch when it merges, with this on.
 	rep.DeleteMergedBranches = deleteMergedBranches(ctx, gh)
@@ -144,60 +183,51 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		emit(rep)
 		return
 	}
-	fmt.Printf("✓ Workers Builds builds %s from %s, in %s:\n", r.wc.Name, rep.Repository, rep.Root)
-	fmt.Printf("  a push to %s:  %s, then %s\n", rep.Branch, rep.Build, rep.Deploy)
-	fmt.Printf("  any other branch: %s, then %s (a preview, its URL on the pull request)\n", rep.Build, rep.Preview)
+	fmt.Printf("✓ Workers Builds builds from %s, in %s, installing with %s:\n", rep.Repository, rep.Root, rep.Build)
+	for _, w := range workers {
+		name := "production"
+		if w.Env != "" {
+			name = w.Env
+		}
+		fmt.Printf("  %-10s %s: a push to %s runs %s\n", name, w.Worker, w.Branch, w.Deploy)
+	}
+	fmt.Printf("  previews   any other branch: %s, its URL on the pull request\n", workers[0].Preview)
 	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", b.Token)
 	if rep.DeleteMergedBranches {
 		fmt.Printf("  GitHub deletes a pull request's branch when it merges, and Workers Builds its preview with it\n")
 	} else {
-		fmt.Printf("  · switch on GitHub's \"Automatically delete head branches\" (%s's Settings, General) so merged pull requests' previews go too\n", rep.Repository)
+		fmt.Printf("  · log gh in (gh auth login), or switch on GitHub's \"Automatically delete head branches\" (%s's Settings, General), so merged pull requests' previews go too\n", rep.Repository)
 	}
 }
 
-// deleteMergedBranches switches on the repository's "Automatically delete head branches" setting, with GITHUB_TOKEN or
-// the gh CLI's login, and reports whether it's on. Without a token that may change it, it's left to the person.
-func deleteMergedBranches(ctx context.Context, g ghRepo) bool {
-	token := cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN")
-	if token == "" {
-		if out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output(); err == nil {
-			token = strings.TrimSpace(string(out))
-		}
+func workerNames(ws []buildWorker) string {
+	var names []string
+	for _, w := range ws {
+		names = append(names, w.Worker)
 	}
-	if token == "" {
-		return false
-	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPatch, "https://api.github.com/repos/"+g.Owner.Login+"/"+g.Name,
-		strings.NewReader(`{"delete_branch_on_merge":true}`))
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	var r struct {
-		On bool `json:"delete_branch_on_merge"`
-	}
-	return resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&r) == nil && r.On
+	return strings.Join(names, " and ")
 }
 
-// workerTag is the deployed Worker's tag, which Workers Builds attaches to, as Cloudflare has it (cf workers scripts
+// workerTag is a deployed Worker's tag, which Workers Builds attaches to, as Cloudflare has it (cf workers scripts
 // search: its id). The search matches names partly, so only the exact name counts.
-func (r repo) workerTag(ctx context.Context, c cf.CF) string {
+func workerTag(ctx context.Context, c cf.CF, name, env string) string {
 	var found []struct {
 		ID   string `json:"id"`
 		Name string `json:"script_name"`
 	}
-	if err := c.JSON(ctx, &found, "workers", "scripts", "search", "--name", r.wc.Name); err != nil {
+	if err := c.JSON(ctx, &found, "workers", "scripts", "search", "--name", name); err != nil {
 		fail(err)
 	}
 	for _, f := range found {
-		if f.Name == r.wc.Name && f.ID != "" {
+		if f.Name == name && f.ID != "" {
 			return f.ID
 		}
 	}
-	fail(fmt.Errorf("Workers Builds attaches to a deployed Worker, and %s isn't deployed: deploy it once first (mise run cloudflare:deploy), then run this again", r.wc.Name))
+	deploy := "mise run cloudflare:deploy"
+	if env != "" {
+		deploy += " -- --env " + env
+	}
+	fail(fmt.Errorf("Workers Builds attaches to a deployed Worker, and %s isn't deployed: deploy it once first (%s), then run this again", name, deploy))
 	return ""
 }
 
@@ -307,4 +337,32 @@ func buildTokens(ctx context.Context, c cf.CF) ([]buildToken, error) {
 	var tokens []buildToken
 	err := c.JSON(ctx, &tokens, "builds", "tokens", "list")
 	return tokens, err
+}
+
+// deleteMergedBranches switches on the repository's "Automatically delete head branches" setting, with GITHUB_TOKEN or
+// the gh CLI's login (the cloudflare:builds task brings gh), and reports whether it's on. Without a GitHub login that
+// may change it, it's left to the person.
+func deleteMergedBranches(ctx context.Context, g ghRepo) bool {
+	token := cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN")
+	if token == "" {
+		if out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output(); err == nil {
+			token = strings.TrimSpace(string(out))
+		}
+	}
+	if token == "" {
+		return false
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPatch, "https://api.github.com/repos/"+g.Owner.Login+"/"+g.Name,
+		strings.NewReader(`{"delete_branch_on_merge":true}`))
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var r struct {
+		On bool `json:"delete_branch_on_merge"`
+	}
+	return resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&r) == nil && r.On
 }

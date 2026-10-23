@@ -36,6 +36,7 @@ type repo struct {
 	dir    string
 	worker string
 	tool   []string
+	env    string // a wrangler environment's Worker (staging), "" for the Worker itself
 }
 
 func (r repo) toolArgs(args ...string) (string, []string) {
@@ -271,7 +272,11 @@ func (r repo) leftovers() []string {
 // deleteAll deletes the Worker, its D1, KV and R2, with wrangler on the repo's login. Errors are ignored: it also runs
 // as cleanup after a failure, when some of them may not exist.
 func (r repo) deleteAll() {
-	r.try(nil, "wrangler", "delete", "--force")
+	if r.env != "" {
+		r.try(nil, "wrangler", "delete", "--force", "--env", r.env)
+	} else {
+		r.try(nil, "wrangler", "delete", "--force")
+	}
 	if id := r.d1(); id != "" {
 		r.try(nil, "wrangler", "d1", "delete", r.worker+"-db", "-y")
 	}

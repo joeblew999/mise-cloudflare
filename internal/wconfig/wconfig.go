@@ -8,7 +8,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"os"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
@@ -38,12 +41,24 @@ const used = (v) => Array.isArray(v) ? v.length > 0
 const kinds = KINDS.filter((k) => k === 'routes' ? used(c.routes) || used(c.route) : used(c[k]));
 console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [], kinds, raw: r.rawConfig }));`
 
-// Read asks the wrangler installed in dir (node_modules) for dir's config.
+// Read asks the wrangler installed in dir (node_modules) for dir's config, in CLOUDFLARE_ENV's environment if it's set.
 func Read(ctx context.Context, dir string) (Config, error) {
+	return ReadEnv(ctx, dir, os.Getenv("CLOUDFLARE_ENV"))
+}
+
+// Envs is the environments the config defines (env.<name>), as written.
+func (c Config) Envs() []string {
+	envs, _ := c.Raw["env"].(map[string]any)
+	return slices.Sorted(maps.Keys(envs))
+}
+
+// ReadEnv is Read in the wrangler environment env ("" for none): the Worker that environment deploys.
+func ReadEnv(ctx context.Context, dir, env string) (Config, error) {
 	var c Config
 	kinds, _ := json.Marshal(Kinds)
 	cmd := exec.CommandContext(ctx, "node", "--input-type=module", "-e", strings.Replace(script, "KINDS", string(kinds), 1))
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "CLOUDFLARE_ENV="+env)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

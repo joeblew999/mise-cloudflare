@@ -60,7 +60,8 @@ func main() {
 	out := flag.String("o", filepath.Join(".mise", "tasks", "cloudflare.toml"), "tasks: the file to write")
 	off := flag.Bool("off", false, "builds: remove the Workers Builds setup")
 	showVersion := flag.Bool("version", false, "print this build's version")
-	branch := flag.String("branch", "", "builds: the branch whose pushes deploy (default cloudflare.toml's, else the repository's default)")
+	branch := flag.String("branch", "", "builds: the branch whose pushes deploy production (default cloudflare.toml's, else the repository's default, or production with staging)")
+	staging := flag.String("staging", "", "builds: the branch whose pushes deploy staging, the wrangler environment env.staging (default cloudflare.toml's)")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
 		flag.PrintDefaults()
@@ -142,6 +143,9 @@ func main() {
 		b := cfg.Builds
 		if *branch != "" {
 			b.Branch = *branch
+		}
+		if *staging != "" {
+			b.Staging = *staging
 		}
 		r.builds(ctx, b, *off, *jsonOut)
 	case "status":

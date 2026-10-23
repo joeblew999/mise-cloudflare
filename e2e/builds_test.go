@@ -13,49 +13,70 @@ import (
 	"time"
 )
 
-// TestBuilds proves go tool cloudflare builds: Cloudflare's Workers Builds deploys a Worker from its GitHub repository
-// with its own token, a push to the deploy branch going live and any other branch getting a preview URL. The Worker
-// (testdata/builds) says which branch built it, so the proof sees Cloudflare's deploys, not its own. Its branches are
-// throwaway ones, deleted with everything else afterwards; main is never touched.
+// TestBuilds proves go tool cloudflare builds, staging and production as go-htmx4 has them: Cloudflare's Workers Builds
+// deploys a Worker from its GitHub repository with its own token, a push to the staging branch deploying staging (the
+// wrangler environment env.staging, its own Worker), a push to the production branch deploying production, and any
+// other branch getting a preview URL, which goes when its branch does. The Worker (testdata/builds) says which branch
+// built it, so the proof sees Cloudflare's deploys, not its own. Its branches are throwaway ones, deleted with
+// everything else afterwards; main is never touched.
 func TestBuilds(t *testing.T) {
 	needAccount(t)
 	dir, _ := filepath.Abs("testdata/builds")
 	// The tool from this checkout: testdata/builds is in this module, which has no tool line for itself.
-	r := repo{t: t, dir: dir, worker: "cloudflare-zero-builds", tool: []string{"go", "run", "github.com/joeblew999/mise-cloudflare/cmd/cloudflare"}}
+	tool := []string{"go", "run", "github.com/joeblew999/mise-cloudflare/cmd/cloudflare"}
+	r := repo{t: t, dir: dir, worker: "cloudflare-zero-builds", tool: tool}
+	st := repo{t: t, dir: dir, worker: "cloudflare-zero-builds-staging", tool: tool, env: "staging"}
 	stamp := time.Now().Unix()
-	prod, prev := fmt.Sprintf("cfz-builds-prod-%d", stamp), fmt.Sprintf("cfz-builds-preview-%d", stamp)
+	stage, prod, prev := fmt.Sprintf("cfz-builds-staging-%d", stamp), fmt.Sprintf("cfz-builds-prod-%d", stamp), fmt.Sprintf("cfz-builds-preview-%d", stamp)
 
-	r.step("The Worker, with KV and R2, deployed once by hand on the repo's own login")
+	r.step("Production and staging, each with KV and R2, deployed once by hand on the repo's own login")
 	r.must(nil, "npm", "ci", "--no-audit", "--no-fund")
 	r.cf(nil, "login")
-	if out, err := r.try(nil, "wrangler", "deployments", "list", "--json"); err == nil {
-		t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it", r.worker)
-	} else if !strings.Contains(out, "10007") {
-		t.Fatalf("couldn't tell whether %s is deployed", r.worker)
-	}
-	if left := r.leftovers(); len(left) > 0 {
-		t.Fatalf("%s is left over from another run: delete it first", strings.Join(left, ", "))
+	for _, w := range []repo{r, st} {
+		args := []string{"wrangler", "deployments", "list", "--json", "--name", w.worker}
+		if out, err := w.try(nil, args...); err == nil {
+			t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it", w.worker)
+		} else if !strings.Contains(out, "10007") {
+			t.Fatalf("couldn't tell whether %s is deployed", w.worker)
+		}
+		if left := w.leftovers(); len(left) > 0 {
+			t.Fatalf("%s is left over from another run: delete it first", strings.Join(left, ", "))
+		}
 	}
 	t.Cleanup(func() {
-		r.step("Removing everything: the Workers Builds setup, the branches, the Worker, its KV and R2")
-		r.try(nil, "-off", "builds")
-		for _, b := range []string{prod, prev} {
+		r.step("Removing everything: the Workers Builds setup, the branches, both Workers, their KV and R2")
+		r.try(nil, "-off", "-staging", stage, "builds")
+		for _, b := range []string{stage, prod, prev} {
 			r.run(nil, "git", "push", "-q", "origin", "--delete", b)
 		}
 		r.deleteAll()
+		st.deleteAll()
 	})
-	r.cf([]string{"WRANGLER_OUTPUT_FILE_PATH=.wrangler/output.json"}, "wrangler", "deploy")
+	out := []string{"WRANGLER_OUTPUT_FILE_PATH=.wrangler/output.json"}
+	r.cf(out, "wrangler", "deploy")
 	url := r.deployedURL()
-	if !built(url, "here", time.Minute) {
-		t.Fatalf("%s isn't working", url)
+	r.cf(out, "wrangler", "deploy", "--env", "staging")
+	stagingURL := r.deployedURL()
+	for _, u := range []string{url, stagingURL} {
+		if !built(u, "here", time.Minute) {
+			t.Fatalf("%s isn't working", u)
+		}
+		r.pass("%s: built here, KV and R2 work", u)
 	}
-	r.pass("%s: built here, KV and R2 work", url)
 
-	r.step("go tool cloudflare builds: Workers Builds, deploying from %s", prod)
-	r.cf(nil, "-branch", prod, "builds")
+	r.step("go tool cloudflare builds: production from %s, staging from %s, previews from any other branch", prod, stage)
+	r.cf(nil, "-branch", prod, "-staging", stage, "builds")
 	r.pass("set up")
 
-	r.step("A push to %s: Workers Builds builds it and deploys it, with Cloudflare's own token", prod)
+	r.step("A push to %s: Workers Builds deploys staging, with Cloudflare's own token", stage)
+	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+stage)
+	if !built(stagingURL, stage, 15*time.Minute) {
+		r.buildsLog()
+		t.Fatalf("%s wasn't deployed from %s in 15 minutes", stagingURL, stage)
+	}
+	r.pass("%s: built from %s by Workers Builds; KV and R2 work", stagingURL, stage)
+
+	r.step("A push to %s: Workers Builds deploys production", prod)
 	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prod)
 	if !built(url, prod, 15*time.Minute) {
 		r.buildsLog()
@@ -63,7 +84,7 @@ func TestBuilds(t *testing.T) {
 	}
 	r.pass("%s: built from %s by Workers Builds; KV and R2 work", url, prod)
 
-	r.step("A push to %s: a preview at its own URL, the live Worker untouched", prev)
+	r.step("A push to %s: a preview at its own URL, production and staging untouched", prev)
 	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prev)
 	// A branch's preview is at <alias>-<worker>.<subdomain>.workers.dev, the alias being the branch's name.
 	preview := strings.Replace(url, "https://", "https://"+alias(prev)+"-", 1)
@@ -72,20 +93,41 @@ func TestBuilds(t *testing.T) {
 		t.Fatalf("%s wasn't built from %s in 15 minutes", preview, prev)
 	}
 	r.pass("%s: built from %s; KV and R2 work", preview, prev)
-	if !built(url, prod, time.Minute) {
-		t.Fatalf("the preview changed the live Worker at %s", url)
+	if !built(url, prod, time.Minute) || !built(stagingURL, stage, time.Minute) {
+		t.Fatal("the preview changed production or staging")
 	}
-	r.pass("%s: still built from %s", url, prod)
+	r.pass("production still built from %s, staging from %s", prod, stage)
 
-	r.step("go tool cloudflare builds -off removes the setup; then the Worker, its KV and R2 go")
-	r.cf(nil, "-off", "builds")
+	r.step("Deleting %s, as merging a pull request does: its preview goes with it", prev)
+	r.must(nil, "git", "push", "-q", "origin", "--delete", prev)
+	if !gone(preview, prev, 10*time.Minute) {
+		t.Fatalf("%s still answers, 10 minutes after its branch went", preview)
+	}
+	r.pass("%s is gone", preview)
+
+	r.step("go tool cloudflare builds -off removes the setup; then both Workers, their KV and R2 go")
+	r.cf(nil, "-off", "-staging", stage, "builds")
 	r.pass("removed")
 	r.deleteAll()
-	if left := r.leftovers(); len(left) > 0 {
-		t.Fatalf("left on the account: %s", strings.Join(left, ", "))
+	st.deleteAll()
+	for _, w := range []repo{r, st} {
+		if left := w.leftovers(); len(left) > 0 {
+			t.Fatalf("left on the account: %s", strings.Join(left, ", "))
+		}
 	}
 	r.pass("nothing left on the account")
 	fmt.Println("\nALL PASSED")
+}
+
+// gone waits until url no longer serves what branch built, or time runs out.
+func gone(url, branch string, limit time.Duration) bool {
+	for end := time.Now().Add(limit); time.Now().Before(end); time.Sleep(15 * time.Second) {
+		if !built(url, branch, time.Second) {
+			fmt.Printf("  %s: no longer built from %s\n", url, branch)
+			return true
+		}
+	}
+	return false
 }
 
 // built fetches url until it says it was built from branch with its KV and R2 working, or time runs out.
