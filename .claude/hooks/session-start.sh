@@ -4,6 +4,10 @@
 set -euo pipefail
 [ "${CLAUDE_CODE_REMOTE:-}" = true ] || exit 0
 export PATH="$HOME/.local/bin:$PATH"
+# A cloud session's GitHub token can see only the session's own repos. mise sends it when it downloads tools'
+# files from other repos (usage's SKILL.md from jdx/usage), and GitHub answers 404, so the install fails.
+# The installs below need no token, so hide it from them.
+unset GITHUB_TOKEN GH_TOKEN
 command -v mise > /dev/null || curl -fsSL https://mise.run | sh
 cd "$CLAUDE_PROJECT_DIR"
 mise trust -q mise.toml
