@@ -468,3 +468,36 @@ func TestJSONPart(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// sweep deletes every D1, KV namespace and R2 bucket whose name starts with prefix (previews get their own, named by
+// wrangler), and returns what it couldn't delete.
+func (r repo) sweep(prefix string) []string {
+	var left []string
+	var dbs []struct{ UUID, Name string }
+	json.Unmarshal([]byte(jsonPart(r.wrangler("d1", "list", "--json"))), &dbs)
+	for _, d := range dbs {
+		if strings.HasPrefix(d.Name, prefix) {
+			if _, err := r.try(nil, "wrangler", "d1", "delete", d.Name, "-y"); err != nil {
+				left = append(left, "D1 "+d.Name)
+			}
+		}
+	}
+	var ns []struct{ ID, Title string }
+	json.Unmarshal([]byte(jsonPart(r.wrangler("kv", "namespace", "list"))), &ns)
+	for _, n := range ns {
+		if strings.HasPrefix(n.Title, prefix) {
+			if _, err := r.try(nil, "wrangler", "kv", "namespace", "delete", "--namespace-id", n.ID, "-y"); err != nil {
+				left = append(left, "KV "+n.Title)
+			}
+		}
+	}
+	for _, line := range strings.Split(r.wrangler("r2", "bucket", "list"), "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[0] == "name:" && strings.HasPrefix(f[1], prefix) {
+			r.try(nil, "wrangler", "r2", "object", "delete", f[1]+"/stamp.txt", "--remote")
+			if _, err := r.try(nil, "wrangler", "r2", "bucket", "delete", f[1]); err != nil {
+				left = append(left, "R2 "+f[1])
+			}
+		}
+	}
+	return left
+}

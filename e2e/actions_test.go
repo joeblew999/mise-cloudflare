@@ -35,7 +35,14 @@ func TestActions(t *testing.T) {
 	} else if !strings.Contains(out, "10007") {
 		t.Fatalf("couldn't tell whether %s is deployed", r.worker)
 	}
-	r.cf(nil, "ci-token")
+	// CI's token, for the proof: the repo login's own OAuth token, good for about an hour, which is long enough; a repo
+	// stores one made in Cloudflare's dashboard instead. Its value is never printed.
+	var tok struct{ Token string }
+	json.Unmarshal([]byte(jsonPart(r.wrangler("auth", "token", "--json"))), &tok)
+	if tok.Token == "" {
+		t.Fatal("no token from the repo's login")
+	}
+	r.cf([]string{"CLOUDFLARE_CI_TOKEN=" + tok.Token}, "ci-token")
 	r.pass("the secrets are set")
 
 	// A worktree of this commit, on the throwaway branch, its workflow deploying from that branch.

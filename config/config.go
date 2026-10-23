@@ -35,9 +35,8 @@ type Config struct {
 
 // Workflow is the GitHub Actions workflow go tool cloudflare workflow writes. Without deploy it checks the repo on every
 // push and pull request, and Workers Builds deploys. With deploy, GitHub Actions deploys too: production from Branch,
-// a preview per pull request, with the CLOUDFLARE_API_TOKEN that go tool cloudflare ci-token makes, holding Cloudflare's
-// usual Workers permissions and Permissions (permission group names, such as "D1 Write") for the Worker's other
-// bindings.
+// a preview per pull request, with the CLOUDFLARE_API_TOKEN go tool cloudflare ci-token stores as a GitHub secret.
+// Permissions lists what that token needs beyond Workers Scripts, KV and R2, as a reminder for whoever makes it.
 type Workflow struct {
 	Deploy      bool     `toml:"deploy"`
 	Branch      string   `toml:"branch"`      // default: the repository's default branch, else main
@@ -116,11 +115,12 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 
 # The GitHub Actions workflow (go tool cloudflare workflow). It checks the repo on every push and pull request. With
 # deploy, GitHub Actions also deploys, instead of Workers Builds: production from branch, a preview pr-<number> per pull
-# request, deleted when it closes, with the token go tool cloudflare ci-token makes and stores as GitHub secrets.
+# request, deleted when it closes, with a token made once in Cloudflare's dashboard and stored by go tool cloudflare
+# ci-token as a GitHub secret.
 [workflow]
 # deploy = true
 # branch = "main"
-# permissions = ["D1 Write"]                   # beyond Workers Scripts, KV, R2 and Account Settings, for other bindings
+# permissions = ["D1 Edit"]                    # what that token needs beyond Workers Scripts, KV and R2: a reminder
 `
 
 // TemplateFor is Template with profile set, for go tool cloudflare init -profile.

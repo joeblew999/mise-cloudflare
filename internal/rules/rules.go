@@ -30,8 +30,10 @@ var (
 func Check(dir string, w wconfig.Config) ([]string, error) {
 	var problems []string
 	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
-	if _, ok := w.Raw["previews"]; !ok {
+	if previews, ok := w.Raw["previews"].(map[string]any); !ok {
 		bad("%s has no previews block: Worker Previews (Workers Builds' and GitHub Actions') need one; add \"previews\": {} (it can be empty)", filepath.Base(w.Path))
+	} else if missing := previewBindings(w.Raw, previews); len(missing) > 0 {
+		bad("%s's previews block lacks the bindings %s: Worker Previews don't inherit them from production (a preview would fail on its first use of one); add them there, pointed at preview-safe resources", filepath.Base(w.Path), strings.Join(missing, ", "))
 	}
 	for _, p := range IDs(w.Raw) {
 		bad("%s holds %s: the login picks the account, and deploy finds or creates resources by name", filepath.Base(w.Path), p)
@@ -110,6 +112,46 @@ func IDs(raw map[string]any) []string {
 		}
 	}
 	return out
+}
+
+// storageKinds are the bindings to resources that Worker Previews don't inherit: each needs its own in the previews block.
+var storageKinds = []string{"d1_databases", "kv_namespaces", "r2_buckets", "vectorize", "hyperdrive", "analytics_engine_datasets",
+	"pipelines", "secrets_store_secrets"}
+
+// previewBindings names the storage bindings the Worker has that its previews block doesn't declare.
+func previewBindings(raw, previews map[string]any) []string {
+	var missing []string
+	names := func(v any) []string {
+		var out []string
+		for _, b := range list(v) {
+			if n, _ := b["binding"].(string); n != "" {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+	for _, k := range storageKinds {
+		have := names(previews[k])
+		for _, n := range names(raw[k]) {
+			if !slices.Contains(have, n) {
+				missing = append(missing, n)
+			}
+		}
+	}
+	// Queue producers too.
+	q, _ := raw["queues"].(map[string]any)
+	pq, _ := previews["queues"].(map[string]any)
+	for _, p := range list(q["producers"]) {
+		n, _ := p["binding"].(string)
+		found := false
+		for _, pp := range list(pq["producers"]) {
+			found = found || pp["binding"] == n
+		}
+		if n != "" && !found {
+			missing = append(missing, n)
+		}
+	}
+	return missing
 }
 
 func list(v any) []map[string]any {

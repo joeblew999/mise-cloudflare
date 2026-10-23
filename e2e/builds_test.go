@@ -51,6 +51,7 @@ func TestBuilds(t *testing.T) {
 		}
 		r.deleteAll()
 		st.deleteAll()
+		r.sweep(r.worker) // the previews' own KV and R2 too
 	})
 	out := []string{"WRANGLER_OUTPUT_FILE_PATH=.wrangler/output.json"}
 	r.cf(out, "wrangler", "deploy")
@@ -110,6 +111,9 @@ func TestBuilds(t *testing.T) {
 	r.pass("removed")
 	r.deleteAll()
 	st.deleteAll()
+	if left := r.sweep(r.worker); len(left) > 0 {
+		t.Fatalf("left on the account: %s", strings.Join(left, ", "))
+	}
 	for _, w := range []repo{r, st} {
 		if left := w.leftovers(); len(left) > 0 {
 			t.Fatalf("left on the account: %s", strings.Join(left, ", "))

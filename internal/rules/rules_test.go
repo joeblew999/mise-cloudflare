@@ -38,8 +38,11 @@ func good() map[string]string {
 // cfg is what wrangler reads from a config with one D1 and one KV, no IDs, needing GREETING.
 func cfg() wconfig.Config {
 	return wconfig.Config{Path: "/r/wrangler.jsonc", Name: "w", Secrets: []string{"GREETING"}, Raw: map[string]any{
-		"name":          "w",
-		"previews":      map[string]any{},
+		"name": "w",
+		"previews": map[string]any{
+			"d1_databases":  []any{map[string]any{"binding": "DB"}},
+			"kv_namespaces": []any{map[string]any{"binding": "KV"}},
+		},
 		"d1_databases":  []any{map[string]any{"binding": "DB"}},
 		"kv_namespaces": []any{map[string]any{"binding": "KV"}},
 	}}
@@ -84,6 +87,17 @@ func TestInitPasses(t *testing.T) {
 	files := good()
 	files["cloudflare.toml"] = config.Template
 	if p, err := Check(repo(t, files), cfg()); err != nil || len(p) != 0 {
+		t.Errorf("problems %q, %v", p, err)
+	}
+}
+
+// TestPreviewBindings: a storage binding the previews block doesn't declare is named; previews inherit none.
+func TestPreviewBindings(t *testing.T) {
+	c := cfg()
+	c.Raw["r2_buckets"] = []any{map[string]any{"binding": "BUCKET"}}
+	c.Raw["queues"] = map[string]any{"producers": []any{map[string]any{"binding": "JOBS"}}}
+	p, err := Check(repo(t, good()), c)
+	if err != nil || len(p) != 1 || !strings.Contains(p[0], "lacks the bindings BUCKET, JOBS") {
 		t.Errorf("problems %q, %v", p, err)
 	}
 }

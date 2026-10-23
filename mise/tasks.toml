@@ -29,9 +29,9 @@ flag "--json" help="one JSON document on stdout"
 run = "go tool cloudflare -off=${usage_off:-false} -branch=${usage_branch:-} -staging=${usage_staging:-} -json=${usage_json:-false} builds"
 
 ["cloudflare:ci-token"]
-description = "For cloudflare.toml's [workflow] deploy: make the Cloudflare API token GitHub Actions deploys with (Cloudflare's usual Workers permissions and [workflow] permissions) and store it as the repository's GitHub secrets, never shown. The first time, a cf login approved on any device; gh must be logged in. --off deletes the token and the secrets"
-tools = { "npm:cf" = "1.0.0-beta.20", gh = "2.103.0" }
-usage = 'flag "--off" help="delete the token and its GitHub secrets"'
+description = "For cloudflare.toml's [workflow] deploy: store the Cloudflare API token GitHub Actions deploys with as the repository's GitHub secrets (with gh), checked first and never shown. Make the token once in Cloudflare's dashboard (the Edit Cloudflare Workers template): no login may make API tokens. --off deletes the secrets"
+tools = { gh = "2.103.0" }
+usage = 'flag "--off" help="delete the secrets"'
 run = "go tool cloudflare -off=${usage_off:-false} ci-token"
 
 ["cloudflare:status"]
