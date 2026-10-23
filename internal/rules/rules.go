@@ -119,7 +119,7 @@ func Previews(w wconfig.Config, need bool) []string {
 	previews, ok := w.Raw["previews"].(map[string]any)
 	if !ok {
 		if need {
-			return []string{fmt.Sprintf("%s has no previews block: Worker Previews need one; add \"previews\": {}, with the Worker's KV, D1, R2 and other storage bindings in it, pointed at preview-safe ones", filepath.Base(w.Path))}
+			return []string{fmt.Sprintf("add \"previews\": {} to %s: a preview needs it (its KV, D1 and R2 it gets of its own)", filepath.Base(w.Path))}
 		}
 		return nil
 	}
@@ -128,7 +128,7 @@ func Previews(w wconfig.Config, need bool) []string {
 		problems = append(problems, fmt.Sprintf("%s's previews block lacks the bindings %s: a preview inherits none from production (only KV, D1 and R2 come from its Previews Base), so it would fail on its first use of one; add them there, pointed at preview-safe resources (vars with preview values)", filepath.Base(w.Path), strings.Join(missing, ", ")))
 	}
 	if unnamed := unnamedResources(previews); len(unnamed) > 0 {
-		problems = append(problems, fmt.Sprintf("%s's previews block has %s with no resource named, which wrangler preview sends as it is and Cloudflare refuses: leave it out, and mise run cloudflare deploy gives previews their own, or name an existing one (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
+		problems = append(problems, fmt.Sprintf("%s's previews block has %s with no resource named, which wrangler preview sends as it is and Cloudflare refuses: leave it out, and mise run cloudflare:deploy gives previews their own, or name an existing one (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
 	}
 	return problems
 }

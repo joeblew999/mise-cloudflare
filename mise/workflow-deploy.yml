@@ -28,7 +28,7 @@
           cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
       - name: Deploy production
         working-directory: DIR
-        run: mise run cloudflare deploy
+        run: mise run cloudflare:deploy
 
   preview:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository

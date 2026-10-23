@@ -30,22 +30,22 @@ mise run cloudflare
 
 ```
 my-worker
-  ✓ 1. Run it locally     mise run cloudflare dev
-  ✓ 2. Deploy it          mise run cloudflare deploy   https://my-worker.example.workers.dev
-  · 3. Deploy every push  mise run cloudflare github   a preview for every pull request, then staging and production
+  ✓ 1. Run it locally     mise run cloudflare:dev
+  ✓ 2. Deploy it          mise run cloudflare:deploy   https://my-worker.example.workers.dev
+  · 3. Deploy every push  mise run cloudflare:github   a preview for every pull request, then staging and production
   login: my-worker, on My Account
-next: mise run cloudflare github
+next: mise run cloudflare:github
 ```
 
 | Step | Run | You're asked |
 |---|---|---|
-| 1. Run it locally, with local D1, KV and R2 | `mise run cloudflare dev` | Nothing: no account needed |
-| 2. Deploy it yourself | `mise run cloudflare deploy` | **Allow**, the first time |
-| 3. Have Cloudflare deploy every push, once | `mise run cloudflare github` | **Allow** for Cloudflare's own CLI, the first time |
+| 1. Run it locally, with local D1, KV and R2 | `mise run cloudflare:dev` | Nothing: no account needed |
+| 2. Deploy it yourself | `mise run cloudflare:deploy` | **Allow**, the first time |
+| 3. Have Cloudflare deploy every push, once | `mise run cloudflare:github` | **Allow** for Cloudflare's own CLI, the first time |
 
 After step 3 there's nothing to run: push a branch and open a pull request, and Cloudflare builds a preview and puts
 its link on the pull request; merge it, and Cloudflare deploys production. For staging too,
-`mise run cloudflare github --staging main`: then merging into `main` deploys staging, and merging `main` into
+`mise run cloudflare:github --staging main`: then merging into `main` deploys staging, and merging `main` into
 `production` deploys production. To have GitHub Actions deploy instead of Cloudflare, `mise run cloudflare actions`.
 
 `mise run cloudflare help` lists every command: a preview by hand, any wrangler command on the repo's login, checking

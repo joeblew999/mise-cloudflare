@@ -86,7 +86,7 @@ var tasksFile = filepath.Join(".mise", "tasks", "mise-cloudflare.toml")
 // and the Claude Code hook.
 func initRepo(ctx context.Context, dir string) {
 	if _, err := os.Stat("cloudflare.toml"); err == nil {
-		fmt.Println("· cloudflare.toml isn't read any more: its settings are the tasks' flags now (mise run cloudflare github --staging main, mise run cloudflare actions). Delete it")
+		fmt.Println("· cloudflare.toml isn't read any more: its settings are the tasks' flags now (mise run cloudflare:github --staging main, mise run cloudflare actions). Delete it")
 	}
 	b, err := tasksFor(dir)
 	if err != nil {

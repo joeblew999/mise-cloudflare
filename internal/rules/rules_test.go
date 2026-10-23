@@ -71,7 +71,7 @@ func TestCheckFinds(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(p, "\n")
-	for _, want := range []string{"no previews block", "an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
+	for _, want := range []string{"add \"previews\": {}", "an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
 		"notes.txt holds a Cloudflare token", ".dev.vars isn't", ".env isn't", ".cloudflare/ isn't", "secrets.required lists [GREETING KEY]", "isn't pinned"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -118,7 +118,7 @@ func TestPreviewsNeeded(t *testing.T) {
 	if p := Previews(c, false); len(p) != 0 {
 		t.Errorf("problems %q", p)
 	}
-	if p := Previews(c, true); len(p) != 1 || !strings.Contains(p[0], "no previews block") {
+	if p := Previews(c, true); len(p) != 1 || !strings.Contains(p[0], "add \"previews\": {}") {
 		t.Errorf("problems %q", p)
 	}
 }

@@ -10,9 +10,9 @@ done for this repo, and what to run next. Run tasks from the repo's root.
 
 | Step | Task |
 |---|---|
-| 1. Run the Worker locally (no account) | `mise run cloudflare dev` |
-| 2. Deploy it | `mise run cloudflare deploy` |
-| 3. Have Cloudflare deploy every push: a preview for every pull request, then staging and production | `mise run cloudflare github` (`-- --staging main` for staging) |
+| 1. Run the Worker locally (no account) | `mise run cloudflare:dev` |
+| 2. Deploy it | `mise run cloudflare:deploy` |
+| 3. Have Cloudflare deploy every push: a preview for every pull request, then staging and production | `mise run cloudflare:github` (`-- --staging main` for staging) |
 | Or instead of 3, have GitHub Actions deploy | `mise run cloudflare actions` |
 | A preview of what's here now | `mise run cloudflare preview --name my-test` |
 | Any other wrangler command | `mise run cloudflare wrangler d1 list` (secret put, delete, kv, r2, tail, …) |

@@ -272,7 +272,7 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 	case res.Success:
 		return nil
 	case resp.StatusCode == http.StatusNotFound:
-		return fmt.Errorf("%s %w: deploy it once first (mise run cloudflare deploy), then this again", worker, errNotOnCloudflare)
+		return fmt.Errorf("%s %w: deploy it once first (mise run cloudflare:deploy), then this again", worker, errNotOnCloudflare)
 	default:
 		return fmt.Errorf("Cloudflare refused %s's Previews Base (HTTP %d): %v", worker, resp.StatusCode, res.Errors)
 	}

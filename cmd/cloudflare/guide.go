@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/joeblew999/mise-cloudflare/internal/cf"
@@ -23,6 +24,7 @@ type guideReport struct {
 	Scopes      []string           `json:"scopes"` // what the login holds
 	Needs       []string           `json:"needs"`  // what it must hold: wrangler's own login's
 	Deployed    bool               `json:"deployed"`
+	Secrets     []string           `json:"secretsToSet"` // the config's secrets.required not yet on Cloudflare
 	URL         string             `json:"url,omitempty"`
 	GitHub      string             `json:"github"` // who deploys every push: "Workers Builds", "GitHub Actions", or ""
 	StrayTokens []string           `json:"strayTokens"`
@@ -49,6 +51,19 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 			rep.URL = lastDeployURL(r.dir)
 		}
 	}
+	// The secrets the Worker requires that Cloudflare doesn't have yet: a deploy refuses until they're set. wrangler
+	// secret put sets one, and makes the Worker if it isn't there yet.
+	if len(r.wc.Secrets) > 0 && len(rep.StrayTokens) == 0 {
+		var have []struct{ Name string }
+		if rep.LoggedIn {
+			r.wranglerJSON(ctx, &have, "secret", "list")
+		}
+		for _, s := range r.wc.Secrets {
+			if !slices.ContainsFunc(have, func(h struct{ Name string }) bool { return h.Name == s }) {
+				rep.Secrets = append(rep.Secrets, s)
+			}
+		}
+	}
 	switch {
 	case r.viaActions:
 		rep.GitHub = "GitHub Actions"
@@ -69,14 +84,16 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	switch {
 	case len(rep.StrayTokens) > 0:
 		rep.Next = "remove the CLOUDFLARE_API_TOKEN in " + strings.Join(rep.StrayTokens, " and ") + ": it would override the repo's login"
+	case len(rep.Secrets) > 0:
+		rep.Next = "mise run cloudflare wrangler secret put " + rep.Secrets[0] + " (it asks for the value)"
 	case !rep.Deployed:
-		rep.Next = "mise run cloudflare deploy"
+		rep.Next = "mise run cloudflare:deploy"
 	case len(previewProblems) > 0:
-		rep.Next = previewProblems[0] + "; then mise run cloudflare github"
+		rep.Next = previewProblems[0] + "; then mise run cloudflare:github"
 	case rep.GitHub == "":
-		rep.Next = "mise run cloudflare github"
+		rep.Next = "mise run cloudflare:github"
 	case len(previewsMissing) > 0:
-		rep.Next = "mise run cloudflare github: previews don't have their own " + strings.Join(previewsMissing, ", ") + " yet"
+		rep.Next = "mise run cloudflare:github: previews don't have their own " + strings.Join(previewsMissing, ", ") + " yet"
 	default:
 		rep.Next = "push a branch and open a pull request: its preview's link comes on the pull request"
 	}
@@ -86,12 +103,15 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	}
 	mark := map[bool]string{true: "✓", false: "·"}
 	fmt.Printf("%s\n", rep.Worker)
-	fmt.Printf("  ✓ 1. Run it locally     mise run cloudflare dev\n")
-	fmt.Printf("  %s 2. Deploy it          mise run cloudflare deploy   %s\n", mark[rep.Deployed], cmp.Or(rep.URL, map[bool]string{true: "deployed", false: "not deployed yet"}[rep.Deployed]))
+	fmt.Printf("  ✓ 1. Run it locally     mise run cloudflare:dev\n")
+	fmt.Printf("  %s 2. Deploy it          mise run cloudflare:deploy   %s\n", mark[rep.Deployed], cmp.Or(rep.URL, map[bool]string{true: "deployed", false: "not deployed yet"}[rep.Deployed]))
+	if len(rep.Secrets) > 0 {
+		fmt.Printf("    first, its secrets: %s (mise run cloudflare wrangler secret put <name>)\n", strings.Join(rep.Secrets, ", "))
+	}
 	if rep.GitHub != "" {
 		fmt.Printf("  ✓ 3. Deploy every push  %s deploys it: a preview for every pull request\n", rep.GitHub)
 	} else {
-		fmt.Printf("  · 3. Deploy every push  mise run cloudflare github   a preview for every pull request, then staging and production\n")
+		fmt.Printf("  · 3. Deploy every push  mise run cloudflare:github   a preview for every pull request, then staging and production\n")
 	}
 	switch {
 	case !rep.LoggedIn:

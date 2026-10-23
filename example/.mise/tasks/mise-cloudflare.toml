@@ -1,11 +1,20 @@
-# This repo's Cloudflare Worker:
-#
-#   mise run cloudflare        where it is, step by step, and what to run next
-#   mise run cloudflare help   every command
-#
+# This repo's Cloudflare Worker. Start with: mise run cloudflare (what's done, and what to run next).
 # Written by mise-cloudflare (github.com/joeblew999/mise-cloudflare): don't edit it.
 
 ["cloudflare"]
-description = "This repo's Cloudflare Worker: on its own, where it is and what to run next; help lists every command"
+description = "Start here: what's done for this Worker, and what to run next (mise run cloudflare help: every command)"
 tools = { "npm:cf" = "1.0.0-beta.20", gh = "2.103.0" }
 run = "go tool cloudflare"
+
+["cloudflare:dev"]
+description = "1. Run the Worker locally, with local D1, KV and R2: no Cloudflare account needed"
+run = "go tool cloudflare dev"
+
+["cloudflare:deploy"]
+description = "2. Deploy the Worker yourself: the first time, you click Allow"
+run = "go tool cloudflare deploy"
+
+["cloudflare:github"]
+description = "3. Have Cloudflare deploy every push: a preview for every pull request, then production (--staging main for staging)"
+tools = { "npm:cf" = "1.0.0-beta.20", gh = "2.103.0" }
+run = "go tool cloudflare github"

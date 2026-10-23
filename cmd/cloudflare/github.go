@@ -57,7 +57,7 @@ func (r repo) github(ctx context.Context, b builds, off, jsonOut bool) {
 		fail(errors.New("Workers Builds is set up once, from a machine or a Claude Code session, not in CI"))
 	}
 	if !cf.Installed() {
-		fail(errors.New("cf isn't installed: run mise run cloudflare github, which brings it"))
+		fail(errors.New("cf isn't installed: run mise run cloudflare:github, which brings it"))
 	}
 	r.refuseStrayTokens()
 	c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
@@ -225,7 +225,7 @@ func workerTag(ctx context.Context, c cf.CF, name, env string) string {
 	if tag := findWorker(ctx, c, name); tag != "" {
 		return tag
 	}
-	deploy := "mise run cloudflare deploy"
+	deploy := "mise run cloudflare:deploy"
 	if env != "" {
 		deploy += " -- --env " + env
 	}

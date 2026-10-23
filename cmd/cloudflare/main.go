@@ -152,22 +152,22 @@ func main() {
 }
 
 // help is cloudflare help: every command, in the order they're used.
-const help = `This repo's Cloudflare Worker, with mise-cloudflare. Run each as mise run cloudflare <command>:
+const help = `This repo's Cloudflare Worker, with mise-cloudflare.
 
-  (none)          where the Worker is, step by step, and what to run next
-  dev             1. run it locally (wrangler dev), with local D1, KV and R2: no account needed
-  deploy          2. deploy it yourself (wrangler deploy): the first time, you click Allow
-  github          3. have Cloudflare deploy every push: a preview for every pull request, then
-                     staging and production (--staging main for staging; --off to stop)
-  actions         or instead of 3, GitHub Actions deploys every push (--off to stop)
-  preview         a preview of what's here now, at its own URL (--name my-test)
-  check           check the repo: no tokens or account IDs in it, secrets git-ignored, files current
-  wrangler <...>  any other wrangler command, on the repo's login: wrangler d1 list
-  login, logout   the repo's Cloudflare login (the others make it when they need it)
-  update          after upgrading mise-cloudflare: write its files into the repo again
-  version         this build's version
+The steps, in order (mise run cloudflare says which is next):
+  mise run cloudflare:dev      1. run it locally, with local D1, KV and R2: no account needed
+  mise run cloudflare:deploy   2. deploy it yourself: the first time, you click Allow
+  mise run cloudflare:github   3. have Cloudflare deploy every push: a preview for every pull request,
+                                  then production (--staging main for staging; --off to stop)
 
---json prints one JSON document instead (none, github, check, login).
+Now and then, as mise run cloudflare <command>:
+  actions          instead of 3, GitHub Actions deploys every push (--off to stop)
+  preview          a preview of what's here now, at its own URL (--name my-test)
+  wrangler <...>   any other wrangler command on the repo's login: wrangler secret put NAME
+  check            check the repo: no tokens or account IDs in it, secrets git-ignored, files current
+  login, logout    the repo's Cloudflare login (the others make it when they need it)
+  update           after upgrading mise-cloudflare: write its files into the repo again
+  version          this build's version
 `
 
 // run runs wrangler with args on this terminal: on the repo's login when onLogin (made first if needed), or in CI on
