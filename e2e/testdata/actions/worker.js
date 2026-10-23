@@ -4,6 +4,6 @@ export default {
     const stamp = new Date().toISOString();
     await env.KV.put("stamp", stamp);
     const kv = (await env.KV.get("stamp")) === stamp;
-    return Response.json({ worker: "cloudflare-zero-actions", kv });
+    return Response.json({ worker: "cloudflare-zero-actions", pr: true, kv });
   },
 };
