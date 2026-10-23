@@ -227,9 +227,9 @@ func buildTokenNeeds(kinds []string) []string {
 	var out []string
 	for _, k := range kinds {
 		switch k {
-		case "d1_databases":
+		case "d1":
 			out = append(out, "D1 Edit")
-		case "secrets_store_secrets":
+		case "secrets_store_secret":
 			out = append(out, "Secrets Store Edit")
 		}
 	}

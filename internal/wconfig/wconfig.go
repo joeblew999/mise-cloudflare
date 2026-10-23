@@ -12,34 +12,37 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"strings"
 )
 
 // Config is what the tasks need from a repo's wrangler config.
 type Config struct {
-	Path    string         `json:"path"`    // the file wrangler read
-	Name    string         `json:"name"`    // the Worker's name, as wrangler resolves it (CLOUDFLARE_ENV included)
-	Secrets []string       `json:"secrets"` // secrets.required
-	Kinds   []string       `json:"kinds"`   // the kinds of binding the Worker uses: d1_databases, queues, routes, …
-	Raw     map[string]any `json:"raw"`     // the file as written, every environment in it
+	Path    string   `json:"path"`    // the file wrangler read
+	Name    string   `json:"name"`    // the Worker's name, as wrangler resolves it (CLOUDFLARE_ENV included)
+	Secrets []string `json:"secrets"` // secrets.required
+	// The Worker's bindings and its previews block's, name → type, as wrangler itself converts them (kv_namespace, d1,
+	// queue, workflow, …): no list of kinds here, so a kind wrangler adds is there too.
+	Bindings        map[string]string `json:"bindings"`
+	PreviewBindings map[string]string `json:"previewBindings"`
+	// Kinds is the binding types the Worker has, and routes, containers and k2 if it has them (settings wrangler doesn't
+	// convert to bindings, and a login needs scopes for).
+	Kinds []string       `json:"kinds"`
+	Raw   map[string]any `json:"raw"` // the file as written, every environment in it
 }
 
-// Kinds are the binding kinds wrangler's config can hold, by their config key (and routes, for route and routes).
-var Kinds = []string{"d1_databases", "kv_namespaces", "r2_buckets", "queues", "durable_objects", "vectorize", "hyperdrive",
-	"ai", "pipelines", "secrets_store_secrets", "workflows", "containers", "browser", "send_email",
-	"analytics_engine_datasets", "services", "dispatch_namespaces", "images", "ratelimits", "routes"}
-
 // script reads the config with the repo's own wrangler: unstable_readConfig is what wrangler deploy resolves,
-// experimental_readRawConfig the file as written. One marked line, so nothing else wrangler prints gets in the way.
-// A kind is used when its list (or its producers, consumers or bindings) has something in it, or its object is set.
+// experimental_readRawConfig the file as written, unstable_convertConfigBindingsToStartWorkerBindings its bindings, as
+// wrangler sends them. One marked line, so nothing else wrangler prints gets in the way.
 const script = `const w = await import('wrangler');
 const c = w.unstable_readConfig({ env: process.env.CLOUDFLARE_ENV || undefined });
 const r = await w.experimental_readRawConfig({});
-const used = (v) => Array.isArray(v) ? v.length > 0
-  : v && typeof v === 'object' ? (v.bindings ?? [...(v.producers ?? []), ...(v.consumers ?? [])]).length > 0 || (!v.bindings && !v.producers && !v.consumers && Object.keys(v).length > 0)
-  : !!v;
-const kinds = KINDS.filter((k) => k === 'routes' ? used(c.routes) || used(c.route) : used(c[k]));
-console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [], kinds, raw: r.rawConfig }));`
+const types = (b) => Object.fromEntries(Object.entries(w.unstable_convertConfigBindingsToStartWorkerBindings(b ?? {}) ?? {}).map(([n, v]) => [n, v.type]));
+const bindings = types(c), previewBindings = types(c.previews);
+const kinds = [...new Set(Object.values(bindings))];
+if ((c.routes?.length ?? 0) > 0 || c.route) kinds.push('routes');
+if ((c.containers?.length ?? 0) > 0) kinds.push('containers');
+if ((c.k2?.length ?? 0) > 0) kinds.push('k2');
+kinds.sort();
+console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [], bindings, previewBindings, kinds, raw: r.rawConfig }));`
 
 // Read asks the wrangler installed in dir (node_modules) for dir's config, in CLOUDFLARE_ENV's environment if it's set.
 func Read(ctx context.Context, dir string) (Config, error) {
@@ -55,8 +58,7 @@ func (c Config) Envs() []string {
 // ReadEnv is Read in the wrangler environment env ("" for none): the Worker that environment deploys.
 func ReadEnv(ctx context.Context, dir, env string) (Config, error) {
 	var c Config
-	kinds, _ := json.Marshal(Kinds)
-	cmd := exec.CommandContext(ctx, "node", "--input-type=module", "-e", strings.Replace(script, "KINDS", string(kinds), 1))
+	cmd := exec.CommandContext(ctx, "node", "--input-type=module", "-e", script)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "CLOUDFLARE_ENV="+env)
 	var stderr bytes.Buffer

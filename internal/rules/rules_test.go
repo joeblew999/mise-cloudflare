@@ -37,15 +37,16 @@ func good() map[string]string {
 
 // cfg is what wrangler reads from a config with one D1 and one KV, no IDs, needing GREETING.
 func cfg() wconfig.Config {
-	return wconfig.Config{Path: "/r/wrangler.jsonc", Name: "w", Secrets: []string{"GREETING"}, Raw: map[string]any{
-		"name": "w",
-		"previews": map[string]any{
-			"d1_databases":  []any{map[string]any{"binding": "DB", "database_id": "staging-db"}},
-			"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "staging-kv"}},
-		},
-		"d1_databases":  []any{map[string]any{"binding": "DB"}},
-		"kv_namespaces": []any{map[string]any{"binding": "KV"}},
-	}}
+	return wconfig.Config{Path: "/r/wrangler.jsonc", Name: "w", Secrets: []string{"GREETING"},
+		Bindings: map[string]string{"DB": "d1", "KV": "kv_namespace"}, PreviewBindings: map[string]string{"DB": "d1", "KV": "kv_namespace"}, Raw: map[string]any{
+			"name": "w",
+			"previews": map[string]any{
+				"d1_databases":  []any{map[string]any{"binding": "DB", "database_id": "staging-db"}},
+				"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "staging-kv"}},
+			},
+			"d1_databases":  []any{map[string]any{"binding": "DB"}},
+			"kv_namespaces": []any{map[string]any{"binding": "KV"}},
+		}}
 }
 
 func TestCheckPasses(t *testing.T) {
@@ -91,13 +92,12 @@ func TestInitPasses(t *testing.T) {
 	}
 }
 
-// TestPreviewBindings: a storage binding the previews block doesn't declare is named, but for KV, D1 and R2, which the
-// Previews Base gives (go tool cloudflare previews).
+// TestPreviewBindings: a binding the previews block doesn't have is named, but for KV, D1 and R2, which the Previews Base
+// gives (go tool cloudflare previews).
 func TestPreviewBindings(t *testing.T) {
 	c := cfg()
-	c.Raw["r2_buckets"] = []any{map[string]any{"binding": "BUCKET"}}
-	c.Raw["vectorize"] = []any{map[string]any{"binding": "INDEX", "index_name": "i"}}
-	c.Raw["queues"] = map[string]any{"producers": []any{map[string]any{"binding": "JOBS"}}}
+	c.PreviewBindings = map[string]string{"AI": "ai"}
+	c.Bindings = map[string]string{"DB": "d1", "KV": "kv_namespace", "BUCKET": "r2_bucket", "INDEX": "vectorize", "JOBS": "queue", "AI": "ai", "ASSETS": "assets"}
 	p, err := Check(repo(t, good()), c, false)
 	if err != nil || len(p) != 1 || !strings.Contains(p[0], "lacks the bindings INDEX, JOBS") {
 		t.Errorf("problems %q, %v", p, err)

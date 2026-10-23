@@ -6,22 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
-
-// previewKinds are the bindings a preview gets from the Worker's Previews Base when the previews block leaves them out:
-// KV, D1 and R2, which wrangler deploy creates for production and wrangler preview doesn't create at all.
-var previewKinds = []struct{ key, kind, what string }{
-	{"kv_namespaces", "kv_namespace", "KV"}, {"d1_databases", "d1", "D1"}, {"r2_buckets", "r2_bucket", "R2"},
-}
 
 // previewResource is one of the previews' own KV namespaces, D1s or R2 buckets.
 type previewResource struct {
@@ -39,16 +35,13 @@ type previewResource struct {
 // and production's and staging's stay theirs. Run again, it makes only what's new. With off, it takes them out of the
 // Previews Base and deletes them. The Worker must be on Cloudflare already: deployed once, or by Workers Builds.
 func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource {
-	declared, _ := r.wc.Raw["previews"].(map[string]any)
+	// KV, D1 and R2 the previews block leaves out, by wrangler's own types for the Worker's bindings.
+	what := map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2"}
 	var out []previewResource
-	for _, k := range previewKinds {
-		have := map[string]bool{}
-		for _, b := range bindingList(declared[k.key]) {
-			have[fmt.Sprint(b["binding"])] = true
-		}
-		for _, b := range bindingList(r.wc.Raw[k.key]) {
-			if n := fmt.Sprint(b["binding"]); !have[n] {
-				out = append(out, previewResource{Binding: n, Kind: k.what, Name: previewName(r.wc.Name, n)})
+	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
+		if kind, ok := what[r.wc.Bindings[n]]; ok {
+			if _, declared := r.wc.PreviewBindings[n]; !declared {
+				out = append(out, previewResource{Binding: n, Kind: kind, Name: previewName(r.wc.Name, n)})
 			}
 		}
 	}
@@ -247,15 +240,4 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 	default:
 		return fmt.Errorf("Cloudflare refused %s's Previews Base (HTTP %d): %v", worker, resp.StatusCode, res.Errors)
 	}
-}
-
-func bindingList(v any) []map[string]any {
-	items, _ := v.([]any)
-	var out []map[string]any
-	for _, it := range items {
-		if m, ok := it.(map[string]any); ok {
-			out = append(out, m)
-		}
-	}
-	return out
 }

@@ -85,29 +85,69 @@ old Global API Key, which can do everything, is never used.
 
 ### Bindings and their permissions
 
-Neither wrangler nor Cloudflare publishes which scope each kind of binding needs. wrangler's own login asks for one
-scope per product, each described by what it covers ("`workers_kv:write`: See and change Cloudflare Workers KV Storage
-data…"), so each binding gets the scope that names its product; a binding no scope names needs none beyond the four
-every Worker has (`account:read user:read workers:write workers_scripts:write`), as with wrangler's own login. The table
-is [config.BindingScopes](../config/config.go).
+The kinds of binding a Worker has come from its own wrangler, at run time: wrangler converts the config's bindings
+(`unstable_convertConfigBindingsToStartWorkerBindings`), each with its type, so a kind wrangler adds is seen too. The
+scopes a login can ask for are wrangler's too (its login's list). Nothing joins the two: neither wrangler nor
+Cloudflare publishes which scope each kind needs (Cloudflare's own catalog of OAuth scopes maps none). So one table
+does, [config.BindingScopes](../config/config.go): each kind gets the scope whose description in wrangler's login names
+its product ("`workers_kv:write`: See and change Cloudflare Workers KV Storage data…"), or none where no scope does, as
+with wrangler's own login. Three things keep it honest:
 
-| Binding (wrangler config) | Scope | Proven on a real account |
+- `go test` reads the installed wrangler's binding types and its login's scopes, and fails if wrangler has a type the
+  table lacks or the table names a scope wrangler can't ask for. Upgrading wrangler can't leave it behind silently.
+- A Worker with a kind the table lacks is told so by `cloudflare:status`, `check` and `login`, never given nothing
+  silently: if wrangler is refused, add the scope it names to `cloudflare.toml`'s `scopes`.
+- Each entry is proven on a real account by a proof, or says it isn't yet. This table is generated from the code, and
+  `go test` fails if it differs:
+
+| Binding type (wrangler's) | Scope beyond the four | Proven on a real account |
 |---|---|---|
-| `kv_namespaces` | `workers_kv:write` | Yes (`prove`, `prove-builds`) |
-| `d1_databases` | `d1:write` | Yes (`prove`) |
-| `r2_buckets` | none: `workers:write` covers it | Yes (`prove`, `prove-builds`) |
-| `queues` | `queues:write` | Yes (`prove-bindings`) |
-| `pipelines` | `pipelines:write` | Its streams, by `prove-basin`; the binding not yet |
+| `agent_memory` | `agent-memory:write` | Not yet |
 | `ai` | `ai:write` | Yes (`prove-bindings`) |
-| `secrets_store_secrets` | `secrets_store:write` | Not yet |
-| `containers` | `containers:write`, `cloudchamber:write` | Not yet |
+| `ai_search` | `ai-search:write` | Not yet |
+| `ai_search_namespace` | `ai-search:write` | Not yet |
+| `analytics` | none | Not yet |
+| `analytics_engine` | none | Yes (`prove-bindings`) |
+| `artifacts` | `artifacts:write` | Not yet |
+| `assets` | none | Not yet |
 | `browser` | `browser:write` | Yes (`prove-bindings`) |
-| `route`, `routes` | `workers_routes:write`, `zone:read` | Not yet |
-| `durable_objects`, `workflows`, `vectorize`, `analytics_engine_datasets`, `images`, `ratelimits` | none beyond the four | Yes (`prove-bindings`) |
-| `services`, `hyperdrive`, `dispatch_namespaces`, `send_email` | none beyond the four | Not yet: each needs something outside the Worker (another Worker, a database, Workers for Platforms, a zone with Email Routing) |
+| `containers` | `containers:write`, `cloudchamber:write` | Not yet |
+| `d1` | `d1:write` | Yes (`prove`) |
+| `data_blob` | none | Not yet |
+| `dispatch_namespace` | none | Not yet |
+| `durable_object_namespace` | none | Yes (`prove-bindings`) |
+| `flagship` | `flagship:write` | Not yet |
+| `hyperdrive` | none | Not yet |
+| `images` | none | Yes (`prove-bindings`) |
+| `json` | none | Not yet |
+| `k2` | `k2.write` | Not yet |
+| `kv_namespace` | `workers_kv:write` | Yes (`prove`, `prove-builds`) |
+| `logfwdr` | none | Not yet |
+| `media` | none | Not yet |
+| `mtls_certificate` | `ssl_certs:write` | Not yet |
+| `pipeline` | `pipelines:write` | Not yet |
+| `plain_text` | none | Yes (`prove-builds`) |
+| `queue` | `queues:write` | Yes (`prove-bindings`) |
+| `r2_bucket` | none | Yes (`prove`, `prove-builds`) |
+| `ratelimit` | none | Yes (`prove-bindings`) |
+| `routes` | `workers_routes:write`, `zone:read` | Not yet |
+| `secrets_store_secret` | `secrets_store:write` | Not yet |
+| `service` | none | Not yet |
+| `stream` | none | Not yet |
+| `text_blob` | none | Not yet |
+| `unsafe_hello_world` | none | Not yet |
+| `vectorize` | none | Yes (`prove-bindings`) |
+| `version_metadata` | none | Not yet |
+| `vpc_network` | `connectivity:admin` | Not yet |
+| `vpc_service` | `connectivity:admin` | Not yet |
+| `wasm_module` | none | Not yet |
+| `worker_loader` | none | Not yet |
+| `workflow` | none | Yes (`prove-bindings`) |
+| `send_email` | unknown: `cloudflare:status` and `check` say so | Not yet |
 
-If a binding is refused anyway, wrangler names the Cloudflare API call it was refused: add the scope to
-`cloudflare.toml`'s `scopes`.
+`routes`, `containers` and `k2` aren't bindings, but a Worker with them needs scopes too, so they're found by their
+settings. Not every product Cloudflare has is a binding, either: Basin's R2 Data Catalog, say, is reached with its
+own token, not through a binding.
 
 ## Workers Builds: production, staging, previews and pull requests
 

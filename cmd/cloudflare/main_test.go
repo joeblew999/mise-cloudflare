@@ -199,7 +199,7 @@ func TestClaude(t *testing.T) {
 
 // TestCITokenHelp: the dashboard link picks Workers Scripts and what the Worker's bindings need, and names what it can't.
 func TestCITokenHelp(t *testing.T) {
-	help := ciTokenHelp("w", []string{"d1_databases", "kv_namespaces", "r2_buckets", "secrets_store_secrets"})
+	help := ciTokenHelp("w", []string{"d1", "kv_namespace", "r2_bucket", "secrets_store_secret"})
 	link := regexp.MustCompile(`https://dash\.cloudflare\.com/\S+`).FindString(help)
 	u, err := url.Parse(link)
 	if err != nil {

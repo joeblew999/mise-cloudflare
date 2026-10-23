@@ -25,38 +25,94 @@ const File = "cloudflare.toml"
 // BaseScopes are what every Worker's login needs: the account, the user, and Workers and their scripts.
 var BaseScopes = []string{"account:read", "user:read", "workers:write", "workers_scripts:write"}
 
-// BindingScopes are the OAuth scopes a kind of binding (its wrangler config key) needs beyond BaseScopes. Neither
-// wrangler nor Cloudflare publishes this; each is the scope whose description in wrangler's own login names the product
-// ("workers_kv:write: See and change Cloudflare Workers KV Storage data…"). A kind that no scope names needs none, as
-// with wrangler's own login, which asks for no other: R2 (workers:write), Durable Objects (workers_scripts:write),
-// Vectorize, Hyperdrive, Workflows, service bindings, …. docs/reference.md says which are proven on a real account.
-var BindingScopes = map[string][]string{
-	"kv_namespaces":         {"workers_kv:write"},
-	"d1_databases":          {"d1:write"},
-	"queues":                {"queues:write"},
-	"pipelines":             {"pipelines:write"},
-	"ai":                    {"ai:write"},
-	"secrets_store_secrets": {"secrets_store:write"},
-	"containers":            {"containers:write", "cloudchamber:write"},
-	"browser":               {"browser:write"},
-	"routes":                {"workers_routes:write", "zone:read"},
+// BindingScope is what one kind of binding needs of a repo's login beyond BaseScopes, and the proof that showed it on a
+// real account ("" if none has yet).
+type BindingScope struct {
+	Scopes []string
+	Proven string
 }
 
-// TokenPermissions are the permissions CI's token needs for a kind of binding beyond Workers Scripts, which deploying
+// BindingScopes is each kind of binding, by the type wrangler itself gives it (unstable_convertConfigBindingsToStartWorkerBindings),
+// and routes, containers and k2, which aren't bindings but need scopes. Neither wrangler nor Cloudflare publishes which
+// scope a kind needs, so each is the scope whose description in wrangler's own login names the product
+// ("workers_kv:write: See and change Cloudflare Workers KV Storage data…"), or none where no scope does, as with
+// wrangler's own login. TestBindingTypes fails when the installed wrangler has a type this doesn't cover, or names a
+// scope wrangler doesn't have; a Worker with a kind that isn't here is told so (Unknown), never given nothing silently.
+var BindingScopes = map[string]BindingScope{
+	"kv_namespace":             {[]string{"workers_kv:write"}, "prove, prove-builds"},
+	"d1":                       {[]string{"d1:write"}, "prove"},
+	"r2_bucket":                {nil, "prove, prove-builds"},
+	"queue":                    {[]string{"queues:write"}, "prove-bindings"},
+	"ai":                       {[]string{"ai:write"}, "prove-bindings"},
+	"browser":                  {[]string{"browser:write"}, "prove-bindings"},
+	"durable_object_namespace": {nil, "prove-bindings"},
+	"workflow":                 {nil, "prove-bindings"},
+	"vectorize":                {nil, "prove-bindings"},
+	"analytics_engine":         {nil, "prove-bindings"},
+	"images":                   {nil, "prove-bindings"},
+	"ratelimit":                {nil, "prove-bindings"},
+	"plain_text":               {nil, "prove-builds"},
+	"pipeline":                 {[]string{"pipelines:write"}, ""},
+	"secrets_store_secret":     {[]string{"secrets_store:write"}, ""},
+	"agent_memory":             {[]string{"agent-memory:write"}, ""},
+	"ai_search":                {[]string{"ai-search:write"}, ""},
+	"ai_search_namespace":      {[]string{"ai-search:write"}, ""},
+	"artifacts":                {[]string{"artifacts:write"}, ""},
+	"flagship":                 {[]string{"flagship:write"}, ""},
+	"mtls_certificate":         {[]string{"ssl_certs:write"}, ""},
+	"vpc_service":              {[]string{"connectivity:admin"}, ""},
+	"vpc_network":              {[]string{"connectivity:admin"}, ""},
+	"routes":                   {[]string{"workers_routes:write", "zone:read"}, ""},
+	"containers":               {[]string{"containers:write", "cloudchamber:write"}, ""},
+	"k2":                       {[]string{"k2.write"}, ""},
+	"json":                     {nil, ""},
+	"version_metadata":         {nil, ""},
+	"assets":                   {nil, ""},
+	"data_blob":                {nil, ""},
+	"text_blob":                {nil, ""},
+	"wasm_module":              {nil, ""},
+	"service":                  {nil, ""},
+	"worker_loader":            {nil, ""},
+	"dispatch_namespace":       {nil, ""},
+	"hyperdrive":               {nil, ""},
+	"media":                    {nil, ""},
+	"stream":                   {nil, ""},
+	"logfwdr":                  {nil, ""},
+	"analytics":                {nil, ""},
+	"unsafe_hello_world":       {nil, ""},
+}
+
+// NoScopeKnown are kinds of binding wrangler has whose scope can't be told from its descriptions: send_email could be
+// Email Routing's or Email Sending's. A Worker with one is told, as for any kind BindingScopes lacks.
+var NoScopeKnown = []string{"send_email"}
+
+// Unknown is the kinds of binding a Worker has that BindingScopes doesn't cover: whatever they need, the login has it
+// only if cloudflare.toml's scopes adds it.
+func Unknown(kinds []string) []string {
+	var out []string
+	for _, k := range kinds {
+		if _, ok := BindingScopes[k]; !ok {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// TokenPermissions are the permissions CI's token needs for a kind of binding (BindingScopes' kinds) beyond Workers Scripts, which deploying
 // needs ("You do not need separate permissions on the bound resources to deploy the Worker", Cloudflare's Workers
 // authorization docs): for what wrangler does to the resources themselves, creating KV, D1 and R2 on a first deploy and
 // routes on a zone. Each is key:type in Cloudflare's token links (fundamentals/api/how-to/account-owned-token-template).
 var TokenPermissions = map[string][]string{
-	"kv_namespaces": {"workers_kv_storage:edit"},
-	"r2_buckets":    {"workers_r2:edit"},
-	"d1_databases":  {"d1:edit"},
-	"routes":        {"workers_routes:edit", "zone:read"},
+	"kv_namespace": {"workers_kv_storage:edit"},
+	"r2_bucket":    {"workers_r2:edit"},
+	"d1":           {"d1:edit"},
+	"routes":       {"workers_routes:edit", "zone:read"},
 }
 
 // TokenByHand are the permissions CI's token needs for a kind of binding that Cloudflare's token links have no key for,
 // by their names in the dashboard: Secrets Store's, which Cloudflare says deploying a Worker bound to it needs.
 var TokenByHand = map[string][]string{
-	"secrets_store_secrets": {"Secrets Store Edit"},
+	"secrets_store_secret": {"Secrets Store Edit"},
 }
 
 // Scopes is what a repo's login holds: BaseScopes, what each kind of binding its Worker has needs (BindingScopes), and
@@ -71,7 +127,7 @@ func Scopes(kinds, extra []string) []string {
 		}
 	}
 	for _, k := range kinds {
-		add(BindingScopes[k])
+		add(BindingScopes[k].Scopes)
 	}
 	add(extra)
 	return out

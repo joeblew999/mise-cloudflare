@@ -231,10 +231,18 @@ func openRepo(ctx context.Context, dir string, cfg config.Config, profile string
 	return repo{dir: dir, scopes: config.Scopes(wc.Kinds, cfg.Scopes), workflow: cfg.Workflow, wc: wc, w: w}
 }
 
+// unknownNote says what a Worker binding kinds with no known scope should do.
+func unknownNote(kinds []string) string {
+	return "the Worker binds " + strings.Join(kinds, ", ") + ", whose scope mise-cloudflare doesn't know: if wrangler is refused, add the scope it names to cloudflare.toml's scopes"
+}
+
 // login logs the repo in if it isn't yet, and again whenever the login's scopes differ from the repo's (a scope added
 // or removed), then checks they match. It refuses a stray token first: one would override every login.
 func (r repo) login(ctx context.Context) wrangler.Who {
 	r.refuseStrayTokens()
+	if u := config.Unknown(r.wc.Kinds); len(u) > 0 {
+		fmt.Fprintln(os.Stderr, "· "+unknownNote(u))
+	}
 	device := wrangler.Device()
 	if !r.w.LoggedIn() {
 		must(r.w.Login(ctx, r.scopes, device))
@@ -302,14 +310,24 @@ func (r repo) check(ctx context.Context, jsonOut bool) {
 		fail(err)
 	}
 	problems = append(problems, r.stale(ctx)...)
+	// A kind of binding with no known scope isn't a problem with the repo, but the person should know.
+	notes := []string{}
+	if u := config.Unknown(r.wc.Kinds); len(u) > 0 {
+		notes = append(notes, unknownNote(u))
+	}
 	if jsonOut {
 		emit(struct {
 			OK       bool     `json:"ok"`
 			Problems []string `json:"problems"`
-		}{len(problems) == 0, append([]string{}, problems...)})
-	} else if len(problems) == 0 {
-		fmt.Println("rules: pass")
+			Notes    []string `json:"notes"`
+		}{len(problems) == 0, append([]string{}, problems...), notes})
 	} else {
+		for _, n := range notes {
+			fmt.Println("NOTE " + n)
+		}
+		if len(problems) == 0 {
+			fmt.Println("rules: pass")
+		}
 		for _, p := range problems {
 			fmt.Println("FAIL " + p)
 		}
@@ -327,6 +345,7 @@ type statusReport struct {
 	Scopes         []string           `json:"scopes"`
 	Bindings       []string           `json:"bindings"` // the kinds of binding the Worker has, as its wrangler config names them
 	Needs          []string           `json:"needs"`    // the scopes the login must hold: what those need, and cloudflare.toml's
+	Unknown        []string           `json:"unknown"`  // kinds of binding whose scope mise-cloudflare doesn't know
 	TokenInShell   bool               `json:"tokenInShell"`
 	TokenInEnv     []string           `json:"tokenInEnvFiles"`
 	WranglerFolder string             `json:"wranglerFolder"`
@@ -338,7 +357,7 @@ type statusReport struct {
 func (r repo) status(ctx context.Context, jsonOut bool) {
 	rep := statusReport{
 		Profile: r.w.Profile, LoggedIn: r.w.LoggedIn(), Accounts: []wrangler.Account{}, Scopes: []string{},
-		Bindings: append([]string{}, r.wc.Kinds...), Needs: r.scopes,
+		Bindings: append([]string{}, r.wc.Kinds...), Needs: r.scopes, Unknown: append([]string{}, config.Unknown(r.wc.Kinds)...),
 		TokenInShell: os.Getenv("CLOUDFLARE_API_TOKEN") != "", TokenInEnv: tokenEnvFiles(r.dir),
 		WranglerFolder: wrangler.Home(), DefaultLogin: fileHash(wrangler.DefaultLogin()), OtherProfiles: []string{},
 		FolderBindings: map[string]string{},
@@ -376,6 +395,9 @@ func (r repo) status(ctx context.Context, jsonOut bool) {
 		fmt.Printf("scopes               %s\n", strings.Join(rep.Scopes, " "))
 	}
 	fmt.Printf("needs                %s (for its %s, and cloudflare.toml's)\n", strings.Join(rep.Needs, " "), cmp.Or(strings.Join(rep.Bindings, " "), "no bindings"))
+	if len(rep.Unknown) > 0 {
+		fmt.Printf("unknown              %s\n", unknownNote(rep.Unknown))
+	}
 	fmt.Printf("CLOUDFLARE_API_TOKEN %s\n", map[bool]string{true: "SET in this shell (would override every login)", false: "not set"}[rep.TokenInShell])
 	fmt.Printf(".env with a token    %s\n", cmp.Or(strings.Join(rep.TokenInEnv, " "), "none"))
 	fmt.Printf("wrangler folder      %s\n", short(rep.WranglerFolder))
