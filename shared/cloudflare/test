@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#MISE description="Check this repo follows the Cloudflare rules (no account or resource IDs, no tokens, .dev.vars and .env git-ignored, .dev.vars.example matches secrets.required, wrangler pinned), then call the Worker and check D1, KV, R2 and the secret all work: a temporary local one (no account needed), or with --prod the deployed one"
+#MISE depends=["cloudflare:setup"]
+#MISE timeout="3m"
+#USAGE flag "--prod" help="Check the deployed Worker (cloudflare:deploy's URL) instead of a temporary local one"
+set -euo pipefail
+. "$(dirname "$0")/.helpers.sh"
+fail=0
+bad() { echo "FAIL $*"; fail=1; }
+files=$(git ls-files --cached --others --exclude-standard .)
+for f in $(grep -E '(^|/)wrangler\.(json|jsonc|toml)$' <<<"$files" || true); do
+  grep -nE '"?(account_id|database_id|preview_id)"?[[:space:]]*[:=]' "$f" && bad "$f holds an account or resource ID"
+  grep -nE '"id"[[:space:]]*:|^[[:space:]]*id[[:space:]]*=' "$f" && bad "$f holds a resource ID"
+done
+for f in $files; do
+  [ -f "$f" ] && grep -qE 'CLOUDFLARE_API_TOKEN[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9_-]{30,}' "$f" && bad "$f holds a Cloudflare token"
+done
+for f in .dev.vars .env; do git check-ignore -q "$f" || bad "$f isn't git-ignored"; done
+want=$(worker_config | jq -r '.secrets[]' | sort)
+have=$(grep -oE '^[A-Z_][A-Z0-9_]*=' .dev.vars.example 2>/dev/null | tr -d = | sort || true)
+[ "$want" = "$have" ] || bad ".dev.vars.example lists [$(echo $have)], secrets.required lists [$(echo $want)]"
+pin=$(jq -r '.devDependencies.wrangler // .dependencies.wrangler // "missing"' package.json)
+[[ $pin =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || bad "wrangler isn't pinned to an exact version in package.json ($pin)"
+grep -rnE 'wrangler +login' --exclude-dir=node_modules --exclude-dir=.git $files 2>/dev/null && bad "something calls the machine-wide wrangler login"
+[ $fail = 0 ] && echo "rules: pass" || exit 1
+
+if [ "${usage_prod:-false}" = true ]; then
+  url=$(deployed_url); [ -n "$url" ] || { echo "FAIL no deployed URL: run cloudflare:deploy"; exit 1; }
+  echo "calling $url"
+  got=$(curl -fsS -m 20 "$url")
+else
+  echo "calling a temporary local Worker"
+  got=$(node --input-type=module -e "const { unstable_startWorker } = await import('wrangler');
+    const w = await unstable_startWorker({ dev: { remote: false, server: { port: 0 }, inspector: false } });
+    await w.ready;
+    const r = await w.fetch('http://localhost/');
+    console.log('RESULT ' + await r.text());
+    await w.dispose();" 2>&1 | sed -n "s/^RESULT //p")
+fi
+echo "$got"
+jq -e '.d1 and .kv and .r2 and .secret' <<<"$got" > /dev/null && echo "D1, KV, R2 and the secret: all work" || { echo "FAIL not everything works"; exit 1; }

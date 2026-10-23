@@ -8,6 +8,7 @@ jq = "1.8.2"       # reads wrangler's JSON
 
 [env]
 CF_PROFILE = "cloudflare-zero-example"   # this repo's own Cloudflare login (a wrangler profile)
+CF_SCOPES = "account:read user:read workers:write workers_kv:write workers_scripts:write d1:write"  # what it may do
 
 [task_config]
 # Another repo writes git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=<tag>

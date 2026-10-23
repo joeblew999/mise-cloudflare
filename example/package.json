@@ -1,0 +1,8 @@
+{
+  "name": "cloudflare-zero-example",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "4.151.3"
+  }
+}

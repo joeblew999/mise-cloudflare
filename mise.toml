@@ -16,4 +16,4 @@ usage = "7.0.1"    # --help and tab-completion for the tasks' #USAGE flags
 CF_PROFILE = "cloudflare-zero"   # this repo's own Cloudflare login (a wrangler profile)
 
 [task_config]
-includes = ["shared"]   # the shared tasks also run here, on this repo's own login
+includes = ["shared", "mise-tasks"]   # the shared tasks also run here, on this repo's own login; then its own
