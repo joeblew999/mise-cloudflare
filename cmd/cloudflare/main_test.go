@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -70,5 +71,21 @@ func TestCI(t *testing.T) {
 		if ci() != want {
 			t.Errorf("CI=%q: %v", v, !want)
 		}
+	}
+}
+
+// TestInstallCommand: only a lockfile committed to git counts, since Workers Builds checks the repository out.
+func TestInstallCommand(t *testing.T) {
+	dir := t.TempDir()
+	if exec.Command("git", "-C", dir, "init", "-q").Run() != nil {
+		t.Skip("no git")
+	}
+	os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte("{}"), 0o644)
+	if got := installCommand(dir); got != "npm install" {
+		t.Errorf("an uncommitted package-lock.json: %q", got)
+	}
+	exec.Command("git", "-C", dir, "add", "package-lock.json").Run()
+	if got := installCommand(dir); got != "npm ci" {
+		t.Errorf("a committed package-lock.json: %q", got)
 	}
 }

@@ -164,9 +164,13 @@ func (r repo) workerTag(ctx context.Context, c cf.CF) string {
 	return ""
 }
 
-// installCommand installs the Worker's dependencies on Workers Builds, by its lockfile; npm when there's none, or one
-// for a package manager Workers Builds doesn't have (aube): package.json pins wrangler exactly either way.
+// installCommand installs the Worker's dependencies on Workers Builds, by the lockfile committed in dir: Workers Builds
+// checks the repository out, so a lockfile only on this machine doesn't count. npm when there's none, or one for a
+// package manager Workers Builds doesn't have (aube): package.json pins wrangler exactly either way.
 func installCommand(dir string) string {
+	tracked := func(f string) bool {
+		return exec.Command("git", "-C", dir, "ls-files", "--error-unmatch", f).Run() == nil
+	}
 	for _, l := range []struct{ file, cmd string }{
 		{"pnpm-lock.yaml", "pnpm install --frozen-lockfile"},
 		{"bun.lock", "bun install --frozen-lockfile"},
@@ -174,7 +178,7 @@ func installCommand(dir string) string {
 		{"yarn.lock", "yarn install --frozen-lockfile"},
 		{"package-lock.json", "npm ci"},
 	} {
-		if _, err := os.Stat(filepath.Join(dir, l.file)); err == nil {
+		if tracked(l.file) {
 			return l.cmd
 		}
 	}
