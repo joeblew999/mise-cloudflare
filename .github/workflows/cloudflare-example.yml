@@ -14,8 +14,10 @@ on:
 permissions:
   contents: read
 
+# A pull request's runs by its number: once it closes, github.ref is the base branch, and a group by ref would cancel
+# that branch's own push run.
 concurrency:
-  group: cloudflare-example-${{ github.ref }}
+  group: cloudflare-example-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
