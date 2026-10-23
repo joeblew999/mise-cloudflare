@@ -9,9 +9,9 @@ are. README.md is the whole picture; read it first.
 - `mise run test`: the Go tests, no Cloudflare account. Run them after every change.
 - `mise run example`: stamps `example/` through the tool (its tasks and skill), as any repo gets them. The tests fail
   while it's stale.
-- The proofs deploy to a real account: `mise run prove`, `prove-other-repo`, `prove-builds`, `prove-basin`. Each refuses
-  to start while its Worker, D1, KV or R2 exists (another machine may be proving it) and deletes what it made, even when
-  it fails. Never run the same one on two machines at once.
+- `mise run prove`: one real deploy of example/, before a release, a few minutes. It refuses to start while its Worker,
+  D1, KV or R2 exists and deletes what it made, even when it fails. Previews, staging and production are shown working
+  by Cloudflare's own checks on the pull requests, and GitHub Actions by its runs: never build a harness for those.
 - A login needs a person to click Allow: never try to do it for them. With `CLOUDFLARE_LOGIN=device`, or in a Claude
   Code cloud session, the tool prints a link with the code already in it; send it to the person.
 

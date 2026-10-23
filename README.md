@@ -98,4 +98,4 @@ setup hook installs everything when the session starts, and any login comes as a
 
 - [Reference](docs/reference.md): every task and setting, what `cloudflare:check` checks, the files `init` writes, how
   the logins work and why they're safe, Workers Builds and GitHub Actions in full.
-- [Proofs](docs/proofs.md): how each claim here is proven on a real Cloudflare account.
+- [Testing](docs/testing.md): the Go tests after every change, and one real deploy before a release.

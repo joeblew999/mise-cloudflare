@@ -1,8 +1,0 @@
-# prove-actions' Worker, on example/'s own login when run by hand (the same profile and scopes); in GitHub Actions, on
-# the token cloudflare ci-token stores as the repository's secrets.
-profile = "cloudflare-zero-example"
-
-# GitHub Actions deploys it. The proof sets branch to its throwaway branch, on that branch only.
-[workflow]
-deploy = true
-branch = "main"

@@ -50,7 +50,7 @@ func TestSkill(t *testing.T) {
 // TestExampleIsCurrent: example/ has the tasks and the skill this version writes, as any repo would after
 // go tool cloudflare tasks and skill.
 func TestExampleIsCurrent(t *testing.T) {
-	for _, d := range []string{"example", "e2e/testdata/actions"} {
+	for _, d := range []string{"example"} {
 		if b, err := os.ReadFile("../../" + d + "/.mise/tasks/cloudflare.toml"); err != nil || string(b) != string(mise.Tasks) {
 			t.Errorf("%s/.mise/tasks/cloudflare.toml is stale: run mise run example (%v)", d, err)
 		}

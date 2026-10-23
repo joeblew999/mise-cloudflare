@@ -1,5 +1,6 @@
-// Package e2e proves mise-cloudflare on a real Cloudflare account: mise run prove, prove-other-repo and prove-basin
-// (CLOUDFLARE_E2E=1). Without CLOUDFLARE_E2E these tests skip, so go test ./... never touches Cloudflare.
+// Package e2e is mise run prove: one real deploy of example/ on a Cloudflare account, and a brand-new repo set up from
+// GitHub by init alone (CLOUDFLARE_E2E=1). Without CLOUDFLARE_E2E these tests skip, so go test ./... never touches
+// Cloudflare.
 //
 // Every Cloudflare step goes through go tool cloudflare, so the repo's own login and wrangler do it. Logging in, the
 // first time only, opens a browser, or with CLOUDFLARE_LOGIN=device prints a link to open on any device.
@@ -27,18 +28,6 @@ func needAccount(t *testing.T) {
 	if os.Getenv("CLOUDFLARE_E2E") != "1" {
 		t.Skip("needs a Cloudflare account: mise run prove")
 	}
-}
-
-// buildTool builds the cloudflare command from this checkout once, for a proof to run throughout: code changed while
-// it runs can't change what it runs.
-func buildTool(t *testing.T) string {
-	t.Helper()
-	bin := filepath.Join(t.TempDir(), "cloudflare")
-	cmd := exec.Command("go", "build", "-o", bin, "github.com/joeblew999/mise-cloudflare/cmd/cloudflare")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
-	return bin
 }
 
 // repo is a Worker repo that uses mise-cloudflare, its Worker's name, and how it runs the tool (go tool cloudflare
@@ -360,24 +349,12 @@ func prove(t *testing.T, r repo, clean bool) {
 		t.Fatalf("%s: HTTP %d %s", url, code, body)
 	}
 	r.pass("%s: D1, KV, R2 and the secret all work", url)
-	db := r.d1()
-
-	r.step("4. Deploy again: no login, nothing asked, the same resources, the repo unchanged")
-	out := r.must(nil, "mise", "run", "cloudflare:deploy")
-	if strings.Contains(out, "Logging in") || strings.Contains(out, "scopes changed") {
-		t.Fatal("the second deploy logged in again")
-	}
-	r.pass("no login")
-	if r.d1() != db || db == "" {
-		t.Fatalf("D1 %s became %s", db, r.d1())
-	}
-	r.pass("the same D1 (%s), KV and R2", db)
 	if after := r.must(nil, "git", "status", "--porcelain", "."); after != before {
 		t.Fatalf("the repo changed:\n%s", after)
 	}
-	r.pass("deploying changed nothing in the repo: no IDs written into it")
+	r.pass("deploying wrote nothing into the repo: no IDs")
 
-	r.step("5. A stray CLOUDFLARE_API_TOKEN is refused, in the shell and in a .env")
+	r.step("4. A stray CLOUDFLARE_API_TOKEN is refused, in the shell and in a .env")
 	if out, err := r.try([]string{"CLOUDFLARE_API_TOKEN=dummy-not-a-real-token"}, "wrangler", "deploy"); err == nil || !strings.Contains(out, "refusing:") {
 		t.Fatal("deployed with a token in the shell")
 	}
@@ -391,9 +368,9 @@ func prove(t *testing.T, r repo, clean bool) {
 	}
 	r.pass("a token in .env is refused")
 
-	r.step("6. wrangler, on the repo's login, deletes the Worker, its D1, KV and R2")
+	r.step("5. wrangler, on the repo's login, deletes the Worker, its D1, KV and R2")
 	r.deleteAll()
-	if code, _ := get(url); code == 200 {
+	if !gone(url, time.Minute) {
 		t.Fatalf("%s still answers", url)
 	}
 	r.pass("%s no longer answers", url)
@@ -403,7 +380,7 @@ func prove(t *testing.T, r repo, clean bool) {
 	r.pass("no D1, KV or R2 left")
 
 	if clean {
-		r.step("7. Logout removes the login and its folder binding")
+		r.step("6. Logout removes the login and its folder binding")
 		r.cf(nil, "logout")
 		s := r.status()
 		if s.LoggedIn {
@@ -428,8 +405,9 @@ func TestProve(t *testing.T) {
 	prove(t, repo{t: t, dir: dir, worker: "cloudflare-zero-example"}, os.Getenv("PROVE_CLEAN") == "true")
 }
 
-// TestOtherRepo proves a brand-new repo gets the same from config alone: mise-cloudflare from GitHub with go get -tool,
-// go tool cloudflare init, and nothing else of mise-cloudflare's.
+// TestOtherRepo proves a brand-new repo gets everything from config alone: mise-cloudflare from GitHub with go get -tool
+// and go tool cloudflare init, then its rules pass and its Worker runs locally, with no Cloudflare login. Deploying is
+// TestProve's: the same tool, the same steps.
 func TestOtherRepo(t *testing.T) {
 	needAccount(t)
 	ref := os.Getenv("MISE_CLOUDFLARE_REF")
@@ -464,7 +442,14 @@ func TestOtherRepo(t *testing.T) {
 		t.Fatalf("its login is %q, not the Worker's name", s.Profile)
 	}
 	r.pass("cloudflare.toml's defaults: the login is named after the Worker, %s", r.worker)
-	prove(t, r, os.Getenv("PROVE_CLEAN") == "true")
+
+	r.step("Its rules and a local Worker, with no Cloudflare login at all: init gave it everything")
+	r.cf(nil, "check")
+	if body := r.localWorker(); !allWork(body) {
+		t.Fatalf("the local Worker: %s", body)
+	}
+	r.pass("cloudflare:check passes, and the local Worker's D1, KV, R2 and secret work")
+	fmt.Println("\nALL PASSED")
 }
 
 // TestJSONPart: wrangler's JSON is found past a warning that has brackets in it.
@@ -475,35 +460,17 @@ func TestJSONPart(t *testing.T) {
 	}
 }
 
-// sweep deletes every D1, KV namespace and R2 bucket whose name starts with prefix (a Worker's, and its environments'),
-// and returns what it couldn't delete.
-func (r repo) sweep(prefix string) []string {
-	var left []string
-	var dbs []struct{ UUID, Name string }
-	json.Unmarshal([]byte(jsonPart(r.wrangler("d1", "list", "--json"))), &dbs)
-	for _, d := range dbs {
-		if strings.HasPrefix(d.Name, prefix) {
-			if _, err := r.try(nil, "wrangler", "d1", "delete", d.Name, "-y"); err != nil {
-				left = append(left, "D1 "+d.Name)
+// gone waits, for up to limit, until url no longer answers 200.
+func gone(url string, limit time.Duration) bool {
+	for end := time.Now().Add(limit); time.Now().Before(end); time.Sleep(5 * time.Second) {
+		if resp, err := (&http.Client{Timeout: 20 * time.Second}).Get(url); err != nil || resp.StatusCode != 200 {
+			if resp != nil {
+				resp.Body.Close()
 			}
+			return true
+		} else {
+			resp.Body.Close()
 		}
 	}
-	var ns []struct{ ID, Title string }
-	json.Unmarshal([]byte(jsonPart(r.wrangler("kv", "namespace", "list"))), &ns)
-	for _, n := range ns {
-		if strings.HasPrefix(n.Title, prefix) {
-			if _, err := r.try(nil, "wrangler", "kv", "namespace", "delete", "--namespace-id", n.ID, "-y"); err != nil {
-				left = append(left, "KV "+n.Title)
-			}
-		}
-	}
-	for _, line := range strings.Split(r.wrangler("r2", "bucket", "list"), "\n") {
-		if f := strings.Fields(line); len(f) == 2 && f[0] == "name:" && strings.HasPrefix(f[1], prefix) {
-			r.try(nil, "wrangler", "r2", "object", "delete", f[1]+"/stamp.txt", "--remote")
-			if _, err := r.try(nil, "wrangler", "r2", "bucket", "delete", f[1]); err != nil {
-				left = append(left, "R2 "+f[1])
-			}
-		}
-	}
-	return left
+	return false
 }

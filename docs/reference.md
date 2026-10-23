@@ -88,9 +88,7 @@ It asks for what wrangler's own login asks for: the list wrangler keeps, for eve
 own wrangler (`wrangler login --scopes-list` shows it). So whatever wrangler can do with any kind of binding, the
 repo's login can, and nothing here lists kinds of binding or which scope each needs (neither wrangler nor Cloudflare
 publishes that). When an upgraded wrangler asks for more, the next task logs in once more. `scopes` in
-`cloudflare.toml` gives the login exactly those instead, for a narrower one. Proven on a real account: every kind of
-binding Cloudflare makes for nothing (`prove-bindings`: Queues, Vectorize, Workers AI, Durable Objects, Workflows,
-Analytics Engine, rate limits, Browser, Images), and D1, KV and R2 (`prove`).
+`cloudflare.toml` gives the login exactly those instead, for a narrower one.
 
 ## Workers Builds: production, staging, previews and pull requests
 
@@ -117,9 +115,7 @@ KV, D1 and R2 binding, once, with the repo's own wrangler, and puts them in the 
 the settings every new preview starts from. Nothing goes into the repo, which is why the `previews` block leaves KV, D1
 and R2 out. All previews share them, as they share staging's settings; production's and staging's stay theirs.
 `cloudflare:builds` runs it, and so does the deploy workflow's preview job; after adding a KV, D1 or R2 binding, run it
-again (it makes only what's new). `--off` takes them out and deletes them (an R2 bucket only once it's empty). Proven
-on the account: a preview on its own KV and R2 from Workers Builds (`prove-builds`) and on its own KV from GitHub
-Actions (`prove-actions`).
+again (it makes only what's new). `--off` takes them out and deletes them (an R2 bucket only once it's empty).
 
 It needs, once: Cloudflare's GitHub app on the repository (a click on GitHub, by its owner), and a build token on the
 account, which Cloudflare makes the first time any repository is connected in its dashboard. Its permissions are
