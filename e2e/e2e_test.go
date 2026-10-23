@@ -108,6 +108,8 @@ func (r repo) wrangler(args ...string) string {
 type status struct {
 	Profile        string            `json:"profile"`
 	LoggedIn       bool              `json:"loggedIn"`
+	Bindings       []string          `json:"bindings"`
+	Needs          []string          `json:"needs"`
 	DefaultLogin   string            `json:"defaultLogin"`
 	FolderBindings map[string]string `json:"folderBindings"`
 }
