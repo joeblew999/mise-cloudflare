@@ -50,6 +50,21 @@ func Interactive(cmd *exec.Cmd) error {
 	return cmd.Run()
 }
 
+// RunDeviceLogin runs a device login (wrangler's or cf's) on this terminal, adding to what it prints the link with the
+// code already in it.
+func RunDeviceLogin(cmd *exec.Cmd) error {
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	DeviceLink(out, os.Stdout)
+	return cmd.Wait()
+}
+
 // Output runs cmd with no input and returns its stdout; on failure the error carries its stderr.
 func Output(cmd *exec.Cmd) ([]byte, error) {
 	var stderr bytes.Buffer
@@ -180,7 +195,7 @@ func (w W) Login(ctx context.Context, scopes []string, device bool) error {
 	fmt.Printf("Logging in %s: open the link below on any device (your phone works), click Allow and pick the account.\n", w.Profile)
 	cmd := w.Plain(ctx, append([]string{"login", "--device", "--browser=false", "--scopes"}, scopes...)...)
 	cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+tmp)
-	if err := Interactive(cmd); err != nil {
+	if err := RunDeviceLogin(cmd); err != nil {
 		return fmt.Errorf("wrangler login --device: %w", err)
 	}
 	b, err := os.ReadFile(filepath.Join(tmp, ".wrangler", "config", "default.toml"))

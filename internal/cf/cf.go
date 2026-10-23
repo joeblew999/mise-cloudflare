@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+
+	"github.com/joeblew999/cloudflare-zero/internal/wrangler"
 )
 
 // Scopes is what go tool cloudflare builds needs: the account, and Workers Builds.
@@ -121,9 +123,8 @@ func (c CF) Login(ctx context.Context, browser bool) error {
 	}
 	cmd := exec.CommandContext(ctx, "cf", args...)
 	cmd.Dir, cmd.Env = c.Dir, os.Environ()
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	fmt.Printf("Logging %s in to Cloudflare's cf, for Workers Builds: approve the code below on any device (your phone works).\n", c.Profile)
-	if err := cmd.Run(); err != nil {
+	fmt.Printf("Logging %s in to Cloudflare's cf, for Workers Builds: approve it on any device (your phone works).\n", c.Profile)
+	if err := wrangler.RunDeviceLogin(cmd); err != nil {
 		return fmt.Errorf("cf auth create %s: %w", c.Profile, err)
 	}
 	return nil
