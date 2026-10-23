@@ -64,7 +64,8 @@ func TestActions(t *testing.T) {
 	toml := filepath.Join(w.dir, "cloudflare.toml")
 	b, _ := os.ReadFile(toml)
 	os.WriteFile(toml, []byte(strings.Replace(string(b), `branch = "main"`, `branch = "`+prod+`"`, 1)), 0o644)
-	w.cf(nil, "workflow")
+	// Stamped as a developer there does, with the repo's own go tool: the version it writes is the one CI's check expects.
+	w.must(nil, "go", "tool", "cloudflare", "workflow")
 	w.must(nil, "git", "add", "-A")
 	w.must(nil, "git", "commit", "-qm", "prove-actions: deploy "+r.worker+" from "+prod)
 
