@@ -15,7 +15,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joeblew999/cloudflare-zero/internal/wrangler"
+	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
 // Scopes is what go tool cloudflare builds needs: the account and Workers Builds.

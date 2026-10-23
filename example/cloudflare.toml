@@ -1,9 +1,9 @@
 # cloudflare.toml: this repo on Cloudflare, for go tool cloudflare and the cloudflare:* tasks
-# (github.com/joeblew999/cloudflare-zero). Never put an account ID, a resource ID, a token or a secret value here.
+# (github.com/joeblew999/mise-cloudflare). Never put an account ID, a resource ID, a token or a secret value here.
 
 # The repo's own Cloudflare login, a wrangler auth profile. Default: the Worker's name, which it is here.
 profile = "cloudflare-zero-example"
 
-# What the login may do, exactly: D1, KV and R2 for the Worker, and pipelines:write for Basin (cloudflare-zero's
+# What the login may do, exactly: D1, KV and R2 for the Worker, and pipelines:write for Basin (mise-cloudflare's
 # prove-basin). Change this and the next task logs in once more.
 scopes = ["account:read", "user:read", "workers:write", "workers_kv:write", "workers_scripts:write", "d1:write", "pipelines:write"]

@@ -1,6 +1,6 @@
 ---
 name: cloudflare
-description: Use when working on this repo's Cloudflare Worker with wrangler (deploy, delete, D1, KV, R2, secrets, logs) or its Cloudflare login, in a Claude Code cloud session or on a machine, with github.com/joeblew999/cloudflare-zero (go tool cloudflare, mise run cloudflare:*). Never create or ask for a Cloudflare API token.
+description: Use when working on this repo's Cloudflare Worker with wrangler (deploy, delete, D1, KV, R2, secrets, logs) or its Cloudflare login, in a Claude Code cloud session or on a machine, with github.com/joeblew999/mise-cloudflare (go tool cloudflare, mise run cloudflare:*). Never create or ask for a Cloudflare API token.
 ---
 
 # Cloudflare from this repo

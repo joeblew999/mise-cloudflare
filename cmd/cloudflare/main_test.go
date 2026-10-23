@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joeblew999/cloudflare-zero/mise"
+	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
 var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "version"}
@@ -112,7 +112,7 @@ func TestTasksFor(t *testing.T) {
 	if strings.Contains(string(b), "go tool cloudflare") {
 		t.Error("tasks for a repo without Go run go tool")
 	}
-	pin := `"github:joeblew999/cloudflare-zero" = "0.1.0"`
+	pin := `"github:joeblew999/mise-cloudflare" = "0.1.0"`
 	if n, tasks := strings.Count(string(b), pin), strings.Count(string(b), `["cloudflare:`); n != tasks {
 		t.Errorf("%d of %d tasks pin the release:\n%s", n, tasks, b)
 	}

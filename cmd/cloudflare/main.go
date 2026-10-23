@@ -12,7 +12,7 @@
 //	go tool cloudflare skill            # install its agent skill: .claude/skills/cloudflare
 //	go tool cloudflare version          # this build's version
 //
-// A repo without Go runs the released binary instead, cloudflare (mise: github:joeblew999/cloudflare-zero), and its tasks
+// A repo without Go runs the released binary instead, cloudflare (mise: github:joeblew999/mise-cloudflare), and its tasks
 // pin that release; a repo with go.mod's tool line runs go tool cloudflare, at go.mod's version.
 //
 // The login is a wrangler auth profile (cloudflare.toml's profile, default the Worker's name), passed to every wrangler
@@ -42,12 +42,12 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/joeblew999/cloudflare-zero/config"
-	"github.com/joeblew999/cloudflare-zero/internal/cf"
-	"github.com/joeblew999/cloudflare-zero/internal/rules"
-	"github.com/joeblew999/cloudflare-zero/internal/wconfig"
-	"github.com/joeblew999/cloudflare-zero/internal/wrangler"
-	"github.com/joeblew999/cloudflare-zero/skills"
+	"github.com/joeblew999/mise-cloudflare/config"
+	"github.com/joeblew999/mise-cloudflare/internal/cf"
+	"github.com/joeblew999/mise-cloudflare/internal/rules"
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
+	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
+	"github.com/joeblew999/mise-cloudflare/skills"
 )
 
 func main() {

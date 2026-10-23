@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joeblew999/cloudflare-zero/mise"
+	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
 // version is this build's version: set by the release build (goreleaser's -X main.version), else the module version Go
@@ -27,9 +27,9 @@ func buildVersion() string {
 	return "(devel)"
 }
 
-const toolPath = "github.com/joeblew999/cloudflare-zero/cmd/cloudflare"
+const toolPath = "github.com/joeblew999/mise-cloudflare/cmd/cloudflare"
 
-// goTool reports whether the repo at dir runs cloudflare-zero with go tool: its go.mod has the tool line.
+// goTool reports whether the repo at dir runs mise-cloudflare with go tool: its go.mod has the tool line.
 func goTool(dir string) bool {
 	b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	return err == nil && regexp.MustCompile(`(?m)^\s*tool\s+(\(\s*)?`+regexp.QuoteMeta(toolPath)+`\s*$|^\s+`+regexp.QuoteMeta(toolPath)+`\s*$`).Match(b)
@@ -49,9 +49,9 @@ func tasksFor(dir string) ([]byte, error) {
 	}
 	v := buildVersion()
 	if v == "(devel)" || strings.Contains(v, "-0.") {
-		return nil, errors.New("this is a development build, which no release matches: in a repo without go.mod's tool line, use a released cloudflare (mise use github:joeblew999/cloudflare-zero)")
+		return nil, errors.New("this is a development build, which no release matches: in a repo without go.mod's tool line, use a released cloudflare (mise use github:joeblew999/mise-cloudflare)")
 	}
-	pin := `"github:joeblew999/cloudflare-zero" = "` + v + `"`
+	pin := `"github:joeblew999/mise-cloudflare" = "` + v + `"`
 	b := bytes.ReplaceAll(mise.Tasks, []byte("go tool cloudflare"), []byte("cloudflare"))
 	// Each task pins the release: in its tools table if it has one, else in a new one after its name.
 	heads := taskStart.FindAllIndex(b, -1)

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joeblew999/cloudflare-zero/config"
-	"github.com/joeblew999/cloudflare-zero/internal/cf"
-	"github.com/joeblew999/cloudflare-zero/internal/wrangler"
+	"github.com/joeblew999/mise-cloudflare/config"
+	"github.com/joeblew999/mise-cloudflare/internal/cf"
+	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
 // buildsReport is go tool cloudflare builds -json: how Workers Builds builds the Worker now.

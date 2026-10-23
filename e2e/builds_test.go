@@ -21,7 +21,7 @@ func TestBuilds(t *testing.T) {
 	needAccount(t)
 	dir, _ := filepath.Abs("testdata/builds")
 	// The tool from this checkout: testdata/builds is in this module, which has no tool line for itself.
-	r := repo{t: t, dir: dir, worker: "cloudflare-zero-builds", tool: []string{"go", "run", "github.com/joeblew999/cloudflare-zero/cmd/cloudflare"}}
+	r := repo{t: t, dir: dir, worker: "cloudflare-zero-builds", tool: []string{"go", "run", "github.com/joeblew999/mise-cloudflare/cmd/cloudflare"}}
 	stamp := time.Now().Unix()
 	prod, prev := fmt.Sprintf("cfz-builds-prod-%d", stamp), fmt.Sprintf("cfz-builds-preview-%d", stamp)
 

@@ -1,4 +1,4 @@
-# cloudflare-zero's CI: the Go tests and example/'s rules, which need no Cloudflare account. Cloudflare credentials
+# mise-cloudflare's CI: the Go tests and example/'s rules, which need no Cloudflare account. Cloudflare credentials
 # never come here. Shell steps only, as go-htmx4's: no JavaScript actions.
 name: ci
 
@@ -39,6 +39,9 @@ jobs:
 
       - name: The Go tests (no Cloudflare account)
         run: mise run test
+
+      - name: The release config is valid
+        run: mise exec -- goreleaser check
 
       - name: "example/: its setup and cloudflare:check, as any repo's CI would (no Cloudflare account)"
         working-directory: example

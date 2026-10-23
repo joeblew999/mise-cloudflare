@@ -1,4 +1,4 @@
-module github.com/joeblew999/cloudflare-zero
+module github.com/joeblew999/mise-cloudflare
 
 go 1.26.0
 

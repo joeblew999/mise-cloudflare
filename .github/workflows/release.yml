@@ -36,3 +36,7 @@ jobs:
         run: |
           mise run test
           mise exec -- goreleaser release --clean
+
+      - name: proxy.golang.org fetches the version, so go get and pkg.go.dev have it at once
+        run: |
+          GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod mise exec -- go list -m "github.com/${GITHUB_REPOSITORY}@${GITHUB_REF_NAME}"

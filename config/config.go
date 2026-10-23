@@ -73,7 +73,7 @@ func Find(dir string) (Config, error) {
 
 // Template is the cloudflare.toml go tool cloudflare init writes: every setting, commented out at its default.
 const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudflare and the cloudflare:* tasks
-# (github.com/joeblew999/cloudflare-zero). The tasks read it, so none needs an argument; a flag still overrides it.
+# (github.com/joeblew999/mise-cloudflare). The tasks read it, so none needs an argument; a flag still overrides it.
 # Every line is optional: uncomment what differs from its default. Never put an account ID, a resource ID, a token or
 # a secret value here: the login picks the account, wrangler creates the resources, Cloudflare keeps the secrets.
 

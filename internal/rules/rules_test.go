@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joeblew999/cloudflare-zero/config"
-	"github.com/joeblew999/cloudflare-zero/internal/wconfig"
+	"github.com/joeblew999/mise-cloudflare/config"
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 )
 
 func repo(t *testing.T, files map[string]string) string {

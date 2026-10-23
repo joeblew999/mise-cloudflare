@@ -1,4 +1,4 @@
-// Package e2e proves cloudflare-zero on a real Cloudflare account: mise run prove, prove-other-repo and prove-basin
+// Package e2e proves mise-cloudflare on a real Cloudflare account: mise run prove, prove-other-repo and prove-basin
 // (CLOUDFLARE_E2E=1). Without CLOUDFLARE_E2E these tests skip, so go test ./... never touches Cloudflare.
 //
 // Every Cloudflare step goes through go tool cloudflare, so the repo's own login and wrangler do it. Logging in, the
@@ -29,7 +29,7 @@ func needAccount(t *testing.T) {
 	}
 }
 
-// repo is a Worker repo that uses cloudflare-zero, its Worker's name, and how it runs the tool (go tool cloudflare
+// repo is a Worker repo that uses mise-cloudflare, its Worker's name, and how it runs the tool (go tool cloudflare
 // unless tool says otherwise).
 type repo struct {
 	t      *testing.T
@@ -407,17 +407,17 @@ func TestProve(t *testing.T) {
 	prove(t, repo{t: t, dir: dir, worker: "cloudflare-zero-example"}, os.Getenv("PROVE_CLEAN") == "true")
 }
 
-// TestOtherRepo proves a brand-new repo gets the same from config alone: cloudflare-zero from GitHub with go get -tool,
-// go tool cloudflare init, and nothing else of cloudflare-zero's.
+// TestOtherRepo proves a brand-new repo gets the same from config alone: mise-cloudflare from GitHub with go get -tool,
+// go tool cloudflare init, and nothing else of mise-cloudflare's.
 func TestOtherRepo(t *testing.T) {
 	needAccount(t)
-	ref := os.Getenv("CF_ZERO_REF")
+	ref := os.Getenv("MISE_CLOUDFLARE_REF")
 	if ref == "" {
 		ref = "main"
 	}
 	src, _ := filepath.Abs("../example")
 	r := repo{t: t, dir: filepath.Join(t.TempDir(), "other-repo"), worker: "cloudflare-zero-other"}
-	r.step("A new repo at %s: a Worker, and cloudflare-zero from GitHub at %s", r.dir, ref)
+	r.step("A new repo at %s: a Worker, and mise-cloudflare from GitHub at %s", r.dir, ref)
 	os.MkdirAll(filepath.Join(r.dir, "src"), 0o755)
 	for _, f := range []string{"src/worker.js", "package.json", "aube-lock.yaml", ".dev.vars.example", ".gitignore", "mise.toml"} {
 		b, err := os.ReadFile(filepath.Join(src, f))
@@ -431,7 +431,7 @@ func TestOtherRepo(t *testing.T) {
 	r.must(nil, "git", "init", "-q")
 	r.must(nil, "go", "mod", "init", "example.com/other-repo")
 	// Straight from GitHub, whatever the ref: not from the module proxy, which may not have a new commit yet.
-	r.must([]string{"GOPRIVATE=github.com/joeblew999/cloudflare-zero"}, "go", "get", "-tool", "github.com/joeblew999/cloudflare-zero/cmd/cloudflare@"+ref)
+	r.must([]string{"GOPRIVATE=github.com/joeblew999/mise-cloudflare"}, "go", "get", "-tool", "github.com/joeblew999/mise-cloudflare/cmd/cloudflare@"+ref)
 	r.cf(nil, "init")
 	r.must(nil, "mise", "trust", "-q", "mise.toml")
 	r.must(nil, "git", "add", "-A")

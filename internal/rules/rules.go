@@ -14,7 +14,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joeblew999/cloudflare-zero/internal/wconfig"
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 )
 
 var (

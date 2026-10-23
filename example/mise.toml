@@ -1,4 +1,4 @@
-# A Worker repo that uses cloudflare-zero exactly as any other repo would: go.mod's tool line, cloudflare.toml, and the
+# A Worker repo that uses mise-cloudflare exactly as any other repo would: go.mod's tool line, cloudflare.toml, and the
 # tasks go tool cloudflare tasks writes into .mise/tasks/.
 
 [settings]
@@ -17,6 +17,6 @@ run = ["aube install", "cp -n .dev.vars.example .dev.vars || true"]
 description = "wrangler dev: the Worker on http://localhost:8787, with local D1, KV and R2 and .dev.vars (no account)"
 run = "node node_modules/wrangler/bin/wrangler.js dev"
 
-# cloudflare-zero's tasks, as go tool cloudflare tasks writes them.
+# mise-cloudflare's tasks, as go tool cloudflare tasks writes them.
 [task_config]
 includes = [".mise/tasks/cloudflare.toml"]
