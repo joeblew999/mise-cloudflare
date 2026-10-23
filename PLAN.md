@@ -1,6 +1,6 @@
 # Cloudflare without the token mess
 
-Plan, 23 Oct 2026. Research done; `cloudflare:status` is built, the rest isn't yet.
+Plan, 23 Oct 2026. Built and proven the same day: see README.md (`mise run prove`, `mise run prove-other-repo`). Still to do: a token template link for what a login can't do (Basin SQL), CI, a second account, and a release tag for other repos to pin.
 
 ## Goal
 
