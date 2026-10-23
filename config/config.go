@@ -28,7 +28,19 @@ var DefaultScopes = []string{"account:read", "user:read", "workers:write", "work
 type Config struct {
 	Profile string   `toml:"profile"` // "" until the caller fills in the Worker's name
 	Scopes  []string `toml:"scopes"`
+	Builds  Builds   `toml:"builds"`
 	Path    string   `toml:"-"` // the file read, "" without one
+}
+
+// Builds is how Cloudflare's Workers Builds builds and deploys the Worker from its GitHub repository (go tool cloudflare
+// builds). Every field has a default, filled in by the command: it knows the repository and the lockfile.
+type Builds struct {
+	Branch  string `toml:"branch"`  // the branch whose pushes deploy: default the repository's default branch
+	Root    string `toml:"root"`    // the folder, in the repository, its commands run in: default this one
+	Build   string `toml:"build"`   // installs the Worker's dependencies: default from its lockfile
+	Deploy  string `toml:"deploy"`  // default npx wrangler deploy (with --env when CLOUDFLARE_ENV is set)
+	Preview string `toml:"preview"` // every other branch's preview: default npx wrangler versions upload (with --env)
+	Token   string `toml:"token"`   // the name of the account's build token it deploys with: default the first
 }
 
 // Find reads the nearest cloudflare.toml at or above dir, and fills in the defaults; without one, it is every default.
@@ -71,6 +83,17 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 # What the login may do: OAuth scopes, named as wrangler lists them (its login command, with --scopes-list). The login
 # holds exactly these; change them and the next task logs in once more. Default: what a Worker with D1, KV and R2 needs.
 # scopes = ["account:read", "user:read", "workers:write", "workers_kv:write", "workers_scripts:write", "d1:write"]
+
+# Workers Builds (go tool cloudflare builds): Cloudflare builds and deploys the Worker from its GitHub repository, with
+# its own token, so GitHub never holds a Cloudflare credential. A push to branch deploys; every other branch gets a
+# preview, its URL on the pull request.
+[builds]
+# branch = "main"                              # default: the repository's default branch
+# root = "."                                   # the folder its commands run in; default: this one
+# build = "npm ci"                             # default: from the lockfile
+# deploy = "npx wrangler deploy"
+# preview = "npx wrangler versions upload"
+# token = "My Build Token"                     # which of the account's build tokens; default: the first
 `
 
 // TemplateFor is Template with profile set, for go tool cloudflare init -profile.

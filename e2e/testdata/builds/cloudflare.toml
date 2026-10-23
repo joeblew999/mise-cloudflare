@@ -1,0 +1,8 @@
+# The prove-builds Worker, on example/'s own logins (the same profile, the same scopes), so proving it asks for none.
+profile = "cloudflare-zero-example"
+scopes = ["account:read", "user:read", "workers:write", "workers_kv:write", "workers_scripts:write", "d1:write", "pipelines:write"]
+
+# Each build says which branch it came from, so the proof can tell Workers Builds' deploys from its own.
+[builds]
+deploy = "npx wrangler deploy --var BUILT_BY:$WORKERS_CI_BRANCH"
+preview = "npx wrangler versions upload --var BUILT_BY:$WORKERS_CI_BRANCH"

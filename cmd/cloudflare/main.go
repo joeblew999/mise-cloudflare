@@ -5,7 +5,8 @@
 //	go tool cloudflare wrangler <args>  # the repo's pinned wrangler on that login (deploy, delete, d1, secret, …)
 //	go tool cloudflare status           # the repo's login, its account and scopes; this machine's other logins; stray tokens
 //	go tool cloudflare check            # the repo's rules: no account or resource IDs, no tokens, secrets listed, wrangler pinned
-//	go tool cloudflare logout           # log the repo's login out on Cloudflare and delete it
+//	go tool cloudflare builds           # Workers Builds: a push to the branch deploys, every other branch a preview
+//	go tool cloudflare logout           # log the repo's logins out on Cloudflare and delete them
 //	go tool cloudflare init             # cloudflare.toml, the mise tasks and the agent skill, into a repo
 //	go tool cloudflare tasks            # write its mise tasks: .mise/tasks/cloudflare.toml
 //	go tool cloudflare skill            # install its agent skill: .claude/skills/cloudflare
@@ -38,6 +39,7 @@ import (
 	"strings"
 
 	"github.com/joeblew999/cloudflare-zero/config"
+	"github.com/joeblew999/cloudflare-zero/internal/cf"
 	"github.com/joeblew999/cloudflare-zero/internal/rules"
 	"github.com/joeblew999/cloudflare-zero/internal/wconfig"
 	"github.com/joeblew999/cloudflare-zero/internal/wrangler"
@@ -53,8 +55,10 @@ func main() {
 	profile := flag.String("profile", cfg.Profile, "the repo's login, a wrangler auth profile (default the Worker's name)")
 	jsonOut := flag.Bool("json", false, "print one JSON document on stdout instead of text")
 	out := flag.String("o", filepath.Join(".mise", "tasks", "cloudflare.toml"), "tasks: the file to write")
+	off := flag.Bool("off", false, "builds: remove the Workers Builds setup")
+	branch := flag.String("branch", "", "builds: the branch whose pushes deploy (default cloudflare.toml's, else the repository's default)")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill, or cloudflare wrangler <args>")
+		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -116,6 +120,12 @@ func main() {
 		if err := wrangler.Interactive(r.w.Cmd(ctx, args[1:]...)); err != nil {
 			os.Exit(exitCode(err))
 		}
+	case "builds":
+		b := cfg.Builds
+		if *branch != "" {
+			b.Branch = *branch
+		}
+		r.builds(ctx, b, *off, *jsonOut)
 	case "status":
 		r.status(ctx, *jsonOut)
 	case "check":
@@ -124,6 +134,13 @@ func main() {
 		if r.w.LoggedIn() {
 			r.refuseStrayTokens()
 			must(r.w.Delete(ctx))
+		}
+		// The cf login, for Workers Builds, if this machine has one.
+		if cf.Installed() {
+			c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
+			if who, err := c.Whoami(ctx); err == nil && who.Authenticated {
+				must(c.Delete(ctx))
+			}
 		}
 		fmt.Printf("✓ %s is logged out and deleted\n", r.w.Profile)
 	default:

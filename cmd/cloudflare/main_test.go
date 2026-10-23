@@ -10,7 +10,7 @@ import (
 	"github.com/joeblew999/cloudflare-zero/mise"
 )
 
-var commands = []string{"login", "wrangler", "status", "check", "logout", "init", "tasks", "skill"}
+var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill"}
 
 // TestTasks: every command the tasks run is one cloudflare has, and tasks writes them.
 func TestTasks(t *testing.T) {

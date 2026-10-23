@@ -19,6 +19,17 @@ mise run cloudflare:wrangler -- d1 list --json   # any wrangler command: secret 
 Both log in first if needed. Never run `npx wrangler`, `wrangler login` or a global wrangler: they use another login.
 `wrangler dev` needs no login: run the repo's own wrangler for it.
 
+## Deploys from GitHub: previews, staging, production
+
+`mise run cloudflare:builds` sets Cloudflare's Workers Builds up for the Worker, once per repo: a push to the branch
+deploys (`wrangler deploy`), and every other branch gets a preview (`wrangler versions upload`) with its URL on the pull
+request. Cloudflare does both with its own build token, so GitHub never holds a Cloudflare credential. Deploy once
+first (`mise run cloudflare:deploy`): Workers Builds attaches to a deployed Worker. The first time it needs a cf login
+(Cloudflare's own CLI, whose login can have Workers Builds' scope): give the person its link and code, as below. For
+staging, a wrangler environment (`env.staging`) is its own Worker: run it again with `CLOUDFLARE_ENV=staging` and
+`--branch main`, and the production Worker with its own branch. `--off` removes the setup. If Cloudflare can't see the
+repository, the person gives Cloudflare's GitHub app access to it on GitHub.
+
 ## Logging in
 
 `mise run cloudflare:login` logs in once. On a machine with a browser, it opens; in a Claude Code cloud session (or with
