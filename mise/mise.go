@@ -14,3 +14,9 @@ var Tasks []byte
 //
 //go:embed workflow.yml
 var Workflow []byte
+
+// SessionStart is session-start.sh, the Claude Code cloud session hook go tool cloudflare claude writes into a repo's
+// .claude/hooks: mise, every pinned tool, and each named folder's setup task, when a cloud session starts.
+//
+//go:embed session-start.sh
+var SessionStart []byte

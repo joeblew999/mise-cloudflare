@@ -13,7 +13,7 @@ import (
 	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
-var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "workflow", "version"}
+var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "workflow", "claude", "version"}
 
 // TestTasks: every command the tasks run is one cloudflare has, and tasks writes them.
 func TestTasks(t *testing.T) {
@@ -155,4 +155,27 @@ func mustReal(t *testing.T, p string) string {
 		t.Fatal(err)
 	}
 	return r
+}
+
+// TestClaude: the hook is written and made executable, and its SessionStart entry added to settings already there,
+// once.
+func TestClaude(t *testing.T) {
+	top := t.TempDir()
+	if exec.Command("git", "-C", top, "init", "-q").Run() != nil {
+		t.Skip("no git")
+	}
+	sub := filepath.Join(top, "worker")
+	os.MkdirAll(filepath.Join(top, ".claude"), 0o755)
+	os.MkdirAll(sub, 0o755)
+	os.WriteFile(filepath.Join(top, ".claude", "settings.json"), []byte(`{"permissions": {"allow": ["Bash(ls)"]}}`), 0o644)
+	claude(context.Background(), sub)
+	claude(context.Background(), sub)
+	st, err := os.Stat(filepath.Join(top, ".claude", "hooks", hookFile))
+	if err != nil || st.Mode()&0o100 == 0 {
+		t.Fatalf("hook: %v %v", st, err)
+	}
+	b, _ := os.ReadFile(filepath.Join(top, ".claude", "settings.json"))
+	if !strings.Contains(string(b), `"Bash(ls)"`) || strings.Count(string(b), hookFile) != 1 || !strings.Contains(string(b), hookFile+" worker") {
+		t.Errorf("settings:\n%s", b)
+	}
 }

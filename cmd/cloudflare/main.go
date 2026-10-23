@@ -7,10 +7,11 @@
 //	go tool cloudflare check            # the repo's rules: no account or resource IDs, no tokens, secrets listed, wrangler pinned
 //	go tool cloudflare builds           # Workers Builds: a push to the branch deploys, every other branch a preview
 //	go tool cloudflare logout           # log the repo's logins out on Cloudflare and delete them
-//	go tool cloudflare init             # cloudflare.toml, the mise tasks and the agent skill, into a repo
+//	go tool cloudflare init             # cloudflare.toml, the mise tasks, the agent skill, the workflow and the cloud hook
 //	go tool cloudflare tasks            # write its mise tasks: .mise/tasks/cloudflare.toml
 //	go tool cloudflare skill            # install its agent skill: .claude/skills/cloudflare
 //	go tool cloudflare workflow         # write its GitHub Actions workflow: .github/workflows/cloudflare[-<folder>].yml
+//	go tool cloudflare claude           # set the repository up for Claude Code cloud sessions: the hook, and its settings
 //	go tool cloudflare version          # this build's version
 //
 // A repo without Go runs the released binary instead, cloudflare (mise: github:joeblew999/mise-cloudflare), and its tasks
@@ -48,6 +49,7 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/rules"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
+	"github.com/joeblew999/mise-cloudflare/mise"
 	"github.com/joeblew999/mise-cloudflare/skills"
 )
 
@@ -64,7 +66,7 @@ func main() {
 	branch := flag.String("branch", "", "builds: the branch whose pushes deploy production (default cloudflare.toml's, else the repository's default, or production with staging)")
 	staging := flag.String("staging", "", "builds: the branch whose pushes deploy staging, the wrangler environment env.staging (default cloudflare.toml's)")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill|workflow, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
+		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill|workflow|claude, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -95,6 +97,9 @@ func main() {
 	case "skill":
 		writeSkill(filepath.Join(".claude", "skills"))
 		return
+	case "claude":
+		claude(ctx, dir)
+		return
 	case "workflow":
 		path, b, err := workflowFor(ctx, dir)
 		if err != nil {
@@ -117,6 +122,10 @@ func main() {
 		}
 		writeFile(*out, b)
 		writeSkill(filepath.Join(".claude", "skills"))
+		if path, w, err := workflowFor(ctx, dir); err == nil {
+			writeFile(path, w)
+		}
+		claude(ctx, dir)
 		return
 	}
 	r := openRepo(ctx, dir, cfg, *profile)
@@ -435,6 +444,9 @@ func (r repo) stale(ctx context.Context) []string {
 	}
 	if want, err := skills.FS.ReadFile("cloudflare/SKILL.md"); err == nil && differs(filepath.Join(r.dir, ".claude", "skills", "cloudflare", "SKILL.md"), want) {
 		out = append(out, ".claude/skills/cloudflare/SKILL.md is out of date: run mise run cloudflare:skill")
+	}
+	if top, _, err := gitTop(ctx, r.dir); err == nil && differs(filepath.Join(top, ".claude", "hooks", hookFile), mise.SessionStart) {
+		out = append(out, ".claude/hooks/"+hookFile+" is out of date: run mise run cloudflare:claude")
 	}
 	if path, want, err := workflowFor(ctx, r.dir); err == nil && differs(path, want) {
 		rel, _ := filepath.Rel(r.dir, path)

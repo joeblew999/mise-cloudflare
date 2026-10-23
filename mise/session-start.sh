@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Written by mise-cloudflare (cloudflare claude): don't edit it; after upgrading, run mise run cloudflare:claude again.
 # A Claude Code cloud session starts on a bare Linux machine with only the repo cloned. Install mise, then every tool
 # the repo pins (Go from go.mod), then run each folder's own setup task if it has one, so `mise run …` works straight
 # away. Does nothing on your own machine.
