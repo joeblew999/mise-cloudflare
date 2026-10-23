@@ -11,14 +11,7 @@ resources | while read -r kind res id; do
   case $kind in
     d1) wrangler d1 delete "$res" -y </dev/null > /dev/null && echo "deleted D1 $res" ;;
     kv) wrangler kv namespace delete --namespace-id "$id" -y </dev/null > /dev/null && echo "deleted KV $res" ;;
-    r2)
-      # A bucket must be empty before it can go; wrangler can't list objects, Cloudflare's API can (with this login's token).
-      acct=$(wrangler whoami --json </dev/null | jq -r 'if (.accounts | length) == 1 then .accounts[0].id else empty end')
-      [ -n "$acct" ] || { echo "can't tell which account holds R2 $res: empty it in the dashboard, then run again"; exit 1; }
-      token=$(wrangler auth token --json </dev/null | jq -r .token)
-      curl -fsS -m 30 -H "Authorization: Bearer $token" "https://api.cloudflare.com/client/v4/accounts/$acct/r2/buckets/$res/objects" \
-        | jq -r '.result[].key' | while read -r key; do wrangler r2 object delete "$res/$key" --remote </dev/null > /dev/null; done
-      wrangler r2 bucket delete "$res" </dev/null > /dev/null && echo "deleted R2 $res" ;;
+    r2) empty_r2_bucket "$res" && wrangler r2 bucket delete "$res" </dev/null > /dev/null && echo "deleted R2 $res" ;;
   esac
 done
 rm -f .wrangler/cloudflare-url
