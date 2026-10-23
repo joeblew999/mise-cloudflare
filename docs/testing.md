@@ -14,8 +14,8 @@ build and its link, and each deploy's result. The deploy workflow's runs show Gi
 |---|---|
 | [cmd/cloudflare/](../cmd/cloudflare/) | the command |
 | [config/](../config/) | `cloudflare.toml` |
-| [mise/](../mise/) | its tasks, written into a repo by `cloudflare tasks` |
-| [skills/](../skills/) | its agent skill, installed by `cloudflare skill` |
+| [mise/](../mise/) | the tasks, workflow and Claude Code hook `cloudflare init` writes into a repo |
+| [skills/](../skills/) | the agent skill `cloudflare init` installs |
 | [internal/](../internal/) | the login (`wrangler`), cf (`cf`), the Worker's config as wrangler reads it (`wconfig`), the rules (`rules`) |
 | [example/](../example/) | a Worker repo that uses it, exactly as any other repo would (`mise run example` stamps it) |
 | [e2e/](../e2e/) | `mise run prove` |

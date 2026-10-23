@@ -1,5 +1,6 @@
-// Package mise holds mise-cloudflare's mise tasks (tasks.toml) and GitHub Actions workflow (workflow.yml): go tool
-// cloudflare tasks and workflow write them into a repo, from the mise-cloudflare version it runs.
+// Package mise holds what go tool cloudflare init writes into a repo, from the mise-cloudflare version it runs: the
+// mise tasks (tasks.toml), the GitHub Actions workflow (workflow.yml, workflow-deploy.yml) and the Claude Code cloud
+// session hook (session-start.sh).
 package mise
 
 import _ "embed"

@@ -16,7 +16,7 @@ import (
 	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
-var commands = []string{"dev", "login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "workflow", "claude", "ci-token", "previews", "version"}
+var commands = []string{"init", "dev", "login", "wrangler", "status", "check", "builds", "previews", "ci-token", "logout", "version"}
 
 // TestTasks: every command the tasks run is one cloudflare has, and tasks writes them.
 func TestTasks(t *testing.T) {
@@ -25,7 +25,7 @@ func TestTasks(t *testing.T) {
 			t.Errorf("mise/tasks.toml runs cloudflare %s, which it doesn't have", m[1])
 		}
 	}
-	path := filepath.Join(t.TempDir(), ".mise", "tasks", "cloudflare.toml")
+	path := filepath.Join(t.TempDir(), tasksFile)
 	writeFile(path, mise.Tasks)
 	if b, err := os.ReadFile(path); err != nil || string(b) != string(mise.Tasks) {
 		t.Fatalf("wrote %q, %v", b, err)
@@ -47,12 +47,11 @@ func TestSkill(t *testing.T) {
 	}
 }
 
-// TestExampleIsCurrent: example/ has the tasks and the skill this version writes, as any repo would after
-// go tool cloudflare tasks and skill.
+// TestExampleIsCurrent: example/ has what this version's init writes, as any repo would after it.
 func TestExampleIsCurrent(t *testing.T) {
 	for _, d := range []string{"example"} {
-		if b, err := os.ReadFile("../../" + d + "/.mise/tasks/cloudflare.toml"); err != nil || string(b) != string(mise.Tasks) {
-			t.Errorf("%s/.mise/tasks/cloudflare.toml is stale: run mise run example (%v)", d, err)
+		if b, err := os.ReadFile(filepath.Join("../..", d, tasksFile)); err != nil || string(b) != string(mise.Tasks) {
+			t.Errorf("%s/%s is stale: run mise run example (%v)", d, tasksFile, err)
 		}
 	}
 	if b, err := os.ReadFile("../../example/cloudflare.toml"); err != nil || string(b) != config.Template {
@@ -60,7 +59,7 @@ func TestExampleIsCurrent(t *testing.T) {
 	}
 	want, _ := os.ReadFile("../../skills/cloudflare/SKILL.md")
 	if b, err := os.ReadFile("../../example/.claude/skills/cloudflare/SKILL.md"); err != nil || string(b) != string(want) {
-		t.Errorf("example/.claude/skills/cloudflare/SKILL.md is stale: run go tool cloudflare skill in example/ (%v)", err)
+		t.Errorf("example/.claude/skills/cloudflare/SKILL.md is stale: run mise run example (%v)", err)
 	}
 }
 

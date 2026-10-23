@@ -20,8 +20,17 @@ cloudflare init                              # or: go tool cloudflare init
 mise run cloudflare:check                    # says exactly what, if anything, the repo still needs
 ```
 
-`init` adds the tasks (`mise run cloudflare:…`), a Claude skill, a GitHub Actions check, and the Claude Code cloud
-session setup. [example/](example/) is a repo set up this way.
+`init` adds these to the repo ([example/](example/) is a repo set up this way):
+
+| File | What | Edit it? |
+|---|---|---|
+| `cloudflare.toml` | The repo's settings, every one commented at its default | Yes |
+| `.mise/tasks/mise-cloudflare.toml` | The tasks: `mise tasks` lists them | No |
+| `.claude/skills/cloudflare/SKILL.md` | How Claude works on the Worker | No |
+| `.github/workflows/cloudflare.yml` | Checks the repo on every push and pull request | No |
+| `.claude/hooks/mise-cloudflare-session-start.sh` | Sets a Claude Code cloud session up | No |
+
+After upgrading mise-cloudflare, `mise run cloudflare:update` writes the ones you don't edit again.
 
 ## Develop locally
 
@@ -39,7 +48,7 @@ mise run cloudflare:deploy
 
 The first time, your browser opens Cloudflare's page: click **Allow** and pick your account. That's the repo's own
 login, kept on your machine (in a Claude Code cloud session, you get a link to tap on your phone instead). After that,
-it never asks again.
+it asks again only when an upgraded wrangler needs more.
 
 ## Preview every pull request, then staging and production
 

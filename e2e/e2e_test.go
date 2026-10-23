@@ -257,7 +257,7 @@ func jsonPart(out string) string {
 	return ""
 }
 
-// leftovers names the Worker's D1, KV and R2 that exist, which a proof must start without and end without.
+// leftovers names the Worker's D1, KV and R2 that exist, which prove must start without and end without.
 func (r repo) leftovers() []string {
 	var left []string
 	if r.d1() != "" {

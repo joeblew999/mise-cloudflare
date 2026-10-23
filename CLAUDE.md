@@ -7,8 +7,8 @@ are. README.md is the whole picture; read it first.
 ## Working on it
 
 - `mise run test`: the Go tests, no Cloudflare account. Run them after every change.
-- `mise run example`: stamps `example/` through the tool (its tasks and skill), as any repo gets them. The tests fail
-  while it's stale.
+- `mise run example`: runs `go tool cloudflare init` in `example/`, as any repo is set up. The tests fail while it's
+  stale.
 - `mise run prove`: one real deploy of example/, before a release, a few minutes. It refuses to start while its Worker,
   D1, KV or R2 exists and deletes what it made, even when it fails. Previews, staging and production are shown working
   by Cloudflare's own checks on the pull requests, and GitHub Actions by its runs: never build a harness for those.

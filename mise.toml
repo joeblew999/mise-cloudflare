@@ -3,7 +3,7 @@
 #
 #   cmd/cloudflare/  the command;  config/  cloudflare.toml;  mise/  its tasks;  skills/  its agent skill
 #   example/         a Worker repo that uses it, exactly as any other repo would
-#   e2e/             the proofs, on a real Cloudflare account (mise run prove …)
+#   e2e/             one real deploy, before a release (mise run prove)
 
 [settings]
 # go.mod's toolchain line is the Go pin; this makes mise install honour it.
@@ -17,9 +17,9 @@ goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
 "npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI, for cloudflare:builds (a repo gets it from that task's tools)
 
 [tasks.example]
-description = "Stamp example/ the way any repo gets mise-cloudflare: go tool cloudflare tasks, skill, workflow and claude there, from this version (the Go tests and cloudflare:check fail while it's stale)"
+description = "Set example/ up with this version, as any repo is: go tool cloudflare init there (the Go tests and cloudflare:check fail while it's stale)"
 dir = "example"
-run = ["go tool cloudflare tasks", "go tool cloudflare skill", "go tool cloudflare workflow", "go tool cloudflare claude"]
+run = "go tool cloudflare init"
 
 [tasks.test]
 description = "The Go tests: no Cloudflare account, nothing deployed"

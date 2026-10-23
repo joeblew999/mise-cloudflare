@@ -1,5 +1,5 @@
-# Written by mise-cloudflare (cloudflare workflow, 0.0.0): don't edit it. After upgrading, run
-# mise run cloudflare:workflow again; cloudflare:check fails while it's out of date.
+# Written by mise-cloudflare (0.0.0): don't edit it. After upgrading, mise run cloudflare:update writes it again;
+# cloudflare:check fails while it's out of date.
 #
 # What GitHub Actions runs for the Worker in example on every push and pull request: its setup and test tasks if it has
 # them, then cloudflare:check (no account or resource IDs, no tokens, secrets listed, wrangler pinned). No Cloudflare

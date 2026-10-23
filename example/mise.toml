@@ -1,5 +1,5 @@
-# A Worker repo that uses mise-cloudflare exactly as any other repo would: go.mod's tool line, cloudflare.toml, and the
-# tasks go tool cloudflare tasks writes into .mise/tasks/.
+# A Worker repo set up with mise-cloudflare exactly as any other repo is: go.mod's tool line, then go tool cloudflare
+# init, which wrote cloudflare.toml and the mise tasks in .mise/tasks/ (mise finds them there by itself).
 
 [settings]
 # go.mod's toolchain line is the Go pin; this makes mise install honour it.
@@ -12,7 +12,3 @@ aube = "2.8.1"     # installs wrangler from package.json
 [tasks.setup]
 description = "Install the pinned wrangler, and make .dev.vars from .dev.vars.example for wrangler dev (no account)"
 run = ["aube install", "cp -n .dev.vars.example .dev.vars || true"]
-
-# mise-cloudflare's tasks, as go tool cloudflare tasks writes them.
-[task_config]
-includes = [".mise/tasks/cloudflare.toml"]
