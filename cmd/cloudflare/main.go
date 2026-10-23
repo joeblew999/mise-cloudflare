@@ -10,6 +10,7 @@
 //	go tool cloudflare init             # cloudflare.toml, the mise tasks and the agent skill, into a repo
 //	go tool cloudflare tasks            # write its mise tasks: .mise/tasks/cloudflare.toml
 //	go tool cloudflare skill            # install its agent skill: .claude/skills/cloudflare
+//	go tool cloudflare workflow         # write its GitHub Actions workflow: .github/workflows/cloudflare[-<folder>].yml
 //	go tool cloudflare version          # this build's version
 //
 // A repo without Go runs the released binary instead, cloudflare (mise: github:joeblew999/mise-cloudflare), and its tasks
@@ -63,7 +64,7 @@ func main() {
 	branch := flag.String("branch", "", "builds: the branch whose pushes deploy production (default cloudflare.toml's, else the repository's default, or production with staging)")
 	staging := flag.String("staging", "", "builds: the branch whose pushes deploy staging, the wrangler environment env.staging (default cloudflare.toml's)")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
+		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill|workflow, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -93,6 +94,13 @@ func main() {
 		return
 	case "skill":
 		writeSkill(filepath.Join(".claude", "skills"))
+		return
+	case "workflow":
+		path, b, err := workflowFor(ctx, dir)
+		if err != nil {
+			fail(err)
+		}
+		writeFile(path, b)
 		return
 	case "init":
 		switch {
@@ -151,7 +159,7 @@ func main() {
 	case "status":
 		r.status(ctx, *jsonOut)
 	case "check":
-		r.check(*jsonOut)
+		r.check(ctx, *jsonOut)
 	case "logout":
 		if r.w.LoggedIn() {
 			r.refuseStrayTokens()
@@ -257,11 +265,12 @@ func tokenEnvFiles(dir string) []string {
 	return out
 }
 
-func (r repo) check(jsonOut bool) {
+func (r repo) check(ctx context.Context, jsonOut bool) {
 	problems, err := rules.Check(r.dir, r.wc)
 	if err != nil {
 		fail(err)
 	}
+	problems = append(problems, r.stale(ctx)...)
 	if jsonOut {
 		emit(struct {
 			OK       bool     `json:"ok"`
@@ -411,4 +420,25 @@ func writeFile(path string, b []byte) {
 	must(os.MkdirAll(filepath.Dir(path), 0o755))
 	must(os.WriteFile(path, b, 0o644))
 	fmt.Println("wrote", path)
+}
+
+// stale names the files mise-cloudflare wrote into the repo that this version would write differently: the tasks (if
+// the repo has them), the skill (if it has it) and the workflow (if it has it). An upgrade rewrites them.
+func (r repo) stale(ctx context.Context) []string {
+	var out []string
+	differs := func(path string, want []byte) bool {
+		b, err := os.ReadFile(path)
+		return err == nil && !bytes.Equal(b, want)
+	}
+	if want, err := tasksFor(r.dir); err == nil && differs(filepath.Join(r.dir, ".mise", "tasks", "cloudflare.toml"), want) {
+		out = append(out, ".mise/tasks/cloudflare.toml is out of date for mise-cloudflare "+buildVersion()+": run mise run cloudflare:tasks")
+	}
+	if want, err := skills.FS.ReadFile("cloudflare/SKILL.md"); err == nil && differs(filepath.Join(r.dir, ".claude", "skills", "cloudflare", "SKILL.md"), want) {
+		out = append(out, ".claude/skills/cloudflare/SKILL.md is out of date: run mise run cloudflare:skill")
+	}
+	if path, want, err := workflowFor(ctx, r.dir); err == nil && differs(path, want) {
+		rel, _ := filepath.Rel(r.dir, path)
+		out = append(out, rel+" is out of date: run mise run cloudflare:workflow")
+	}
+	return out
 }

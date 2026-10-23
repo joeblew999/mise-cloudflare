@@ -46,6 +46,10 @@ run = "go tool cloudflare logout"
 description = "Install or update the cloudflare agent skill (.claude/skills/cloudflare), which Claude Code uses to work on Cloudflare from this repo"
 run = "go tool cloudflare skill"
 
+["cloudflare:workflow"]
+description = "Write the GitHub Actions workflow for this Worker (.github/workflows/cloudflare.yml at the repository's root, cloudflare-<folder>.yml for a Worker in a subfolder): its setup and test tasks, then cloudflare:check, on every push and pull request, with no Cloudflare credentials. Run it again after upgrading"
+run = "go tool cloudflare workflow"
+
 ["cloudflare:tasks"]
 description = "Write this file again from the mise-cloudflare version in go.mod: run it after upgrading"
 run = "go tool cloudflare tasks"

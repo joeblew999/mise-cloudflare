@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +13,7 @@ import (
 	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
-var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "version"}
+var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "workflow", "version"}
 
 // TestTasks: every command the tasks run is one cloudflare has, and tasks writes them.
 func TestTasks(t *testing.T) {
@@ -122,4 +123,36 @@ func TestTasksFor(t *testing.T) {
 	if !regexp.MustCompile(`(?m)^run = "cloudflare -off=`).Match(b) {
 		t.Errorf("builds runs the binary:\n%s", b)
 	}
+}
+
+// TestWorkflowFor: a Worker at a repository's root gets cloudflare.yml, one in a subfolder cloudflare-<folder>.yml,
+// working there; nothing of the template's placeholders is left.
+func TestWorkflowFor(t *testing.T) {
+	top := t.TempDir()
+	if exec.Command("git", "-C", top, "init", "-q").Run() != nil {
+		t.Skip("no git")
+	}
+	sub := filepath.Join(top, "workers", "api")
+	os.MkdirAll(sub, 0o755)
+	for dir, want := range map[string]string{top: "cloudflare.yml", sub: "cloudflare-workers-api.yml"} {
+		path, b, err := workflowFor(context.Background(), dir)
+		if err != nil || filepath.Base(path) != want || filepath.Dir(path) != filepath.Join(mustReal(t, top), ".github", "workflows") {
+			t.Errorf("%s: %s, %v", dir, path, err)
+		}
+		if regexp.MustCompile(`\b(VERSION|NAME|DIR)\b`).Match(b) {
+			t.Errorf("%s: placeholders left:\n%s", want, b)
+		}
+	}
+	_, b, _ := workflowFor(context.Background(), sub)
+	if !strings.Contains(string(b), "working-directory: workers/api") || !strings.Contains(string(b), "name: cloudflare-workers-api") {
+		t.Errorf("the subfolder's workflow:\n%s", b)
+	}
+}
+
+func mustReal(t *testing.T, p string) string {
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
 }
