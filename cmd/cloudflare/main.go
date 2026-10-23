@@ -10,6 +10,10 @@
 //	go tool cloudflare init             # cloudflare.toml, the mise tasks and the agent skill, into a repo
 //	go tool cloudflare tasks            # write its mise tasks: .mise/tasks/cloudflare.toml
 //	go tool cloudflare skill            # install its agent skill: .claude/skills/cloudflare
+//	go tool cloudflare version          # this build's version
+//
+// A repo without Go runs the released binary instead, cloudflare (mise: github:joeblew999/cloudflare-zero), and its tasks
+// pin that release; a repo with go.mod's tool line runs go tool cloudflare, at go.mod's version.
 //
 // The login is a wrangler auth profile (cloudflare.toml's profile, default the Worker's name), passed to every wrangler
 // command with --profile, so nothing depends on which login wrangler would pick for the folder. It logs in in a browser
@@ -43,7 +47,6 @@ import (
 	"github.com/joeblew999/cloudflare-zero/internal/rules"
 	"github.com/joeblew999/cloudflare-zero/internal/wconfig"
 	"github.com/joeblew999/cloudflare-zero/internal/wrangler"
-	"github.com/joeblew999/cloudflare-zero/mise"
 	"github.com/joeblew999/cloudflare-zero/skills"
 )
 
@@ -56,6 +59,7 @@ func main() {
 	jsonOut := flag.Bool("json", false, "print one JSON document on stdout instead of text")
 	out := flag.String("o", filepath.Join(".mise", "tasks", "cloudflare.toml"), "tasks: the file to write")
 	off := flag.Bool("off", false, "builds: remove the Workers Builds setup")
+	showVersion := flag.Bool("version", false, "print this build's version")
 	branch := flag.String("branch", "", "builds: the branch whose pushes deploy (default cloudflare.toml's, else the repository's default)")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
@@ -63,6 +67,9 @@ func main() {
 	}
 	flag.Parse()
 	args := flag.Args()
+	if *showVersion {
+		args = []string{"version"}
+	}
 	if len(args) == 0 || (args[0] != "wrangler" && len(args) != 1) {
 		flag.Usage()
 		os.Exit(2)
@@ -73,8 +80,15 @@ func main() {
 		fail(err)
 	}
 	switch args[0] {
+	case "version":
+		fmt.Println(buildVersion())
+		return
 	case "tasks":
-		writeFile(*out, mise.Tasks)
+		b, err := tasksFor(dir)
+		if err != nil {
+			fail(err)
+		}
+		writeFile(*out, b)
 		return
 	case "skill":
 		writeSkill(filepath.Join(".claude", "skills"))
@@ -88,7 +102,11 @@ func main() {
 		default:
 			writeFile(config.File, []byte(config.Template))
 		}
-		writeFile(*out, mise.Tasks)
+		b, err := tasksFor(dir)
+		if err != nil {
+			fail(err)
+		}
+		writeFile(*out, b)
 		writeSkill(filepath.Join(".claude", "skills"))
 		return
 	}

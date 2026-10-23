@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/joeblew999/cloudflare-zero/mise"
 )
 
-var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill"}
+var commands = []string{"login", "wrangler", "builds", "status", "check", "logout", "init", "tasks", "skill", "version"}
 
 // TestTasks: every command the tasks run is one cloudflare has, and tasks writes them.
 func TestTasks(t *testing.T) {
@@ -87,5 +88,38 @@ func TestInstallCommand(t *testing.T) {
 	exec.Command("git", "-C", dir, "add", "package-lock.json").Run()
 	if got := installCommand(dir); got != "npm ci" {
 		t.Errorf("a committed package-lock.json: %q", got)
+	}
+}
+
+// TestTasksFor: a repo with go.mod's tool line gets the tasks as embedded; any other repo gets tasks that run the
+// cloudflare binary, each pinning this release, and needs no Go.
+func TestTasksFor(t *testing.T) {
+	goRepo := t.TempDir()
+	os.WriteFile(filepath.Join(goRepo, "go.mod"), []byte("module x\n\ngo 1.26.0\n\ntool "+toolPath+"\n"), 0o644)
+	if b, err := tasksFor(goRepo); err != nil || string(b) != string(mise.Tasks) {
+		t.Errorf("a Go repo: %v", err)
+	}
+	other := t.TempDir()
+	if _, err := tasksFor(other); err == nil {
+		t.Error("a development build wrote tasks pinning no release")
+	}
+	defer func(v string) { version = v }(version)
+	version = "v0.1.0"
+	b, err := tasksFor(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "go tool cloudflare") {
+		t.Error("tasks for a repo without Go run go tool")
+	}
+	pin := `"github:joeblew999/cloudflare-zero" = "0.1.0"`
+	if n, tasks := strings.Count(string(b), pin), strings.Count(string(b), `["cloudflare:`); n != tasks {
+		t.Errorf("%d of %d tasks pin the release:\n%s", n, tasks, b)
+	}
+	if !strings.Contains(string(b), `tools = { `+pin+`, "npm:cf" = "`) {
+		t.Errorf("cloudflare:builds pins both cloudflare and cf in one tools table:\n%s", b)
+	}
+	if !regexp.MustCompile(`(?m)^run = "cloudflare -off=`).Match(b) {
+		t.Errorf("builds runs the binary:\n%s", b)
 	}
 }

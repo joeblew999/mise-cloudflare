@@ -1,0 +1,38 @@
+# A v* tag's release: goreleaser builds the cloudflare binary for every machine (.goreleaser.yaml) and puts them on the
+# tag's GitHub release, where mise's github backend finds them. Shell steps only, as ci.yml.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # the release and its files
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MISE_YES: "1"
+    steps:
+      - name: Check out the tag with git (no actions/checkout)
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "+${GITHUB_REF}:${GITHUB_REF}"
+          git checkout -q --detach "${GITHUB_REF}"
+          git log --oneline -1
+
+      - name: mise, Go and goreleaser
+        run: |
+          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_QUIET=1 sh
+          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          mise install go goreleaser
+
+      - name: The tests, then the release
+        run: |
+          mise run test
+          mise exec -- goreleaser release --clean

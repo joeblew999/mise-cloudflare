@@ -13,6 +13,7 @@ idiomatic_version_file_enable_tools = ["go"]
 node = "26.11.1"   # example/'s wrangler
 aube = "2.8.1"     # installs it
 usage = "7.0.1"    # --help and tab-completion for the tasks' flags
+goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
 "npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI: prove-builds' Workers Builds (a repo gets it from the cloudflare:builds task)
 
 [tasks.example]

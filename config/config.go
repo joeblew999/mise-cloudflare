@@ -39,7 +39,7 @@ type Builds struct {
 	Root    string `toml:"root"`    // the folder, in the repository, its commands run in: default this one
 	Build   string `toml:"build"`   // installs the Worker's dependencies: default from its lockfile
 	Deploy  string `toml:"deploy"`  // default npx wrangler deploy (with --env when CLOUDFLARE_ENV is set)
-	Preview string `toml:"preview"` // every other branch's preview: default npx wrangler versions upload (with --env)
+	Preview string `toml:"preview"` // every other branch's preview: default npx wrangler preview (with --env)
 	Token   string `toml:"token"`   // the name of the account's build token it deploys with: default the first
 }
 
@@ -92,7 +92,7 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 # root = "."                                   # the folder its commands run in; default: this one
 # build = "npm ci"                             # default: from the lockfile
 # deploy = "npx wrangler deploy"
-# preview = "npx wrangler versions upload"
+# preview = "npx wrangler preview"
 # token = "My Build Token"                     # which of the account's build tokens; default: the first
 `
 

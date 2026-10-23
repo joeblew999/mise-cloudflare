@@ -30,6 +30,8 @@ type buildsReport struct {
 	Preview    string `json:"preview"`
 	Token      string `json:"token"`
 	Removed    bool   `json:"removed,omitempty"`
+	// GitHub deletes merged pull requests' branches, and Workers Builds their previews with them.
+	DeleteMergedBranches bool `json:"deleteMergedBranches"`
 }
 
 // builds sets Cloudflare's Workers Builds up for the repo's Worker: a push to the branch deploys it, every other branch
@@ -110,7 +112,7 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	rep.Root = orDefault(b.Root, gh.root)
 	rep.Build = orDefault(b.Build, installCommand(r.dir))
 	rep.Deploy = orDefault(b.Deploy, "npx wrangler deploy"+env)
-	rep.Preview = orDefault(b.Preview, "npx wrangler versions upload"+env)
+	rep.Preview = orDefault(b.Preview, "npx wrangler preview"+env)
 	settings := []string{
 		"--git-repository-branch", rep.Branch,
 		"--git-repository-provider-type", "github",
@@ -136,6 +138,8 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	if err != nil {
 		fail(fmt.Errorf("%w\nIf Cloudflare can't see the repository, give Cloudflare's GitHub app access to %s on GitHub (Settings, Applications, Cloudflare Workers and Pages), then run this again", err, rep.Repository))
 	}
+	// A branch's preview goes when the branch does; GitHub deletes a pull request's branch when it merges, with this on.
+	rep.DeleteMergedBranches = deleteMergedBranches(ctx, gh)
 	if jsonOut {
 		emit(rep)
 		return
@@ -144,6 +148,38 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	fmt.Printf("  a push to %s:  %s, then %s\n", rep.Branch, rep.Build, rep.Deploy)
 	fmt.Printf("  any other branch: %s, then %s (a preview, its URL on the pull request)\n", rep.Build, rep.Preview)
 	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", b.Token)
+	if rep.DeleteMergedBranches {
+		fmt.Printf("  GitHub deletes a pull request's branch when it merges, and Workers Builds its preview with it\n")
+	} else {
+		fmt.Printf("  · switch on GitHub's \"Automatically delete head branches\" (%s's Settings, General) so merged pull requests' previews go too\n", rep.Repository)
+	}
+}
+
+// deleteMergedBranches switches on the repository's "Automatically delete head branches" setting, with GITHUB_TOKEN or
+// the gh CLI's login, and reports whether it's on. Without a token that may change it, it's left to the person.
+func deleteMergedBranches(ctx context.Context, g ghRepo) bool {
+	token := cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN")
+	if token == "" {
+		if out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output(); err == nil {
+			token = strings.TrimSpace(string(out))
+		}
+	}
+	if token == "" {
+		return false
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPatch, "https://api.github.com/repos/"+g.Owner.Login+"/"+g.Name,
+		strings.NewReader(`{"delete_branch_on_merge":true}`))
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var r struct {
+		On bool `json:"delete_branch_on_merge"`
+	}
+	return resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&r) == nil && r.On
 }
 
 // workerTag is the deployed Worker's tag, which Workers Builds attaches to, as Cloudflare has it (cf workers scripts

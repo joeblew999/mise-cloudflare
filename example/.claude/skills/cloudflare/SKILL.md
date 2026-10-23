@@ -22,7 +22,7 @@ Both log in first if needed. Never run `npx wrangler`, `wrangler login` or a glo
 ## Deploys from GitHub: previews, staging, production
 
 `mise run cloudflare:builds` sets Cloudflare's Workers Builds up for the Worker, once per repo: a push to the branch
-deploys (`wrangler deploy`), and every other branch gets a preview (`wrangler versions upload`) with its URL on the pull
+deploys (`wrangler deploy`), and every other branch gets a preview (`wrangler preview`) with its URL on the pull
 request. Cloudflare does both with its own build token, so GitHub never holds a Cloudflare credential. Deploy once
 first (`mise run cloudflare:deploy`): Workers Builds attaches to a deployed Worker. The first time it needs a cf login
 (Cloudflare's own CLI, whose login can have Workers Builds' scope): give the person its link and code, as below. For
