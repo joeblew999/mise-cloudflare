@@ -24,7 +24,7 @@ func TestBindings(t *testing.T) {
 	r.must(nil, "npm", "ci", "--no-audit", "--no-fund")
 	s := r.status()
 	want := []string{"account:read", "user:read", "workers:write", "workers_scripts:write", "queues:write", "ai:write", "browser:write"}
-	if !slices.Equal(s.Needs, want) {
+	if !slices.Equal(slices.Sorted(slices.Values(s.Needs)), slices.Sorted(slices.Values(want))) { // a set: the login compares sets
 		t.Fatalf("its bindings %q need %q, want %q", s.Bindings, s.Needs, want)
 	}
 	r.pass("its bindings (%s) need %s", strings.Join(s.Bindings, ", "), strings.Join(s.Needs, " "))
