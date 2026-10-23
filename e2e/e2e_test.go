@@ -469,8 +469,8 @@ func TestJSONPart(t *testing.T) {
 	}
 }
 
-// sweep deletes every D1, KV namespace and R2 bucket whose name starts with prefix (previews get their own, named by
-// wrangler), and returns what it couldn't delete.
+// sweep deletes every D1, KV namespace and R2 bucket whose name starts with prefix (a Worker's, and its environments'),
+// and returns what it couldn't delete.
 func (r repo) sweep(prefix string) []string {
 	var left []string
 	var dbs []struct{ UUID, Name string }

@@ -288,7 +288,7 @@ func tokenEnvFiles(dir string) []string {
 }
 
 func (r repo) check(ctx context.Context, jsonOut bool) {
-	problems, err := rules.Check(r.dir, r.wc)
+	problems, err := rules.Check(r.dir, r.wc, r.workflow.Deploy) // the deploy workflow runs Worker Previews
 	if err != nil {
 		fail(err)
 	}

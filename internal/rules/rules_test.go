@@ -40,8 +40,8 @@ func cfg() wconfig.Config {
 	return wconfig.Config{Path: "/r/wrangler.jsonc", Name: "w", Secrets: []string{"GREETING"}, Raw: map[string]any{
 		"name": "w",
 		"previews": map[string]any{
-			"d1_databases":  []any{map[string]any{"binding": "DB"}},
-			"kv_namespaces": []any{map[string]any{"binding": "KV"}},
+			"d1_databases":  []any{map[string]any{"binding": "DB", "database_id": "staging-db"}},
+			"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "staging-kv"}},
 		},
 		"d1_databases":  []any{map[string]any{"binding": "DB"}},
 		"kv_namespaces": []any{map[string]any{"binding": "KV"}},
@@ -49,7 +49,7 @@ func cfg() wconfig.Config {
 }
 
 func TestCheckPasses(t *testing.T) {
-	if p, err := Check(repo(t, good()), cfg()); err != nil || len(p) != 0 {
+	if p, err := Check(repo(t, good()), cfg(), false); err != nil || len(p) != 0 {
 		t.Errorf("problems %q, %v", p, err)
 	}
 }
@@ -66,7 +66,7 @@ func TestCheckFinds(t *testing.T) {
 	delete(c.Raw, "previews")
 	c.Raw["d1_databases"] = []any{map[string]any{"binding": "DB", "database_id": "x"}}
 	c.Raw["env"] = map[string]any{"production": map[string]any{"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "y"}}}}
-	p, err := Check(repo(t, files), c)
+	p, err := Check(repo(t, files), c, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestCheckFinds(t *testing.T) {
 func TestInitPasses(t *testing.T) {
 	files := good()
 	files["cloudflare.toml"] = config.Template
-	if p, err := Check(repo(t, files), cfg()); err != nil || len(p) != 0 {
+	if p, err := Check(repo(t, files), cfg(), false); err != nil || len(p) != 0 {
 		t.Errorf("problems %q, %v", p, err)
 	}
 }
@@ -96,8 +96,36 @@ func TestPreviewBindings(t *testing.T) {
 	c := cfg()
 	c.Raw["r2_buckets"] = []any{map[string]any{"binding": "BUCKET"}}
 	c.Raw["queues"] = map[string]any{"producers": []any{map[string]any{"binding": "JOBS"}}}
-	p, err := Check(repo(t, good()), c)
+	p, err := Check(repo(t, good()), c, false)
 	if err != nil || len(p) != 1 || !strings.Contains(p[0], "lacks the bindings BUCKET, JOBS") {
 		t.Errorf("problems %q, %v", p, err)
+	}
+}
+
+// TestPreviewResources: a previews block's KV, D1 or R2 that doesn't name its resource is named: wrangler preview
+// creates none.
+func TestPreviewResources(t *testing.T) {
+	c := cfg()
+	c.Raw["r2_buckets"] = []any{map[string]any{"binding": "BUCKET"}}
+	c.Raw["previews"] = map[string]any{
+		"d1_databases":  []any{map[string]any{"binding": "DB", "database_id": "staging-db"}},
+		"kv_namespaces": []any{map[string]any{"binding": "KV", "id": ""}},
+		"r2_buckets":    []any{map[string]any{"binding": "BUCKET"}},
+	}
+	p := Previews(c, false)
+	if len(p) != 1 || !strings.Contains(p[0], "which KV KV, R2 BUCKET to use") {
+		t.Errorf("problems %q", p)
+	}
+}
+
+// TestPreviewsNeeded: no previews block is fine for a repo that runs no Worker Previews, a problem for one that does.
+func TestPreviewsNeeded(t *testing.T) {
+	c := cfg()
+	delete(c.Raw, "previews")
+	if p := Previews(c, false); len(p) != 0 {
+		t.Errorf("problems %q", p)
+	}
+	if p := Previews(c, true); len(p) != 1 || !strings.Contains(p[0], "no previews block") {
+		t.Errorf("problems %q", p)
 	}
 }

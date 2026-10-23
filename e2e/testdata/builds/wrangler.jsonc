@@ -9,10 +9,12 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
   "preview_urls": true,
-  // Previews inherit nothing from production: their own KV and R2.
+  // Previews inherit nothing from production, and Cloudflare makes them no KV or R2 of their own: they use staging's,
+  // its KV namespace by id, its bucket by name (wrangler names staging's own <worker>-kv and <worker>-bucket). The id
+  // doesn't exist until staging's first deploy: the proof fills it in then, as a repo does once, when it sets up previews.
   "previews": {
-    "kv_namespaces": [{ "binding": "KV" }],
-    "r2_buckets": [{ "binding": "BUCKET" }]
+    "kv_namespaces": [{ "binding": "KV" /* the proof adds staging's id */ }],
+    "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "cloudflare-zero-builds-staging-bucket" }]
   },
   "kv_namespaces": [{ "binding": "KV" }],
   "r2_buckets": [{ "binding": "BUCKET" }],

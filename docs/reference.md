@@ -8,7 +8,7 @@ mise-cloudflare writes, how the logins work, Workers Builds and GitHub Actions i
 | Needs | Checked by |
 |---|---|
 | A wrangler config with no account or resource IDs, in any environment; its secrets in `"secrets": { "required": [...] }` | `cloudflare:check` |
-| A `previews` block in it, declaring every storage binding the Worker has (D1, KV, R2, …): Worker Previews inherit nothing from production, so a preview without them fails on its first use of one. Bindings with no IDs get their own preview resources | `cloudflare:check` |
+| For Worker Previews (`cloudflare:builds`, or `[workflow] deploy`), a `previews` block in it, declaring every storage binding the Worker has (D1, KV, R2, …), each KV, D1 and R2 one naming the resource it uses: an existing, preview-safe one, such as staging's (a KV namespace's `id`, a D1's `database_id`, a bucket's `bucket_name`). Previews inherit nothing from production, and Cloudflare creates no KV, D1 or R2 for them (only Durable Objects and Containers). A repo with no previews needs no block | `cloudflare:check`, `cloudflare:builds` |
 | `.dev.vars.example` with a dummy for each required secret; `.dev.vars` and `.env` git-ignored | `cloudflare:check` |
 | wrangler pinned exactly in `package.json`; a lockfile, if any, committed (Workers Builds installs from git) | `cloudflare:check`, `cloudflare:builds` |
 | The tasks, skill, workflow and Claude Code hook mise-cloudflare wrote, current for its version | `cloudflare:check` |
@@ -79,7 +79,9 @@ branch gets a preview. Then:
 - **A push to the deploy branch** is built and deployed by Cloudflare, with Cloudflare's own build token.
 - **Any other branch** gets a [Worker Preview](https://developers.cloudflare.com/workers/previews/) at
   `https://<branch>-<worker>.<subdomain>.workers.dev`, its own logs and metrics, and Cloudflare's GitHub app posts its
-  URL on the pull request and keeps the comment current.
+  URL on the pull request and keeps the comment current. It uses the KV, D1 and R2 the `previews` block names, usually
+  staging's: wrangler made those at staging's first deploy (`<worker>-staging-kv`, …), and
+  `mise run cloudflare:wrangler -- kv namespace list` (`d1 list`, `r2 bucket list`) shows their ids.
 - **A merged pull request's preview** goes when its branch does: `builds` switches on GitHub's "Automatically delete head
   branches" (with `GITHUB_TOKEN` or gh's login).
 

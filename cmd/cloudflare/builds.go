@@ -16,6 +16,7 @@ import (
 
 	"github.com/joeblew999/mise-cloudflare/config"
 	"github.com/joeblew999/mise-cloudflare/internal/cf"
+	"github.com/joeblew999/mise-cloudflare/internal/rules"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
@@ -146,9 +147,11 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	workers[0].Branch = orDefault(b.Branch, prodBranch)
 	workers[0].Deploy = orDefault(b.Deploy, "npx wrangler deploy") + envFlag(env)
 	workers[0].Preview = orDefault(b.Preview, "npx wrangler preview") + envFlag(env)
-	// Worker Previews (wrangler preview) need a previews block in the config; Cloudflare's build fails without one.
-	if _, ok := r.wc.Raw["previews"]; !ok && strings.Contains(workers[0].Preview, "wrangler preview") {
-		fail(fmt.Errorf("Worker Previews (wrangler preview) need a previews block in %s: add \"previews\": {} (it can be empty), or set cloudflare.toml's [builds] preview", filepath.Base(r.wc.Path)))
+	// Worker Previews (wrangler preview) need a previews block with every binding in it; Cloudflare's build fails without.
+	if strings.Contains(workers[0].Preview, "wrangler preview") {
+		if problems := rules.Previews(r.wc, true); len(problems) > 0 {
+			fail(errors.New(strings.Join(problems, "\n") + "\n(or set cloudflare.toml's [builds] preview to another command)"))
+		}
 	}
 	if len(workers) > 1 && workers[0].Branch == workers[1].Branch {
 		fail(fmt.Errorf("production and staging both deploy from %s: give them different branches", workers[0].Branch))

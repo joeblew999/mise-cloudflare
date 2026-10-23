@@ -7,12 +7,5 @@
   "d1_databases": [{ "binding": "DB" }],
   "kv_namespaces": [{ "binding": "KV" }],
   "r2_buckets": [{ "binding": "BUCKET" }],
-  "secrets": { "required": ["GREETING"] },
-  // Worker Previews (wrangler preview, Workers Builds' and GitHub Actions' previews) inherit nothing from production:
-  // their bindings are declared here, and wrangler creates their own D1, KV and R2 for them.
-  "previews": {
-    "d1_databases": [{ "binding": "DB" }],
-    "kv_namespaces": [{ "binding": "KV" }],
-    "r2_buckets": [{ "binding": "BUCKET" }]
-  }
+  "secrets": { "required": ["GREETING"] }
 }

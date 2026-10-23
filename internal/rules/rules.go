@@ -24,17 +24,13 @@ var (
 	exactPin = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 )
 
-// Check returns the repo at dir's problems: IDs in its wrangler config (any environment), tokens or the machine-wide
-// wrangler login in its files, .dev.vars or .env not git-ignored, .dev.vars.example not matching secrets.required,
-// wrangler not pinned to an exact version.
-func Check(dir string, w wconfig.Config) ([]string, error) {
-	var problems []string
+// Check returns the repo at dir's problems: IDs in its wrangler config (any environment), its previews block's (see
+// Previews; previews says the repo runs Worker Previews, so it needs one), tokens or the machine-wide wrangler login in
+// its files, .dev.vars or .env not git-ignored, .dev.vars.example not matching secrets.required, wrangler not pinned to
+// an exact version.
+func Check(dir string, w wconfig.Config, previews bool) ([]string, error) {
+	problems := Previews(w, previews)
 	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
-	if previews, ok := w.Raw["previews"].(map[string]any); !ok {
-		bad("%s has no previews block: Worker Previews (Workers Builds' and GitHub Actions') need one; add \"previews\": {} (it can be empty)", filepath.Base(w.Path))
-	} else if missing := previewBindings(w.Raw, previews); len(missing) > 0 {
-		bad("%s's previews block lacks the bindings %s: Worker Previews don't inherit them from production (a preview would fail on its first use of one); add them there, pointed at preview-safe resources", filepath.Base(w.Path), strings.Join(missing, ", "))
-	}
 	for _, p := range IDs(w.Raw) {
 		bad("%s holds %s: the login picks the account, and deploy finds or creates resources by name", filepath.Base(w.Path), p)
 	}
@@ -109,6 +105,44 @@ func IDs(raw map[string]any) []string {
 	for _, name := range slices.Sorted(maps.Keys(envs)) {
 		if e, ok := envs[name].(map[string]any); ok {
 			section("env."+name+": ", e)
+		}
+	}
+	return out
+}
+
+// Previews returns the problems with the Worker's previews block, which Worker Previews (wrangler preview) run on; with
+// no block, none unless need. Previews inherit nothing from production, and Cloudflare makes them no KV, D1 or R2 of
+// their own (only Durable Objects and Containers): each storage binding is declared there again, and a KV, D1 or R2
+// one names the existing, preview-safe resource it uses, such as staging's.
+func Previews(w wconfig.Config, need bool) []string {
+	previews, ok := w.Raw["previews"].(map[string]any)
+	if !ok {
+		if need {
+			return []string{fmt.Sprintf("%s has no previews block: Worker Previews need one; add \"previews\": {}, with the Worker's KV, D1, R2 and other storage bindings in it, pointed at preview-safe ones", filepath.Base(w.Path))}
+		}
+		return nil
+	}
+	var problems []string
+	if missing := previewBindings(w.Raw, previews); len(missing) > 0 {
+		problems = append(problems, fmt.Sprintf("%s's previews block lacks the bindings %s: Worker Previews don't inherit them from production (a preview would fail on its first use of one); add them there, pointed at preview-safe resources", filepath.Base(w.Path), strings.Join(missing, ", ")))
+	}
+	if unnamed := unnamedResources(previews); len(unnamed) > 0 {
+		problems = append(problems, fmt.Sprintf("%s's previews block doesn't say which %s to use: Cloudflare makes previews no KV, D1 or R2 of their own; point each at an existing, preview-safe one, such as staging's (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name: mise run cloudflare:wrangler -- kv namespace list, d1 list, r2 bucket list)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
+	}
+	return problems
+}
+
+// unnamedResources names the previews block's KV, D1 and R2 bindings that don't say which resource they use: wrangler
+// deploy creates those for production, wrangler preview doesn't.
+func unnamedResources(previews map[string]any) []string {
+	var out []string
+	for _, k := range []struct{ kind, what, field string }{
+		{"kv_namespaces", "KV", "id"}, {"d1_databases", "D1", "database_id"}, {"r2_buckets", "R2", "bucket_name"},
+	} {
+		for _, b := range list(previews[k.kind]) {
+			if v, _ := b[k.field].(string); v == "" {
+				out = append(out, fmt.Sprintf("%s %v", k.what, b["binding"]))
+			}
 		}
 	}
 	return out

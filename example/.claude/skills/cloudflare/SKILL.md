@@ -44,7 +44,8 @@ permission group in `[workflow] permissions` (`"D1 Write"`), then `ci-token` aga
 `.mise/tasks/cloudflare.toml`, `.claude/skills/cloudflare/SKILL.md`, the workflow and
 `.claude/hooks/mise-cloudflare-session-start.sh` are stamped from mise-cloudflare at its version: never edit them. After
 upgrading, run `mise run cloudflare:tasks`, `cloudflare:skill`, `cloudflare:workflow` and `cloudflare:claude`;
-`cloudflare:check` names any that are out of date. A wrangler config needs `"previews": {}` for Worker Previews.
+`cloudflare:check` names any that are out of date. For Worker Previews, a wrangler config needs a `previews` block with each storage binding in it, every KV, D1 and R2 one
+pointed at an existing, preview-safe resource such as staging's: Cloudflare makes previews none of their own.
 
 ## Logging in
 

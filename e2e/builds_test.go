@@ -16,7 +16,7 @@ import (
 // TestBuilds proves go tool cloudflare builds, staging and production as go-htmx4 has them: Cloudflare's Workers Builds
 // deploys a Worker from its GitHub repository with its own token, a push to the staging branch deploying staging (the
 // wrangler environment env.staging, its own Worker), a push to the production branch deploying production, and any
-// other branch getting a preview URL, which goes when its branch does. The Worker (testdata/builds) says which branch
+// other branch getting a preview URL, on staging's KV and R2, which goes when its branch does. The Worker (testdata/builds) says which branch
 // built it, so the proof sees Cloudflare's deploys, not its own. Its branches are throwaway ones, deleted with
 // everything else afterwards; main is never touched.
 func TestBuilds(t *testing.T) {
@@ -51,7 +51,7 @@ func TestBuilds(t *testing.T) {
 		}
 		r.deleteAll()
 		st.deleteAll()
-		r.sweep(r.worker) // the previews' own KV and R2 too
+		r.sweep(r.worker) // anything else named after the Worker
 	})
 	out := []string{"WRANGLER_OUTPUT_FILE_PATH=.wrangler/output.json"}
 	r.cf(out, "wrangler", "deploy")
@@ -65,35 +65,61 @@ func TestBuilds(t *testing.T) {
 		r.pass("%s: built here, KV and R2 work", u)
 	}
 
+	r.step("Previews use staging's KV and R2: its KV's id goes into the previews block, committed on top of this commit")
+	// As a repo does once, when it sets up previews: Cloudflare makes previews no KV or R2 of their own. The commit is
+	// made in a worktree, which every push below goes from, so this checkout is untouched.
+	kvID := st.kv()
+	if kvID == "" {
+		t.Fatalf("%s has no KV", st.worker)
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	r.must(nil, "git", "worktree", "add", "-q", "--detach", wt, "HEAD")
+	t.Cleanup(func() { r.run(nil, "git", "worktree", "remove", "--force", wt) })
+	w := repo{t: t, dir: filepath.Join(wt, "e2e", "testdata", "builds"), worker: r.worker, tool: tool}
+	const marker = `"binding": "KV" /* the proof adds staging's id */`
+	wcfg := filepath.Join(w.dir, "wrangler.jsonc")
+	if b := mustRead(t, wcfg); !strings.Contains(b, marker) {
+		t.Fatalf("%s has no %s", wcfg, marker)
+	} else {
+		os.WriteFile(wcfg, []byte(strings.Replace(b, marker, `"binding": "KV", "id": "`+kvID+`"`, 1)), 0o644)
+	}
+	w.must(nil, "git", "commit", "-qam", "prove-builds: previews use staging's KV and R2")
+	w.must(nil, "npm", "ci", "--no-audit", "--no-fund")
+	w.cf(nil, "check")
+	r.pass("the previews block names staging's KV %s and bucket %s-bucket; check passes", kvID, st.worker)
+
 	r.step("go tool cloudflare builds: production from %s, staging from %s, previews from any other branch", prod, stage)
-	r.cf(nil, "-branch", prod, "-staging", stage, "builds")
+	w.cf(nil, "-branch", prod, "-staging", stage, "builds")
 	r.pass("set up")
 
 	r.step("A push to %s: Workers Builds deploys staging, with Cloudflare's own token", stage)
-	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+stage)
+	w.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+stage)
 	if !built(stagingURL, stage, 15*time.Minute) {
-		r.buildsLog()
+		r.buildsLog(st.worker)
 		t.Fatalf("%s wasn't deployed from %s in 15 minutes", stagingURL, stage)
 	}
 	r.pass("%s: built from %s by Workers Builds; KV and R2 work", stagingURL, stage)
 
 	r.step("A push to %s: Workers Builds deploys production", prod)
-	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prod)
+	w.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prod)
 	if !built(url, prod, 15*time.Minute) {
-		r.buildsLog()
+		r.buildsLog(r.worker)
 		t.Fatalf("%s wasn't deployed from %s in 15 minutes", url, prod)
 	}
 	r.pass("%s: built from %s by Workers Builds; KV and R2 work", url, prod)
 
-	r.step("A push to %s: a preview at its own URL, production and staging untouched", prev)
-	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prev)
+	r.step("A pull request's branch %s, with a commit of its own: a preview at its own URL, on staging's KV and R2; production and staging untouched", prev)
+	os.WriteFile(filepath.Join(w.dir, "preview.txt"), []byte("a pull request's change\n"), 0o644)
+	w.must(nil, "git", "add", "preview.txt")
+	w.must(nil, "git", "commit", "-qm", "prove-builds: a pull request's change")
+	w.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prev)
 	// A branch's preview is at <alias>-<worker>.<subdomain>.workers.dev, the alias being the branch's name.
 	preview := strings.Replace(url, "https://", "https://"+alias(prev)+"-", 1)
 	if !built(preview, prev, 15*time.Minute) {
-		r.buildsLog()
+		r.buildsLog(r.worker)
 		t.Fatalf("%s wasn't built from %s in 15 minutes", preview, prev)
 	}
-	r.pass("%s: built from %s; KV and R2 work", preview, prev)
+	r.pass("%s: built from %s; KV and R2 (staging's) work", preview, prev)
 	if !built(url, prod, time.Minute) || !built(stagingURL, stage, time.Minute) {
 		t.Fatal("the preview changed production or staging")
 	}
@@ -165,15 +191,14 @@ func alias(branch string) string {
 	return strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(branch), "-"), "-")
 }
 
-// buildsLog prints the Worker's latest Workers Builds, to see why a deploy didn't come.
-func (r repo) buildsLog() {
-	tag := ""
-	if b, err := os.ReadFile(filepath.Join(r.dir, ".wrangler", "output.json")); err == nil {
-		if m := regexp.MustCompile(`"worker_tag":"([0-9a-f]+)"`).FindAllSubmatch(b, -1); len(m) > 0 {
-			tag = string(m[len(m)-1][1])
+// buildsLog prints worker's latest Workers Builds, to see why a deploy didn't come.
+func (r repo) buildsLog(worker string) {
+	out, _ := r.run(nil, "cf", "workers", "scripts", "search", "--name", worker, "--profile", "cloudflare-zero-example")
+	var found []struct{ ID, Script_name string }
+	json.Unmarshal([]byte(jsonPart(out)), &found)
+	for _, w := range found {
+		if w.Script_name == worker {
+			r.run(nil, "cf", "builds", "list", "--external-script-id", w.ID, "--per-page", "5", "--profile", "cloudflare-zero-example")
 		}
-	}
-	if tag != "" {
-		r.run(nil, "cf", "builds", "list", tag, "--profile", "cloudflare-zero-example")
 	}
 }
