@@ -18,7 +18,7 @@ import (
 	"github.com/joeblew999/cloudflare-zero/internal/wrangler"
 )
 
-// Scopes is what go tool cloudflare builds needs: the account, and Workers Builds.
+// Scopes is what go tool cloudflare builds needs: the account and Workers Builds.
 var Scopes = []string{"account:read", "user:read", "workers:write", "workers_scripts:write", "workers_builds:write"}
 
 // CF is cf on one profile, in one folder, on one account (once known).

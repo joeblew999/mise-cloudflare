@@ -28,11 +28,21 @@ func needAccount(t *testing.T) {
 	}
 }
 
-// repo is a Worker repo that uses cloudflare-zero, and its Worker's name.
+// repo is a Worker repo that uses cloudflare-zero, its Worker's name, and how it runs the tool (go tool cloudflare
+// unless tool says otherwise).
 type repo struct {
 	t      *testing.T
 	dir    string
 	worker string
+	tool   []string
+}
+
+func (r repo) toolArgs(args ...string) (string, []string) {
+	tool := r.tool
+	if tool == nil {
+		tool = []string{"go", "tool", "cloudflare"}
+	}
+	return tool[0], append(append([]string{}, tool[1:]...), args...)
 }
 
 func (r repo) step(format string, a ...any) { fmt.Printf("\n=== %s\n", fmt.Sprintf(format, a...)) }
@@ -62,7 +72,14 @@ func (r repo) must(env []string, name string, args ...string) string {
 // cf is go tool cloudflare; wrangler is the repo's wrangler on its own login.
 func (r repo) cf(env []string, args ...string) string {
 	r.t.Helper()
-	return r.must(env, "go", append([]string{"tool", "cloudflare"}, args...)...)
+	name, a := r.toolArgs(args...)
+	return r.must(env, name, a...)
+}
+
+// try runs the tool, its failure returned rather than fatal.
+func (r repo) try(env []string, args ...string) (string, error) {
+	name, a := r.toolArgs(args...)
+	return r.run(env, name, a...)
 }
 
 func (r repo) wrangler(args ...string) string {
@@ -80,7 +97,8 @@ type status struct {
 
 func (r repo) status() status {
 	r.t.Helper()
-	cmd := exec.Command("go", "tool", "cloudflare", "-json", "status")
+	name, a := r.toolArgs("-json", "status")
+	cmd := exec.Command(name, a...)
 	cmd.Dir = r.dir
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
@@ -233,16 +251,16 @@ func jsonPart(out string) string {
 // deleteAll deletes the Worker, its D1, KV and R2, with wrangler on the repo's login. Errors are ignored: it also runs
 // as cleanup after a failure, when some of them may not exist.
 func (r repo) deleteAll() {
-	r.run(nil, "go", "tool", "cloudflare", "wrangler", "delete", "--force")
+	r.try(nil, "wrangler", "delete", "--force")
 	if id := r.d1(); id != "" {
-		r.run(nil, "go", "tool", "cloudflare", "wrangler", "d1", "delete", r.worker+"-db", "-y")
+		r.try(nil, "wrangler", "d1", "delete", r.worker+"-db", "-y")
 	}
 	if id := r.kv(); id != "" {
-		r.run(nil, "go", "tool", "cloudflare", "wrangler", "kv", "namespace", "delete", "--namespace-id", id, "-y")
+		r.try(nil, "wrangler", "kv", "namespace", "delete", "--namespace-id", id, "-y")
 	}
 	if r.r2() {
-		r.run(nil, "go", "tool", "cloudflare", "wrangler", "r2", "object", "delete", r.worker+"-bucket/stamp.txt", "--remote")
-		r.run(nil, "go", "tool", "cloudflare", "wrangler", "r2", "bucket", "delete", r.worker+"-bucket")
+		r.try(nil, "wrangler", "r2", "object", "delete", r.worker+"-bucket/stamp.txt", "--remote")
+		r.try(nil, "wrangler", "r2", "bucket", "delete", r.worker+"-bucket")
 	}
 }
 
@@ -262,7 +280,7 @@ func prove(t *testing.T, r repo, clean bool) {
 
 	r.step("2. Deploy on the repo's own login, %s (logs in the first time only)", r.worker)
 	r.cf(nil, "login")
-	if out, err := r.run(nil, "go", "tool", "cloudflare", "wrangler", "deployments", "list", "--json"); err == nil {
+	if out, err := r.try(nil, "wrangler", "deployments", "list", "--json"); err == nil {
 		t.Fatalf("%s is already deployed on this account: another machine may be proving it now. Wait for it, or delete it", r.worker)
 	} else if !strings.Contains(out, "10007") {
 		t.Fatalf("couldn't tell whether %s is deployed", r.worker)
@@ -316,13 +334,13 @@ func prove(t *testing.T, r repo, clean bool) {
 	r.pass("deploying changed nothing in the repo: no IDs written into it")
 
 	r.step("5. A stray CLOUDFLARE_API_TOKEN is refused, in the shell and in a .env")
-	if out, err := r.run([]string{"CLOUDFLARE_API_TOKEN=dummy-not-a-real-token"}, "go", "tool", "cloudflare", "wrangler", "deploy"); err == nil || !strings.Contains(out, "refusing:") {
+	if out, err := r.try([]string{"CLOUDFLARE_API_TOKEN=dummy-not-a-real-token"}, "wrangler", "deploy"); err == nil || !strings.Contains(out, "refusing:") {
 		t.Fatal("deployed with a token in the shell")
 	}
 	r.pass("a token in the shell is refused")
 	env := filepath.Join(r.dir, ".env")
 	os.WriteFile(env, []byte("CLOUDFLARE_API_TOKEN=dummy-not-a-real-token\n"), 0o600)
-	out, err := r.run(nil, "go", "tool", "cloudflare", "wrangler", "deploy")
+	out, err := r.try(nil, "wrangler", "deploy")
 	os.Remove(env)
 	if err == nil || !strings.Contains(out, "refusing:") {
 		t.Fatal("deployed with a token in .env")

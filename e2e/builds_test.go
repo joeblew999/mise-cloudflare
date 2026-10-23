@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,70 +20,68 @@ import (
 func TestBuilds(t *testing.T) {
 	needAccount(t)
 	dir, _ := filepath.Abs("testdata/builds")
-	r := repo{t: t, dir: dir, worker: "cloudflare-zero-builds"}
 	// The tool from this checkout: testdata/builds is in this module, which has no tool line for itself.
-	tool := func(env []string, args ...string) string {
-		t.Helper()
-		return r.must(env, "go", append([]string{"run", "github.com/joeblew999/cloudflare-zero/cmd/cloudflare"}, args...)...)
-	}
+	r := repo{t: t, dir: dir, worker: "cloudflare-zero-builds", tool: []string{"go", "run", "github.com/joeblew999/cloudflare-zero/cmd/cloudflare"}}
 	stamp := time.Now().Unix()
 	prod, prev := fmt.Sprintf("cfz-builds-prod-%d", stamp), fmt.Sprintf("cfz-builds-preview-%d", stamp)
 
-	r.step("The Worker, deployed once by hand on the repo's own login")
-	r.must(nil, "npm", "install", "--no-audit", "--no-fund")
-	tool(nil, "login")
-	if out, err := r.run(nil, "go", "run", "github.com/joeblew999/cloudflare-zero/cmd/cloudflare", "wrangler", "deployments", "list", "--json"); err == nil {
+	r.step("The Worker, with KV and R2, deployed once by hand on the repo's own login")
+	r.must(nil, "npm", "ci", "--no-audit", "--no-fund")
+	r.cf(nil, "login")
+	if out, err := r.try(nil, "wrangler", "deployments", "list", "--json"); err == nil {
 		t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it", r.worker)
 	} else if !strings.Contains(out, "10007") {
 		t.Fatalf("couldn't tell whether %s is deployed", r.worker)
 	}
 	t.Cleanup(func() {
-		r.step("Removing everything: the Workers Builds setup, the branches, the Worker")
-		r.run(nil, "go", "run", "github.com/joeblew999/cloudflare-zero/cmd/cloudflare", "-off", "builds")
-		r.run(nil, "git", "push", "-q", "origin", "--delete", prod, prev)
-		r.run(nil, "go", "run", "github.com/joeblew999/cloudflare-zero/cmd/cloudflare", "wrangler", "delete", "--force")
+		r.step("Removing everything: the Workers Builds setup, the branches, the Worker, its KV and R2")
+		r.try(nil, "-off", "builds")
+		for _, b := range []string{prod, prev} {
+			r.run(nil, "git", "push", "-q", "origin", "--delete", b)
+		}
+		r.deleteAll()
 	})
-	tool([]string{"WRANGLER_OUTPUT_FILE_PATH=.wrangler/output.json"}, "wrangler", "deploy")
+	r.cf([]string{"WRANGLER_OUTPUT_FILE_PATH=.wrangler/output.json"}, "wrangler", "deploy")
 	url := r.deployedURL()
-	if got := waitText(url, "built from here", time.Minute); got != "built from here" {
-		t.Fatalf("%s answered %q", url, got)
+	if !built(url, "here", time.Minute) {
+		t.Fatalf("%s isn't working", url)
 	}
-	r.pass("%s: built from here", url)
+	r.pass("%s: built here, KV and R2 work", url)
 
-	r.step("go tool cloudflare builds: Workers Builds, deploying from %s (the first time, a cf login approved on any device)", prod)
-	tool(nil, "-branch", prod, "builds")
+	r.step("go tool cloudflare builds: Workers Builds, deploying from %s", prod)
+	r.cf(nil, "-branch", prod, "builds")
 	r.pass("set up")
 
 	r.step("A push to %s: Workers Builds builds it and deploys it, with Cloudflare's own token", prod)
 	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prod)
-	if got := waitText(url, "built from "+prod, 15*time.Minute); got != "built from "+prod {
+	if !built(url, prod, 15*time.Minute) {
 		r.buildsLog()
-		t.Fatalf("%s still answers %q after 15 minutes", url, got)
+		t.Fatalf("%s wasn't deployed from %s in 15 minutes", url, prod)
 	}
-	r.pass("%s: built from %s, deployed by Workers Builds", url, prod)
+	r.pass("%s: built from %s by Workers Builds; KV and R2 work", url, prod)
 
 	r.step("A push to %s: a preview at its own URL, the live Worker untouched", prev)
 	r.must(nil, "git", "push", "-q", "origin", "HEAD:refs/heads/"+prev)
-	// A preview's URL is <alias>-<worker>.<subdomain>.workers.dev, the alias being the branch's name.
+	// A branch's preview is at <alias>-<worker>.<subdomain>.workers.dev, the alias being the branch's name.
 	preview := strings.Replace(url, "https://", "https://"+alias(prev)+"-", 1)
-	if got := waitText(preview, "built from "+prev, 15*time.Minute); got != "built from "+prev {
+	if !built(preview, prev, 15*time.Minute) {
 		r.buildsLog()
-		t.Fatalf("%s answers %q after 15 minutes", preview, got)
+		t.Fatalf("%s wasn't built from %s in 15 minutes", preview, prev)
 	}
-	r.pass("%s: built from %s", preview, prev)
-	if got := waitText(url, "built from "+prod, time.Minute); got != "built from "+prod {
-		t.Fatalf("the preview changed the live Worker: %s answers %q", url, got)
+	r.pass("%s: built from %s; KV and R2 work", preview, prev)
+	if !built(url, prod, time.Minute) {
+		t.Fatalf("the preview changed the live Worker at %s", url)
 	}
-	r.pass("%s still answers built from %s", url, prod)
+	r.pass("%s: still built from %s", url, prod)
 
 	r.step("go tool cloudflare builds -off removes the setup")
-	tool(nil, "-off", "builds")
+	r.cf(nil, "-off", "builds")
 	r.pass("removed")
 	fmt.Println("\nALL PASSED")
 }
 
-// waitText fetches url until its body is want or time runs out, and returns the last body.
-func waitText(url, want string, limit time.Duration) string {
+// built fetches url until it says it was built from branch with its KV and R2 working, or time runs out.
+func built(url, branch string, limit time.Duration) bool {
 	last := ""
 	for end := time.Now().Add(limit); ; {
 		if resp, err := (&http.Client{Timeout: 20 * time.Second}).Get(url); err == nil {
@@ -90,14 +89,18 @@ func waitText(url, want string, limit time.Duration) string {
 			resp.Body.Close()
 			if body := strings.TrimSpace(string(b)); body != last {
 				last = body
-				fmt.Printf("  %s: %.80q\n", url, body)
+				fmt.Printf("  %s: %.120s\n", url, body)
 			}
-			if last == want {
-				return last
+			var v struct {
+				Built  string
+				KV, R2 bool
+			}
+			if json.Unmarshal(b, &v) == nil && v.Built == branch && v.KV && v.R2 {
+				return true
 			}
 		}
 		if time.Now().After(end) {
-			return last
+			return false
 		}
 		time.Sleep(10 * time.Second)
 	}

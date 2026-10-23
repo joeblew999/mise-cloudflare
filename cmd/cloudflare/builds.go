@@ -66,7 +66,7 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	rep := buildsReport{Worker: r.wc.Name, ScriptTag: tag}
 
 	if off {
-		if err := c.JSON(ctx, nil, "builds", "workers", "delete", tag); err != nil && !cf.NotFound(err) {
+		if err := c.JSON(ctx, nil, "builds", "workers", "delete", tag, "--force"); err != nil && !cf.NotFound(err) {
 			fail(err)
 		}
 		rep.Removed = true
@@ -82,23 +82,24 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	if err != nil {
 		fail(err)
 	}
-	var tokens []struct {
-		UUID string `json:"build_token_uuid"`
-		Name string `json:"build_token_name"`
-	}
-	if err := c.JSON(ctx, &tokens, "builds", "tokens", "list"); err != nil {
+	// The build token Workers Builds deploys with: one Cloudflare made (connecting a repository in the dashboard makes
+	// one), cloudflare.toml's by name, else the first. Cloudflare's own covers Workers Scripts, KV, R2 and Workers Routes;
+	// a Worker binding anything else (D1, Queues, …) needs that permission added to it in the dashboard.
+	tokens, err := buildTokens(ctx, c)
+	if err != nil {
 		fail(err)
 	}
 	for _, t := range tokens {
 		if b.Token == "" || t.Name == b.Token {
-			rep.Token = t.UUID
-			b.Token = t.Name
+			rep.Token, b.Token = t.UUID, t.Name
 			break
 		}
 	}
 	if rep.Token == "" {
-		fail(errors.New("the account has no Workers Builds token to deploy with" + map[bool]string{true: " named " + b.Token, false: ""}[b.Token != ""] +
-			": connecting any repository once in Cloudflare's dashboard (a Worker's Settings, Builds) makes one, and every repo can use it"))
+		if b.Token != "" {
+			fail(fmt.Errorf("the account has no Workers Builds token named %q", b.Token))
+		}
+		fail(errors.New("the account has no Workers Builds token yet: connect any repository once in Cloudflare's dashboard (a Worker's Settings, Builds), which makes one, then run this again"))
 	}
 	env := ""
 	if e := os.Getenv("CLOUDFLARE_ENV"); e != "" {
@@ -258,4 +259,16 @@ func cmpOrEnv(names ...string) string {
 		}
 	}
 	return ""
+}
+
+type buildToken struct {
+	UUID    string `json:"build_token_uuid"`
+	Name    string `json:"build_token_name"`
+	TokenID string `json:"cloudflare_token_id"`
+}
+
+func buildTokens(ctx context.Context, c cf.CF) ([]buildToken, error) {
+	var tokens []buildToken
+	err := c.JSON(ctx, &tokens, "builds", "tokens", "list")
+	return tokens, err
 }

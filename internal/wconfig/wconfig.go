@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // Config is what the tasks need from a repo's wrangler config.
@@ -16,26 +17,38 @@ type Config struct {
 	Path    string         `json:"path"`    // the file wrangler read
 	Name    string         `json:"name"`    // the Worker's name, as wrangler resolves it (CLOUDFLARE_ENV included)
 	Secrets []string       `json:"secrets"` // secrets.required
+	Kinds   []string       `json:"kinds"`   // the kinds of binding the Worker uses: d1_databases, queues, routes, …
 	Raw     map[string]any `json:"raw"`     // the file as written, every environment in it
 }
 
+// Kinds are the binding kinds wrangler's config can hold, by their config key (and routes, for route and routes).
+var Kinds = []string{"d1_databases", "kv_namespaces", "r2_buckets", "queues", "durable_objects", "vectorize", "hyperdrive",
+	"ai", "pipelines", "secrets_store_secrets", "workflows", "containers", "browser", "send_email",
+	"analytics_engine_datasets", "services", "dispatch_namespaces", "images", "ratelimits", "routes"}
+
 // script reads the config with the repo's own wrangler: unstable_readConfig is what wrangler deploy resolves,
 // experimental_readRawConfig the file as written. One marked line, so nothing else wrangler prints gets in the way.
+// A kind is used when its list (or its producers, consumers or bindings) has something in it, or its object is set.
 const script = `const w = await import('wrangler');
 const c = w.unstable_readConfig({ env: process.env.CLOUDFLARE_ENV || undefined });
 const r = await w.experimental_readRawConfig({});
-console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [], raw: r.rawConfig }));`
+const used = (v) => Array.isArray(v) ? v.length > 0
+  : v && typeof v === 'object' ? (v.bindings ?? [...(v.producers ?? []), ...(v.consumers ?? [])]).length > 0 || (!v.bindings && !v.producers && !v.consumers && Object.keys(v).length > 0)
+  : !!v;
+const kinds = KINDS.filter((k) => k === 'routes' ? used(c.routes) || used(c.route) : used(c[k]));
+console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [], kinds, raw: r.rawConfig }));`
 
 // Read asks the wrangler installed in dir (node_modules) for dir's config.
 func Read(ctx context.Context, dir string) (Config, error) {
 	var c Config
-	cmd := exec.CommandContext(ctx, "node", "--input-type=module", "-e", script)
+	kinds, _ := json.Marshal(Kinds)
+	cmd := exec.CommandContext(ctx, "node", "--input-type=module", "-e", strings.Replace(script, "KINDS", string(kinds), 1))
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return c, fmt.Errorf("wrangler couldn't read the config here (run go tool cloudflare setup first): %w\n%s", err, bytes.TrimSpace(stderr.Bytes()))
+		return c, fmt.Errorf("wrangler couldn't read the config here (install the repo's dependencies first: its package.json pins wrangler): %w\n%s", err, bytes.TrimSpace(stderr.Bytes()))
 	}
 	for _, line := range bytes.Split(out, []byte("\n")) {
 		if b, ok := bytes.CutPrefix(line, []byte("WCONFIG ")); ok {

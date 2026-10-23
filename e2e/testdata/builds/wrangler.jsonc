@@ -1,10 +1,13 @@
-// The Worker mise run prove-builds has Cloudflare's Workers Builds deploy from GitHub: it answers with the branch
-// Workers Builds built it from (BUILT_BY, set by cloudflare.toml's [builds] commands), "here" when deployed by hand.
+// The Worker mise run prove-builds has Cloudflare's Workers Builds deploy from GitHub. It uses a KV namespace and an R2
+// bucket, which Cloudflare's own build token may create and use, and says which branch Workers Builds built it from
+// (BUILT_BY, set by cloudflare.toml's [builds] commands), "here" when deployed by hand.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cloudflare-zero-builds",
   "main": "worker.js",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
-  "preview_urls": true
+  "preview_urls": true,
+  "kv_namespaces": [{ "binding": "KV" }],
+  "r2_buckets": [{ "binding": "BUCKET" }]
 }
