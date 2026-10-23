@@ -13,10 +13,6 @@ aube = "2.8.1"     # installs wrangler from package.json
 description = "Install the pinned wrangler, and make .dev.vars from .dev.vars.example for wrangler dev (no account)"
 run = ["aube install", "cp -n .dev.vars.example .dev.vars || true"]
 
-[tasks.dev]
-description = "wrangler dev: the Worker on http://localhost:8787, with local D1, KV and R2 and .dev.vars (no account)"
-run = "node node_modules/wrangler/bin/wrangler.js dev"
-
 # mise-cloudflare's tasks, as go tool cloudflare tasks writes them.
 [task_config]
 includes = [".mise/tasks/cloudflare.toml"]

@@ -17,7 +17,7 @@ mise run cloudflare:wrangler -- d1 list --json   # any wrangler command: secret 
 ```
 
 Both log in first if needed. Never run `npx wrangler`, `wrangler login` or a global wrangler: they use another login.
-`wrangler dev` needs no login: run the repo's own wrangler for it.
+`mise run cloudflare:dev` runs the Worker locally (wrangler dev), with no login.
 
 ## Deploys from GitHub: previews, staging, production
 

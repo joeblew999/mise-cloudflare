@@ -3,6 +3,10 @@
 # default task directories, from the mise-cloudflare version in its go.mod: don't edit it, run that again after
 # upgrading. --json prints one JSON document for a program; exit codes: 0 ok, 1 problems.
 
+["cloudflare:dev"]
+description = "Develop locally: wrangler dev, the Worker on http://localhost:8787 with local D1, KV and R2 and .dev.vars. No Cloudflare account, no login"
+run = "go tool cloudflare dev"
+
 ["cloudflare:login"]
 description = "The repo's own Cloudflare login, with exactly cloudflare.toml's scopes: a browser on this machine, or a link to open on any device (Claude Code cloud sessions, CLOUDFLARE_LOGIN=device). Once, then again only when the scopes change"
 run = "go tool cloudflare login"

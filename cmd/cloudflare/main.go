@@ -1,6 +1,7 @@
 // Command cloudflare gives a repo its own Cloudflare login, with exactly the scopes it says, and runs the repo's own
 // wrangler on it. No API tokens to make, nothing machine-wide, and the same on a Mac and in a Claude Code cloud session.
 //
+//	go tool cloudflare dev [<args>]     # wrangler dev: the Worker locally, with local D1, KV and R2; no login
 //	go tool cloudflare login            # the repo's login: once, then again only when cloudflare.toml's scopes change
 //	go tool cloudflare wrangler <args>  # the repo's pinned wrangler on that login (deploy, delete, d1, secret, …)
 //	go tool cloudflare status           # the repo's login, its account and scopes; this machine's other logins; stray tokens
@@ -75,7 +76,7 @@ func main() {
 	if *showVersion {
 		args = []string{"version"}
 	}
-	if len(args) == 0 || (args[0] != "wrangler" && len(args) != 1) {
+	if len(args) == 0 || (args[0] != "wrangler" && args[0] != "dev" && len(args) != 1) {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -135,6 +136,13 @@ func main() {
 		fail(errors.New("in CI there's no one to log in: give CI a CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID) as secrets, or deploy with Cloudflare's own Workers Builds"))
 	}
 	r := openRepo(ctx, dir, cfg, *profile)
+	if args[0] == "dev" {
+		// Local development needs no login: the repo's own wrangler, on local D1, KV and R2.
+		if err := wrangler.Interactive(r.w.Plain(ctx, append([]string{"dev"}, args[1:]...)...)); err != nil {
+			os.Exit(exitCode(err))
+		}
+		return
+	}
 	if ci() && (args[0] == "login" || args[0] == "wrangler") {
 		if args[0] == "login" {
 			fmt.Println("✓ CI: wrangler uses CLOUDFLARE_API_TOKEN")
