@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="Check the Cloudflare rules (cloudflare:check), then call this example's Worker and check D1, KV, R2 and the secret all work: a temporary local one (no account needed), or with --prod the deployed one"
+#MISE depends=["cloudflare:check"]
+#MISE timeout="3m"
+#USAGE flag "--prod" help="Call the deployed Worker (cloudflare:deploy's URL) instead of a temporary local one"
+set -euo pipefail
+# The Worker (src/worker.js) answers / with {"d1":true,"kv":true,"r2":true,"secret":true} when every binding works.
+if [ "${usage_prod:-false}" = true ]; then
+  url=$(cat .wrangler/cloudflare-url 2>/dev/null || true); [ -n "$url" ] || { echo "FAIL no deployed URL: run cloudflare:deploy"; exit 1; }
+  echo "calling $url"
+  # A Worker just deployed can answer 500, then 404 (error 1042), for up to a minute before it's live everywhere.
+  got=$(curl -fsS -m 20 --retry 12 --retry-delay 5 --retry-all-errors "$url")
+else
+  echo "calling a temporary local Worker"
+  got=$(node --input-type=module -e "const { unstable_startWorker } = await import('wrangler');
+    const w = await unstable_startWorker({ dev: { remote: false, server: { port: 0 }, inspector: false } });
+    await w.ready;
+    const r = await w.fetch('http://localhost/');
+    console.log('RESULT ' + await r.text());
+    await w.dispose();" 2>&1 | sed -n "s/^RESULT //p")
+fi
+echo "$got"
+jq -e '.d1 and .kv and .r2 and .secret' <<<"$got" > /dev/null && echo "D1, KV, R2 and the secret: all work" || { echo "FAIL not everything works"; exit 1; }

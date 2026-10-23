@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# A Claude Code cloud session starts on a bare Linux machine with only this repo cloned.
-# Install mise, then every tool the repo pins, so `mise run …` works straight away. Does nothing on your own machine.
+# A Claude Code cloud session starts on a bare Linux machine with only the repo cloned. Install mise, then every tool
+# the repo pins, and get each Worker folder ready, so `mise run …` works straight away. Does nothing on your own machine.
+# Usage: session-start.sh [folder …], folders relative to the repo; with none, the repo's own folder.
 set -euo pipefail
 [ "${CLAUDE_CODE_REMOTE:-}" = true ] || exit 0
 export PATH="$HOME/.local/bin:$PATH"
@@ -10,10 +11,16 @@ export PATH="$HOME/.local/bin:$PATH"
 unset GITHUB_TOKEN GH_TOKEN
 command -v mise > /dev/null || curl -fsSL https://mise.run | sh
 cd "$CLAUDE_PROJECT_DIR"
-mise trust -q mise.toml
-mise trust -q example/mise.toml
-mise install
-(cd example && mise install && mise run cloudflare:setup)
+[ $# -gt 0 ] || set -- .
+for dir in "$@"; do
+  (
+    cd "$dir"
+    mise trust -q mise.toml
+    mise install
+    # A folder with a wrangler config is a Worker: install its pinned wrangler.
+    if [ -f wrangler.json ] || [ -f wrangler.jsonc ] || [ -f wrangler.toml ]; then mise run cloudflare:setup; fi
+  )
+done
 # Keep mise on PATH for the rest of the session's commands.
 [ -n "${CLAUDE_ENV_FILE:-}" ] && echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> "$CLAUDE_ENV_FILE"
 echo "mise $(mise --version | cut -d' ' -f1) and every pinned tool installed"

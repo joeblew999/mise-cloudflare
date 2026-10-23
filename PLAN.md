@@ -98,14 +98,14 @@ The tasks, as they run in `example/`:
 
 | Task | Does | Needs an account |
 |---|---|---|
-| `cloudflare:setup` | aube install, `.dev.vars` from the example if missing, local D1 migrations | No |
+| `cloudflare:setup` | Install with the package manager the lockfile is for, `.dev.vars` from the example if missing, local D1 migrations | No |
 | `cloudflare:dev` | `wrangler dev` | No |
-| `cloudflare:test` | The repo-rules check, then a temporary local Worker shows D1, KV, R2 and the dummy secret working | No |
-| `cloudflare:test [repo]` | The rules check alone, on any repo | No |
-| `cloudflare:test --prod` | The same checks against the deployed Worker | Yes |
+| `cloudflare:check` | The repo-rules check, on any repo | No |
+| `test` (example/'s own, not shared) | `cloudflare:check`, then a temporary local Worker shows D1, KV, R2 and the dummy secret working | No |
+| `test --prod` (example/'s own) | The same against the deployed Worker | Yes |
 | `cloudflare:deploy` | Login if needed, then resources, secrets, migrations, deploy, URL | Yes |
 | `cloudflare:status` | Which profile, whether it's logged in, its account and scopes, the URL and whether it answers, the resources. Built so far: the logins and stray tokens, with `--baseline` | Yes |
-| `cloudflare:teardown` | Deletes the Worker and the resources it created | Yes |
+| `cloudflare:teardown` | Deletes the Worker; with `--data` also the D1, KV and R2 in its config and their data | Yes |
 | `cloudflare:clean` | Removes local state and the repo's profile (`wrangler auth delete`) | No |
 
 The rules check, the part other repos reuse, fails when:
@@ -121,14 +121,14 @@ Each one is a task run, with its output recorded in `FINDINGS.md`.
 
 | # | Proves | How |
 |---|---|---|
-| 1 | A fresh developer needs no account | Clone into a temp folder with a bare environment (only mise, no wrangler login visible). Then `mise install`, `cloudflare:setup`, `cloudflare:test`. |
+| 1 | A fresh developer needs no account | Clone into a temp folder with a bare environment (only mise, no wrangler login visible). Then `mise install`, `cloudflare:setup`, `test`. |
 | 2 | The check catches real problems | It passes on `example/` and fails on a copy of it with an `account_id` and a `database_id` added. |
 | 3 | Deploying takes one click | With no profile yet, `cloudflare:deploy` opens the browser once. You click Allow, the resources get created, the secret is asked for once, and the URL answers with D1, KV, R2 and the secret working. |
 | 4 | It uses the fewest scopes | Start with the fewest scopes, and add one per failure, writing each down. That ends with the exact list. |
 | 5 | Re-running is safe | A second `cloudflare:deploy` asks nothing and keeps the same resource IDs. |
 | 6 | The repo stays clean | `git status` is empty after deploying, and the rules check still passes. |
 | 7 | The login is isolated | The machine's default login is unchanged (its file and `wrangler whoami` outside the repo). A `CLOUDFLARE_API_TOKEN` in the shell or in a `.env` is refused with a clear message. |
-| 8 | Nothing is left behind | After `cloudflare:teardown`, `cloudflare:status` shows no Worker and no resources. `cloudflare:clean` removes the profile. |
+| 8 | Nothing is left behind | After `cloudflare:teardown --data`, `cloudflare:status` shows no Worker and no resources. `cloudflare:clean` removes the profile. |
 | 9 | It works on another account | The same deploy on a second Cloudflare account. A free account covers D1 and KV; R2 must be turned on first. Needs someone with a second account. |
 | 10 | It works for other repos | The rules check on some of our other repos says what each one must change. |
 
@@ -139,14 +139,14 @@ One step at a time. After each one I show you the real output and stop. The next
 | Step | What I do | It works when | You |
 |---|---|---|---|
 | 1. Baseline | Record the machine as it is: `cloudflare:status --baseline` (wrangler's logins as checksums, profiles, no `CLOUDFLARE_API_TOKEN`). Changes nothing | The output is saved, so step 9 can compare against it | Look |
-| 2. Example, local | Write the rest of `example/` (D1, KV, R2 with no IDs, one required secret, `.dev.vars.example`) and the shared tasks; in `example/` run `cloudflare:setup` and `cloudflare:test` | `cloudflare:test` shows D1, KV, R2 and the dummy secret all working, with no account | Review the files and output |
+| 2. Example, local | Write the rest of `example/` (D1, KV, R2 with no IDs, one required secret, `.dev.vars.example`) and the shared tasks; in `example/` run `cloudflare:setup` and `test` | `test` shows D1, KV, R2 and the dummy secret all working, with no account | Review the files and output |
 | 3. Rules check | Run the check on `example/`, then on a copy with IDs added | It passes on `example/` and fails on the copy, naming the `account_id` and `database_id` | Look |
-| 4. Fresh developer | Clone into a temp folder with a bare environment; `mise install`, `cloudflare:setup`, `cloudflare:test` | Same result as step 2, and wrangler there sees no login | Look |
+| 4. Fresh developer | Clone into a temp folder with a bare environment; `mise install`, `cloudflare:setup`, `test` | Same result as step 2, and wrangler there sees no login | Look |
 | 5. Login | `cloudflare:deploy` creates the `cloudflare-zero-example` profile with the fewest scopes and opens the browser | `wrangler auth list` shows `cloudflare-zero-example` bound to the example folder; the default login file is unchanged | **Click Allow in the browser** |
-| 6. First deploy | The same run carries on: resources, secret, migrations, deploy. A missing scope shows as an error; I add that one scope and log in again | `cloudflare:test --prod` shows D1, KV, R2 and the secret working on the live URL. Every scope added is written down | Click Allow again for each scope added |
+| 6. First deploy | The same run carries on: resources, secret, migrations, deploy. A missing scope shows as an error; I add that one scope and log in again | `test --prod` shows D1, KV, R2 and the secret working on the live URL. Every scope added is written down | Click Allow again for each scope added |
 | 7. Re-run, clean repo | `cloudflare:deploy` again, then `git status` and the rules check | No prompts, the same resource IDs, `git status` empty, the check passes | Look |
 | 8. Stray tokens | Deploy with a dummy `CLOUDFLARE_API_TOKEN` in the shell, then in a `.env` | Both refused, with a message saying why | Look |
-| 9. Teardown | `cloudflare:teardown`, `cloudflare:status`, `cloudflare:clean` | No Worker and no resources left, no `cloudflare-zero-example` profile, the default login file matches step 1 | Look |
+| 9. Teardown | `cloudflare:teardown --data`, `cloudflare:status`, `cloudflare:clean` | No Worker and no resources left, no `cloudflare-zero-example` profile, the default login file matches step 1 | Look |
 | 10. You, from zero | You run `cloudflare:deploy` in your own terminal, as a new developer would. This also tries the secret prompt, which I can't type into | One click, one secret typed, and it's live | **Run it yourself** |
 | 11. Another repo, minimal | A new repo in a temp folder holding only the config above and a tiny Worker, with the shared tasks pulled in by git URL. Run setup, test, deploy, teardown | It works the same as `example/`; its line count shows what each repo carries | Look; click Allow once |
 | 12. Other repos | The rules check on a few of our other repos. Read-only | It lists what each repo must change | Look |

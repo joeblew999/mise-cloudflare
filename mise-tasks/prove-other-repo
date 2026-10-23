@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Prove any other repo gets the same thing from config alone: make a new repo in a temporary folder with only a mise.toml (including the shared tasks from https://github.com/joeblew999/cloudflare-zero by git URL, ref {{env.CF_ZERO_REF}}), a wrangler.jsonc without IDs, package.json, .dev.vars.example, .gitignore and a tiny Worker; then local test, deploy on its own login (profile cloudflare-zero-other; the browser opens once), live test, teardown, clean. Prints how many lines that repo carries"
+#MISE description="Prove any other repo gets the same thing from config alone: make a new repo in a temporary folder with only a mise.toml (including the shared tasks from https://github.com/joeblew999/cloudflare-zero by git URL, ref {{env.CF_ZERO_REF}}), a wrangler.jsonc without IDs, package.json, .dev.vars.example, .gitignore, a tiny Worker and its own test (example/'s); then the rules check and local test, deploy on its own login (profile cloudflare-zero-other; the browser opens once), live test, teardown --data, clean. The shared tasks are fetched fresh, never from mise's cache. Prints how many lines that repo carries"
 #MISE timeout="20m"
 set -euo pipefail
 . "$(dirname "$0")/../shared/cloudflare/.helpers.sh"
@@ -11,7 +11,7 @@ pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; exit 1; }
 
 step "A new repo at $repo, config only"
-cp -R "$src/src" "$src/package.json" "$src/.dev.vars.example" "$src/.gitignore" .
+cp -R "$src/src" "$src/mise-tasks" "$src/package.json" "$src/aube-lock.yaml" "$src/.dev.vars.example" "$src/.gitignore" .
 sed 's/"cloudflare-zero-example"/"cloudflare-zero-other"/' "$src/wrangler.jsonc" > wrangler.jsonc
 scopes=$(cd "$src" && mise env --json | jq -r .CF_SCOPES)
 cat > mise.toml <<TOML
@@ -28,21 +28,23 @@ CF_PROFILE = "cloudflare-zero-other"
 CF_SCOPES = "$scopes"
 
 [task_config]
-includes = ["git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=$CF_ZERO_REF"]
+includes = ["git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=$CF_ZERO_REF", "mise-tasks"]
 TOML
 git init -q && git add -A
+# mise keeps a copy of git-included tasks and doesn't fetch them again, so this run would test a stale copy.
+export MISE_TASK_REMOTE_NO_CACHE=true
 mise trust -q mise.toml
-wc -l mise.toml wrangler.jsonc package.json .dev.vars.example .gitignore src/worker.js
+wc -l mise.toml wrangler.jsonc package.json .dev.vars.example .gitignore src/worker.js mise-tasks/test
 mise tasks | grep -q '^cloudflare:deploy' && pass "the shared tasks came in from GitHub" || { mise tasks; fail "no shared tasks"; }
 
 step "Local test, no login"
-XDG_CONFIG_HOME=$(mktemp -d) mise run cloudflare:test
+XDG_CONFIG_HOME=$(mktemp -d) mise run test
 step "Deploy on its own login"
 GREETING=set-by-prove-other-repo mise run cloudflare:deploy
 step "Live test"
-mise run cloudflare:test --prod
+mise run test --prod
 step "Teardown and clean"
-mise run cloudflare:teardown
+mise run cloudflare:teardown --data
 mise run cloudflare:clean
 [ ! -f "$(CF_PROFILE=cloudflare-zero-other profile_file)" ] && pass "its login is gone" || fail "its login is still there"
 echo; echo "ALL PASSED"

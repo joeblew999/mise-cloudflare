@@ -13,7 +13,7 @@ experimental = true   # mise needs this for git includes
 
 [tools]
 node = "26.11.1"
-aube = "2.8.1"
+aube = "2.8.1"   # or pnpm, bun, yarn: whichever your lockfile is for (npm comes with node)
 jq = "1.8.2"
 
 [env]
@@ -23,6 +23,8 @@ CF_SCOPES = "account:read user:read workers:write workers_kv:write workers_scrip
 [task_config]
 includes = ["git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=main"]
 ```
+
+mise downloads the shared tasks once and keeps reusing that copy; it doesn't fetch `main` again by itself. To get the current ones, run a task with `MISE_TASK_REMOTE_NO_CACHE=true`.
 
 You also need:
 
@@ -37,14 +39,16 @@ You also need:
 
 | Task | Does | Cloudflare account |
 |---|---|---|
-| `mise run cloudflare:setup` | Installs the pinned wrangler and makes `.dev.vars` from the example | No |
+| `mise run cloudflare:setup` | Installs the pinned wrangler with the package manager your lockfile is for, and makes `.dev.vars` from the example | No |
 | `mise run cloudflare:dev` | Runs the Worker locally, with local D1, KV and R2 | No |
-| `mise run cloudflare:test` | Checks the repo rules, then runs a temporary local Worker | No |
-| `mise run cloudflare:deploy` | First time: the browser opens, you click Allow and pick the account. Then it creates D1, KV and R2, asks once for each missing secret, deploys and prints the URL. After that it asks nothing | Yes |
-| `mise run cloudflare:test --prod` | The same checks against the live Worker | Yes |
+| `mise run cloudflare:check` | Checks the repo rules: no IDs or tokens in its files, `.dev.vars` and `.env` git-ignored, secrets listed, wrangler pinned | No |
+| `mise run cloudflare:deploy` | First time: the browser opens, you click Allow and pick the account. Then wrangler creates any missing D1, KV and R2, it asks once for each missing secret, deploys and prints the workers.dev URL. After that it asks nothing | Yes |
 | `mise run cloudflare:status` | The login, its account and scopes, the URL, the resources, and any stray tokens | Yes |
-| `mise run cloudflare:teardown` | Deletes the Worker and the D1, KV and R2 it created | Yes |
+| `mise run cloudflare:teardown` | Deletes the Worker. Its D1, KV and R2 and their data are kept | Yes |
+| `mise run cloudflare:teardown --data` | Also deletes every D1, KV and R2 in the repo's wrangler config, and all their data | Yes |
 | `mise run cloudflare:clean` | Removes local state and the repo's login | No |
+
+Testing your Worker is your repo's own job, as it is in [example/mise-tasks/test](example/mise-tasks/test).
 
 ## Rights: how a repo asks for them, and how people get them
 
@@ -57,7 +61,7 @@ You also need:
 
 ## Claude Code cloud sessions
 
-A cloud session (claude.ai/code, or the Claude iOS app) starts on a bare Linux machine. [.claude/settings.json](.claude/settings.json) runs [.claude/hooks/session-start.sh](.claude/hooks/session-start.sh) at the start of each session. It installs mise, then every tool the repo pins, so `mise run …` works straight away. On your own machine it does nothing. The cloud environment's network settings must allow mise's downloads: mise.run, GitHub, nodejs.org and the npm registry. The hook hides the session's GitHub token from mise: that token can only see the session's own repos, and GitHub answers 404 when mise sends it to download from others.
+A cloud session (claude.ai/code, or the Claude iOS app) starts on a bare Linux machine. [.claude/settings.json](.claude/settings.json) runs [.claude/hooks/session-start.sh](.claude/hooks/session-start.sh) at the start of each session. It installs mise, then every tool the repo pins, and runs `cloudflare:setup` in each folder with a wrangler config, so `mise run …` works straight away. On your own machine it does nothing. It sets up the repo's own folder, or the folders named after it: this repo's settings name `. example`. To use it in another repo, copy both files into its `.claude/` and drop `example`. The cloud environment's network settings must allow mise's downloads: mise.run, GitHub, nodejs.org and the npm registry. The hook hides the session's GitHub token from mise: that token can only see the session's own repos, and GitHub answers 404 when mise sends it to download from others.
 
 The tasks are the same as on your machine, and so is the login: the repo's profile, bound to its folder, with exactly `CF_SCOPES`. Only how it's made differs. A cloud session has no browser, and `wrangler auth create` can't log in without one, so when Claude Code sets `CLAUDE_CODE_REMOTE=true` the tasks log in with wrangler's device flow instead: wrangler prints a link and a code, you open the link on your phone or computer, click Allow, and the login is saved as the repo's profile. It lasts as long as that cloud session's machine.
 
@@ -67,11 +71,11 @@ Don't prove the same repo on two machines against the same account at once: both
 
 - The login is a [wrangler auth profile](https://developers.cloudflare.com/workers/wrangler/profiles/) (beta), named after the repo and bound to its folder. The machine's default `wrangler login` and other repos' logins are untouched.
 - A `CLOUDFLARE_API_TOKEN` in your shell or in a `.env` would silently override the login, so the tasks refuse to run with one (except in CI).
-- The repo never holds account IDs, resource IDs, tokens or secret values. `cloudflare:test` fails if it does.
+- The repo never holds account IDs, resource IDs, tokens or secret values. `cloudflare:check` fails if it does.
 
 ## Proof
 
 Both tasks below were run on 23 Oct 2026, and both passed.
 
-- `mise run prove`: covers `example/` end to end. A local test with no login. Deploy on the repo's own login, created with one click the first time. A live test of D1, KV, R2 and the secret. A second deploy that asks nothing, keeps the same resources and leaves the repo unchanged. Stray tokens refused, in the shell and in `.env`. Teardown leaves nothing. The machine's default login is untouched throughout. `--clean` also removes the login.
-- `mise run prove-other-repo`: makes a brand-new repo in a temporary folder with config only (53 lines including the Worker) and the shared tasks pulled from GitHub. Then local test, deploy on its own login, live test, teardown and clean.
+- `mise run prove`: covers `example/` end to end. A local test with no login. Deploy on the repo's own login, created with one click the first time. A live test of D1, KV, R2 and the secret. A second deploy that asks nothing, keeps the same resources and leaves the repo unchanged. Stray tokens refused, in the shell and in `.env`. Teardown removes the Worker and keeps the data; `teardown --data` then leaves nothing. The machine's default login is untouched throughout. `--clean` also removes the login.
+- `mise run prove-other-repo`: makes a brand-new repo in a temporary folder with config only (53 lines including the Worker) and the shared tasks pulled from GitHub. Then the rules check and its local test, deploy on its own login, live test, `teardown --data` and clean.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Deploy this repo's Worker on its own login (profile {{env.CF_PROFILE}}): logs in once in the browser if needed, creates missing D1, KV and R2, asks once for each secret not yet set (or takes it from the environment), deploys, prints the https://….workers.dev URL. Refuses a stray CLOUDFLARE_API_TOKEN"
+#MISE description="Deploy this repo's Worker on its own login (profile {{env.CF_PROFILE}}): logs in once if needed, lets wrangler create any missing D1, KV and R2, asks once for each secret not yet set (or takes it from the environment), deploys, prints the https://….workers.dev URL if it has one. Refuses a stray CLOUDFLARE_API_TOKEN"
 #MISE depends=["cloudflare:setup"]
 #MISE timeout="10m"
 set -euo pipefail
@@ -16,6 +16,7 @@ for s in $(jq -r '.secrets[]' <<<"$cfg"); do
   echo "secret $s: will be set"
 done
 out=$(wrangler deploy --secrets-file "$secrets" 2>&1 | tee /dev/stderr)
-url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' <<<"$out" | head -1)
-mkdir -p .wrangler && echo "$url" > .wrangler/cloudflare-url
-echo "deployed: $url"
+url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' <<<"$out" | head -1 || true)
+mkdir -p .wrangler
+if [ -n "$url" ]; then echo "$url" > .wrangler/cloudflare-url; echo "deployed: $url"
+else rm -f .wrangler/cloudflare-url; echo "deployed, with no workers.dev URL (the Worker uses routes or a custom domain)"; fi

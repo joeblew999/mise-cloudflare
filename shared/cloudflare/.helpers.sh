@@ -121,11 +121,16 @@ worker_exists() {
 deployed_url() { cat .wrangler/cloudflare-url 2>/dev/null || true; }
 
 # Empty an R2 bucket so it can be deleted. wrangler can't list objects; Cloudflare's API can, with this login's own token.
+# Each listing returns one page, so delete that page and list again until the bucket is empty.
 empty_r2_bucket() {
-  local acct token
+  local acct token keys key
   acct=$(wrangler whoami --json </dev/null | jq -r 'if (.accounts | length) == 1 then .accounts[0].id else empty end')
   [ -n "$acct" ] || { echo "can't tell which account holds R2 $1: empty it in the dashboard, then run again" >&2; return 1; }
   token=$(wrangler auth token --json </dev/null | jq -r .token)
-  curl -fsS -m 30 -H "Authorization: Bearer $token" "https://api.cloudflare.com/client/v4/accounts/$acct/r2/buckets/$1/objects" \
-    | jq -r '.result[].key' | while read -r key; do wrangler r2 object delete "$1/$key" --remote </dev/null > /dev/null; done
+  while :; do
+    keys=$(curl -fsS -m 30 -H "Authorization: Bearer $token" "https://api.cloudflare.com/client/v4/accounts/$acct/r2/buckets/$1/objects" \
+      | jq -r '.result[].key') || return 1
+    [ -n "$keys" ] || return 0
+    while read -r key; do wrangler r2 object delete "$1/$key" --remote </dev/null > /dev/null || return 1; done <<<"$keys"
+  done
 }

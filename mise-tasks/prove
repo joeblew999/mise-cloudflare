@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Prove per-repo Cloudflare logins work, end to end, in example/ (its own profile, cloudflare-zero-example): a local test with no login at all; deploy on the repo's own login (the browser opens once, the first time only); a live test of D1, KV, R2 and the secret; a second deploy that asks nothing and keeps the same resources; the repo left unchanged; stray tokens refused; teardown leaves nothing; the machine's default login untouched throughout. --clean also removes the login and proves it's gone"
+#MISE description="Prove per-repo Cloudflare logins work, end to end, in example/ (its own profile, cloudflare-zero-example): a local test with no login at all; deploy on the repo's own login (the browser opens once, the first time only); a live test of D1, KV, R2 and the secret; a second deploy that asks nothing and keeps the same resources; the repo left unchanged; stray tokens refused; teardown keeps the data, then teardown --data leaves nothing; the machine's default login untouched throughout. --clean also removes the login and proves it's gone"
 #MISE timeout="20m"
 #USAGE flag "--clean" help="Also remove example/'s login (cloudflare:clean) and prove it's gone; the next run then opens the browser again"
 set -euo pipefail
@@ -15,7 +15,7 @@ default_login=$(file_hash "$home/config/default.toml")
 echo "machine's default login: config/default.toml $default_login (checksum; the contents are never read)"
 
 step "1. A developer with no Cloudflare login at all: setup and local test"
-XDG_CONFIG_HOME=$(mktemp -d) mise run cloudflare:test
+XDG_CONFIG_HOME=$(mktemp -d) mise run test
 pass "local dev works with no Cloudflare login"
 
 step "2. Deploy on the repo's own login, $CF_PROFILE (logs in once if it isn't logged in yet)"
@@ -24,7 +24,7 @@ step "2. Deploy on the repo's own login, $CF_PROFILE (logs in once if it isn't l
 mise exec -- bash -c 'set -e; . ../shared/cloudflare/.helpers.sh; ensure_login; worker_exists' && rc=0 || rc=$?
 case $rc in
   3) pass "the Worker isn't deployed on this account yet, so nothing else is using it" ;;
-  0) fail "the Worker is already deployed on this account: another machine may be proving it now. Wait for it, or run cloudflare:teardown here if it's left over" ;;
+  0) fail "the Worker is already deployed on this account: another machine may be proving it now. Wait for it, or run cloudflare:teardown --data here if it's left over" ;;
   *) fail "couldn't check whether the Worker is deployed" ;;
 esac
 repo_before=$(git status --porcelain .)
@@ -35,7 +35,7 @@ jq -e --arg d "$PWD" --arg p "$CF_PROFILE" '.[$d] == $p' "$home/profiles/directo
 [ "$(file_hash "$home/config/default.toml")" = "$default_login" ] && pass "default login untouched" || fail "default login changed"
 
 step "3. The live Worker: D1, KV, R2 and the secret"
-mise run cloudflare:test --prod
+mise run test --prod
 resources_first=$(mise run cloudflare:status 2>/dev/null | grep '^resource')
 echo "$resources_first"
 
@@ -53,13 +53,15 @@ if out=$(mise run cloudflare:deploy 2>&1); then fail "deployed with a token in .
 grep 'refusing:' <<<"$out" && pass "token in .env refused" || { echo "$out"; fail "not refused for the right reason"; }
 rm -f .env
 
-step "6. Teardown leaves nothing on Cloudflare"
+step "6. Teardown removes the Worker and keeps the data; teardown --data then leaves nothing on Cloudflare"
 url=$(deployed_url)
 mise run cloudflare:teardown
-left=$(mise run cloudflare:status 2>/dev/null | grep '^resource' | grep -v ' none$' || true)
-[ -z "$left" ] && pass "no D1, KV or R2 left" || { echo "$left"; fail "resources left"; }
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "$url" || true)
 [ "$code" != 200 ] && pass "$url no longer answers (HTTP $code)" || fail "$url still answers"
+[ "$(mise run cloudflare:status 2>/dev/null | grep '^resource')" = "$resources_first" ] && pass "D1, KV and R2 kept" || fail "teardown without --data deleted data"
+mise run cloudflare:teardown --data
+left=$(mise run cloudflare:status 2>/dev/null | grep '^resource' | grep -v ' none$' || true)
+[ -z "$left" ] && pass "no D1, KV or R2 left" || { echo "$left"; fail "resources left"; }
 
 if [ "${usage_clean:-false}" = true ]; then
   step "7. Clean removes the login and its folder binding"

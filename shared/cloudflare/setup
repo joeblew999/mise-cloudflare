@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-#MISE description="Get this repo ready for local dev, no Cloudflare account needed: install its pinned wrangler (aube install), and copy .dev.vars.example to .dev.vars if there isn't one"
+#MISE description="Get this repo ready for local dev, no Cloudflare account needed: install its pinned wrangler with the package manager its lockfile belongs to (aube, pnpm, bun, yarn, or npm), and copy .dev.vars.example to .dev.vars if there isn't one"
 #MISE timeout="5m"
 set -euo pipefail
-aube install
+# The repo's own lockfile says which package manager it uses; that tool comes from the repo's mise.toml.
+if [ -f aube-lock.yaml ]; then aube install
+elif [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile
+elif [ -f bun.lock ] || [ -f bun.lockb ]; then bun install --frozen-lockfile
+elif [ -f yarn.lock ]; then yarn install --frozen-lockfile
+elif [ -f package-lock.json ]; then npm ci
+else npm install
+fi
 if [ -f .dev.vars.example ] && [ ! -f .dev.vars ]; then cp .dev.vars.example .dev.vars && echo "made .dev.vars from .dev.vars.example"; fi
