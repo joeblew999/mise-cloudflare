@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joeblew999/cloudflare-zero/config"
 	"github.com/joeblew999/cloudflare-zero/internal/wconfig"
 )
 
@@ -73,5 +74,14 @@ func TestCheckFinds(t *testing.T) {
 	}
 	if strings.Contains(got, "README.md") {
 		t.Errorf("a .md file may mention wrangler login:\n%s", got)
+	}
+}
+
+// TestInitPasses: what go tool cloudflare init writes into a repo passes the rules.
+func TestInitPasses(t *testing.T) {
+	files := good()
+	files["cloudflare.toml"] = config.Template
+	if p, err := Check(repo(t, files), cfg()); err != nil || len(p) != 0 {
+		t.Errorf("problems %q, %v", p, err)
 	}
 }

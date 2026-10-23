@@ -68,8 +68,8 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 # The repo's own Cloudflare login, a wrangler auth profile. Default: the Worker's name (its wrangler config's name).
 # profile = "my-worker"
 
-# What the login may do: OAuth scopes (wrangler login --scopes-list). The login holds exactly these; change them and
-# the next task logs in once more. Default: what a Worker with D1, KV and R2 needs.
+# What the login may do: OAuth scopes, named as wrangler lists them (its login command, with --scopes-list). The login
+# holds exactly these; change them and the next task logs in once more. Default: what a Worker with D1, KV and R2 needs.
 # scopes = ["account:read", "user:read", "workers:write", "workers_kv:write", "workers_scripts:write", "d1:write"]
 `
 
