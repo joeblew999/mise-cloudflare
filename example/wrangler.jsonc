@@ -7,5 +7,7 @@
   "d1_databases": [{ "binding": "DB" }],
   "kv_namespaces": [{ "binding": "KV" }],
   "r2_buckets": [{ "binding": "BUCKET" }],
-  "secrets": { "required": ["GREETING"] }
+  "secrets": { "required": ["GREETING"] },
+  // Worker Previews (wrangler preview, and Workers Builds' previews) need this block; it can stay empty.
+  "previews": {}
 }

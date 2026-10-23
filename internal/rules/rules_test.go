@@ -39,6 +39,7 @@ func good() map[string]string {
 func cfg() wconfig.Config {
 	return wconfig.Config{Path: "/r/wrangler.jsonc", Name: "w", Secrets: []string{"GREETING"}, Raw: map[string]any{
 		"name":          "w",
+		"previews":      map[string]any{},
 		"d1_databases":  []any{map[string]any{"binding": "DB"}},
 		"kv_namespaces": []any{map[string]any{"binding": "KV"}},
 	}}
@@ -59,6 +60,7 @@ func TestCheckFinds(t *testing.T) {
 	c := cfg()
 	c.Secrets = []string{"GREETING", "KEY"}
 	c.Raw["account_id"] = "a"
+	delete(c.Raw, "previews")
 	c.Raw["d1_databases"] = []any{map[string]any{"binding": "DB", "database_id": "x"}}
 	c.Raw["env"] = map[string]any{"production": map[string]any{"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "y"}}}}
 	p, err := Check(repo(t, files), c)
@@ -66,7 +68,7 @@ func TestCheckFinds(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(p, "\n")
-	for _, want := range []string{"an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
+	for _, want := range []string{"no previews block", "an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
 		"notes.txt holds a Cloudflare token", ".dev.vars isn't", ".env isn't", "secrets.required lists [GREETING KEY]", "isn't pinned"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)

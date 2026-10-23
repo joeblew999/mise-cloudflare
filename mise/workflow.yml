@@ -9,6 +9,7 @@ name: NAME
 on:
   push:
   pull_request:
+    types: [opened, synchronize, reopened, closed]
 
 permissions:
   contents: read
@@ -20,7 +21,7 @@ concurrency:
 jobs:
   check:
     # A pull request from this repository already ran as a push; one from a fork runs here, read-only.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'push' || (github.event.action != 'closed' && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

@@ -30,6 +30,9 @@ var (
 func Check(dir string, w wconfig.Config) ([]string, error) {
 	var problems []string
 	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
+	if _, ok := w.Raw["previews"]; !ok {
+		bad("%s has no previews block: Worker Previews (Workers Builds' and GitHub Actions') need one; add \"previews\": {} (it can be empty)", filepath.Base(w.Path))
+	}
 	for _, p := range IDs(w.Raw) {
 		bad("%s holds %s: the login picks the account, and deploy finds or creates resources by name", filepath.Base(w.Path), p)
 	}

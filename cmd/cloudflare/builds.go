@@ -146,6 +146,10 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	workers[0].Branch = orDefault(b.Branch, prodBranch)
 	workers[0].Deploy = orDefault(b.Deploy, "npx wrangler deploy") + envFlag(env)
 	workers[0].Preview = orDefault(b.Preview, "npx wrangler preview") + envFlag(env)
+	// Worker Previews (wrangler preview) need a previews block in the config; Cloudflare's build fails without one.
+	if _, ok := r.wc.Raw["previews"]; !ok && strings.Contains(workers[0].Preview, "wrangler preview") {
+		fail(fmt.Errorf("Worker Previews (wrangler preview) need a previews block in %s: add \"previews\": {} (it can be empty), or set cloudflare.toml's [builds] preview", filepath.Base(r.wc.Path)))
+	}
 	if len(workers) > 1 && workers[0].Branch == workers[1].Branch {
 		fail(fmt.Errorf("production and staging both deploy from %s: give them different branches", workers[0].Branch))
 	}

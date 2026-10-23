@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joeblew999/mise-cloudflare/config"
 	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
@@ -135,7 +136,7 @@ func TestWorkflowFor(t *testing.T) {
 	sub := filepath.Join(top, "workers", "api")
 	os.MkdirAll(sub, 0o755)
 	for dir, want := range map[string]string{top: "cloudflare.yml", sub: "cloudflare-workers-api.yml"} {
-		path, b, err := workflowFor(context.Background(), dir)
+		path, b, err := workflowFor(context.Background(), dir, config.Workflow{})
 		if err != nil || filepath.Base(path) != want || filepath.Dir(path) != filepath.Join(mustReal(t, top), ".github", "workflows") {
 			t.Errorf("%s: %s, %v", dir, path, err)
 		}
@@ -143,9 +144,21 @@ func TestWorkflowFor(t *testing.T) {
 			t.Errorf("%s: placeholders left:\n%s", want, b)
 		}
 	}
-	_, b, _ := workflowFor(context.Background(), sub)
+	_, b, _ := workflowFor(context.Background(), sub, config.Workflow{})
 	if !strings.Contains(string(b), "working-directory: workers/api") || !strings.Contains(string(b), "name: cloudflare-workers-api") {
 		t.Errorf("the subfolder's workflow:\n%s", b)
+	}
+	if strings.Contains(string(b), "CLOUDFLARE_API_TOKEN") {
+		t.Error("a workflow that doesn't deploy holds a Cloudflare token")
+	}
+	_, b, _ = workflowFor(context.Background(), sub, config.Workflow{Deploy: true, Branch: "release"})
+	for _, want := range []string{"refs/heads/release", "--name \"pr-$PR\"", "preview delete", "secrets.CLOUDFLARE_API_TOKEN", "pull-requests: write"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("the deploying workflow lacks %q", want)
+		}
+	}
+	if regexp.MustCompile(`\b(VERSION|NAME|DIR|BRANCH)\b|: &\w+|- \*\w+`).Match(b) {
+		t.Errorf("placeholders or YAML anchors left:\n%s", b)
 	}
 }
 

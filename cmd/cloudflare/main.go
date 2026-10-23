@@ -101,7 +101,7 @@ func main() {
 		claude(ctx, dir)
 		return
 	case "workflow":
-		path, b, err := workflowFor(ctx, dir)
+		path, b, err := workflowFor(ctx, dir, cfg.Workflow)
 		if err != nil {
 			fail(err)
 		}
@@ -122,7 +122,7 @@ func main() {
 		}
 		writeFile(*out, b)
 		writeSkill(filepath.Join(".claude", "skills"))
-		if path, w, err := workflowFor(ctx, dir); err == nil {
+		if path, w, err := workflowFor(ctx, dir, cfg.Workflow); err == nil {
 			writeFile(path, w)
 		}
 		claude(ctx, dir)
@@ -190,10 +190,11 @@ func main() {
 
 // repo is a repo with its wrangler installed: its config as wrangler reads it, and wrangler on its login.
 type repo struct {
-	dir    string
-	scopes []string
-	wc     wconfig.Config
-	w      wrangler.W
+	dir      string
+	scopes   []string
+	workflow config.Workflow
+	wc       wconfig.Config
+	w        wrangler.W
 }
 
 func openRepo(ctx context.Context, dir string, cfg config.Config, profile string) repo {
@@ -206,7 +207,7 @@ func openRepo(ctx context.Context, dir string, cfg config.Config, profile string
 		fail(err)
 	}
 	w.Profile = cmp.Or(profile, wc.Name)
-	return repo{dir: dir, scopes: cfg.Scopes, wc: wc, w: w}
+	return repo{dir: dir, scopes: cfg.Scopes, workflow: cfg.Workflow, wc: wc, w: w}
 }
 
 // login logs the repo in if it isn't yet, and again whenever the login's scopes differ from the repo's (a scope added
@@ -448,7 +449,7 @@ func (r repo) stale(ctx context.Context) []string {
 	if top, _, err := gitTop(ctx, r.dir); err == nil && differs(filepath.Join(top, ".claude", "hooks", hookFile), mise.SessionStart) {
 		out = append(out, ".claude/hooks/"+hookFile+" is out of date: run mise run cloudflare:claude")
 	}
-	if path, want, err := workflowFor(ctx, r.dir); err == nil && differs(path, want) {
+	if path, want, err := workflowFor(ctx, r.dir, r.workflow); err == nil && differs(path, want) {
 		rel, _ := filepath.Rel(r.dir, path)
 		out = append(out, rel+" is out of date: run mise run cloudflare:workflow")
 	}
