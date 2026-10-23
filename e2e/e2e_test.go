@@ -29,6 +29,18 @@ func needAccount(t *testing.T) {
 	}
 }
 
+// buildTool builds the cloudflare command from this checkout once, for a proof to run throughout: code changed while
+// it runs can't change what it runs.
+func buildTool(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "cloudflare")
+	cmd := exec.Command("go", "build", "-o", bin, "github.com/joeblew999/mise-cloudflare/cmd/cloudflare")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	return bin
+}
+
 // repo is a Worker repo that uses mise-cloudflare, its Worker's name, and how it runs the tool (go tool cloudflare
 // unless tool says otherwise).
 type repo struct {

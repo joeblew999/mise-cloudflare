@@ -22,8 +22,8 @@ import (
 func TestBuilds(t *testing.T) {
 	needAccount(t)
 	dir, _ := filepath.Abs("testdata/builds")
-	// The tool from this checkout: testdata/builds is in this module, which has no tool line for itself.
-	tool := []string{"go", "run", "github.com/joeblew999/mise-cloudflare/cmd/cloudflare"}
+	// The tool from this checkout, built once: testdata/builds is in this module, which has no tool line for itself.
+	tool := []string{buildTool(t)}
 	r := repo{t: t, dir: dir, worker: "cloudflare-zero-builds", tool: tool}
 	st := repo{t: t, dir: dir, worker: "cloudflare-zero-builds-staging", tool: tool, env: "staging"}
 	stamp := time.Now().Unix()

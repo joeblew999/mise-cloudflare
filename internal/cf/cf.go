@@ -117,7 +117,12 @@ func (w Who) HasScopes() bool {
 // Login makes or remakes the profile's login with Scopes: a link and a code to approve on any device (cf's device
 // flow), opened in this machine's browser too unless there's none.
 func (c CF) Login(ctx context.Context, browser bool) error {
-	args := append([]string{"auth", "create", c.Profile, "--device", "--scopes"}, Scopes...)
+	return c.LoginScopes(ctx, Scopes, browser)
+}
+
+// LoginScopes is Login with these scopes.
+func (c CF) LoginScopes(ctx context.Context, scopes []string, browser bool) error {
+	args := append([]string{"auth", "create", c.Profile, "--device", "--scopes"}, scopes...)
 	if !browser {
 		args = append(args, "--no-browser")
 	}

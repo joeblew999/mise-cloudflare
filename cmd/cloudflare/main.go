@@ -6,6 +6,7 @@
 //	go tool cloudflare status           # the repo's login, its account and scopes; this machine's other logins; stray tokens
 //	go tool cloudflare check            # the repo's rules: no account or resource IDs, no tokens, secrets listed, wrangler pinned
 //	go tool cloudflare builds           # Workers Builds: a push to the branch deploys, every other branch a preview
+//	go tool cloudflare ci-token         # GitHub Actions' token ([workflow] deploy), made and stored as GitHub secrets
 //	go tool cloudflare logout           # log the repo's logins out on Cloudflare and delete them
 //	go tool cloudflare init             # cloudflare.toml, the mise tasks, the agent skill, the workflow and the cloud hook
 //	go tool cloudflare tasks            # write its mise tasks: .mise/tasks/cloudflare.toml
@@ -61,12 +62,12 @@ func main() {
 	profile := flag.String("profile", cfg.Profile, "the repo's login, a wrangler auth profile (default the Worker's name)")
 	jsonOut := flag.Bool("json", false, "print one JSON document on stdout instead of text")
 	out := flag.String("o", filepath.Join(".mise", "tasks", "cloudflare.toml"), "tasks: the file to write")
-	off := flag.Bool("off", false, "builds: remove the Workers Builds setup")
+	off := flag.Bool("off", false, "builds: remove the Workers Builds setup; ci-token: delete CI's token and its secrets")
 	showVersion := flag.Bool("version", false, "print this build's version")
 	branch := flag.String("branch", "", "builds: the branch whose pushes deploy production (default cloudflare.toml's, else the repository's default, or production with staging)")
 	staging := flag.String("staging", "", "builds: the branch whose pushes deploy staging, the wrangler environment env.staging (default cloudflare.toml's)")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill|workflow|claude, cloudflare [-off] [-branch b] builds, or cloudflare wrangler <args>")
+		fmt.Fprintln(os.Stderr, "usage: cloudflare [-json] [-profile name] login|status|check|logout|init|tasks|skill|workflow|claude, cloudflare [-off] [-branch b] [-staging b] builds|ci-token, or cloudflare wrangler <args>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -156,6 +157,8 @@ func main() {
 		if err := wrangler.Interactive(r.w.Cmd(ctx, args[1:]...)); err != nil {
 			os.Exit(exitCode(err))
 		}
+	case "ci-token":
+		r.ciToken(ctx, *off)
 	case "builds":
 		b := cfg.Builds
 		if *branch != "" {
