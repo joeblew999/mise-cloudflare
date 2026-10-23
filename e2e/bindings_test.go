@@ -10,26 +10,24 @@ import (
 	"time"
 )
 
-// TestBindings proves the scopes table (config.BindingScopes): a Worker with one of each kind of binding Cloudflare
-// makes for nothing (testdata/bindings), on its own login holding exactly the scopes worked out from them, makes its
-// queue and Vectorize index, deploys (its Durable Object, Workflow, Workers AI, Browser, Images, Analytics Engine and
-// rate limit with it), and uses every binding live. Then the Worker, the queue, the index and the Workflow go.
+// TestBindings proves a repo's login, with wrangler's own login's scopes, does what every kind of binding needs: a
+// Worker with one of each kind Cloudflare makes for nothing (testdata/bindings), on its own login, makes its queue and
+// Vectorize index, deploys (its Durable Object, Workflow, Workers AI, Browser, Images, Analytics Engine and rate limit
+// with it), and uses every binding live. Then the Worker, the queue, the index and the Workflow go.
 func TestBindings(t *testing.T) {
 	needAccount(t)
 	dir, _ := filepath.Abs("testdata/bindings")
 	r := repo{t: t, dir: dir, worker: "cloudflare-zero-bindings", tool: []string{buildTool(t)}}
 	const queue, index, workflow = "cloudflare-zero-bindings-q", "cloudflare-zero-bindings-idx", "cloudflare-zero-bindings-wf"
 
-	r.step("The scopes worked out from the Worker's bindings, and its own login with exactly those")
+	r.step("Its own login, with wrangler's own login's scopes")
 	r.must(nil, "npm", "ci", "--no-audit", "--no-fund")
 	s := r.status()
-	want := []string{"account:read", "user:read", "workers:write", "workers_scripts:write", "queues:write", "ai:write", "browser:write"}
-	if !slices.Equal(slices.Sorted(slices.Values(s.Needs)), slices.Sorted(slices.Values(want))) { // a set: the login compares sets
-		t.Fatalf("its bindings %q need %q, want %q", s.Bindings, s.Needs, want)
+	if !slices.Contains(s.Needs, "workers_scripts:write") || !slices.Contains(s.Needs, "queues:write") {
+		t.Fatalf("its login needs %q: not wrangler's own login's scopes", s.Needs)
 	}
-	r.pass("its bindings (%s) need %s", strings.Join(s.Bindings, ", "), strings.Join(s.Needs, " "))
 	r.cf(nil, "login") // fails unless the login holds exactly those
-	r.pass("the login %s holds exactly those", s.Profile)
+	r.pass("the login %s holds wrangler's own login's scopes: %s", s.Profile, strings.Join(s.Needs, " "))
 
 	if out, err := r.try(nil, "wrangler", "deployments", "list", "--json"); err == nil {
 		t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it", r.worker)

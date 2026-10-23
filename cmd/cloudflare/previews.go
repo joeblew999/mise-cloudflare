@@ -16,12 +16,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
 // previewResource is one of the previews' own KV namespaces, D1s or R2 buckets.
 type previewResource struct {
 	Binding string `json:"binding"`
+	Type    string `json:"type"` // wrangler's: kv_namespace, d1 or r2_bucket
 	Kind    string `json:"kind"` // KV, D1 or R2
 	Name    string `json:"name"`
 	ID      string `json:"id,omitempty"` // a KV namespace's or a D1's; an R2 bucket goes by its name
@@ -35,14 +37,14 @@ type previewResource struct {
 // and production's and staging's stay theirs. Run again, it makes only what's new. With off, it takes them out of the
 // Previews Base and deletes them. The Worker must be on Cloudflare already: deployed once, or by Workers Builds.
 func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource {
-	// KV, D1 and R2 the previews block leaves out, by wrangler's own types for the Worker's bindings.
-	what := map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2"}
+	// The Worker's bindings of the kinds wrangler deploy creates (wconfig.Created: KV, D1, R2) that the previews block
+	// leaves out, by wrangler's own types for them.
 	var out []previewResource
 	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
-		if kind, ok := what[r.wc.Bindings[n]]; ok {
-			if _, declared := r.wc.PreviewBindings[n]; !declared {
-				out = append(out, previewResource{Binding: n, Kind: kind, Name: previewName(r.wc.Name, n)})
-			}
+		typ := r.wc.Bindings[n]
+		c, created := wconfig.Created[typ]
+		if _, declared := r.wc.PreviewBindings[n]; created && !declared {
+			out = append(out, previewResource{Binding: n, Type: typ, Kind: c.What, Name: previewName(r.wc.Name, n)})
 		}
 	}
 	if len(out) == 0 {
@@ -62,14 +64,12 @@ func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource
 		if out[i].ID, out[i].Done, err = r.previewResource(ctx, p); err != nil {
 			fail(err)
 		}
-		switch p.Kind {
-		case "KV":
-			env[p.Binding] = map[string]string{"type": "kv_namespace", "namespace_id": out[i].ID}
-		case "D1":
-			env[p.Binding] = map[string]string{"type": "d1", "database_id": out[i].ID}
-		case "R2":
-			env[p.Binding] = map[string]string{"type": "r2_bucket", "bucket_name": p.Name}
+		// In a preview's bindings, as wrangler sends them: R2 by its bucket's name, KV and D1 by id.
+		id := out[i].ID
+		if id == "" {
+			id = p.Name
 		}
+		env[p.Binding] = map[string]string{"type": p.Type, wconfig.Created[p.Type].BaseKey: id}
 	}
 	// Off, a Worker already deleted has no Previews Base left to take them out of: its resources still go.
 	if err := patchPreviewsBase(ctx, token, account, r.wc.Name, env); err != nil && !(off && errors.Is(err, errNotOnCloudflare)) {
@@ -100,8 +100,8 @@ func previewName(worker, binding string) string {
 // findPreview finds the previews' own KV namespace, D1 or R2 bucket with the repo's wrangler: whether it's there, and
 // its id (a KV namespace's or a D1's; an R2 bucket has none but its name).
 func (r repo) findPreview(ctx context.Context, p previewResource) (bool, string, error) {
-	switch p.Kind {
-	case "KV":
+	switch p.Type {
+	case "kv_namespace":
 		var list []struct{ ID, Title string }
 		if err := r.wranglerJSON(ctx, &list, "kv", "namespace", "list"); err != nil {
 			return false, "", err
@@ -111,7 +111,7 @@ func (r repo) findPreview(ctx context.Context, p previewResource) (bool, string,
 				return true, n.ID, nil
 			}
 		}
-	case "D1":
+	case "d1":
 		var list []struct{ UUID, Name string }
 		if err := r.wranglerJSON(ctx, &list, "d1", "list", "--json"); err != nil {
 			return false, "", err
@@ -121,7 +121,7 @@ func (r repo) findPreview(ctx context.Context, p previewResource) (bool, string,
 				return true, d.UUID, nil
 			}
 		}
-	case "R2":
+	case "r2_bucket":
 		_, err := wrangler.Output(r.wranglerCmd(ctx, "r2", "bucket", "info", p.Name))
 		return err == nil, "", nil
 	}
@@ -133,8 +133,8 @@ func (r repo) previewResource(ctx context.Context, p previewResource) (string, s
 	if there, id, err := r.findPreview(ctx, p); err != nil || there {
 		return id, "there already", err
 	}
-	create := map[string][]string{"KV": {"kv", "namespace", "create", p.Name}, "D1": {"d1", "create", p.Name}, "R2": {"r2", "bucket", "create", p.Name}}
-	if _, err := wrangler.Output(r.wranglerCmd(ctx, create[p.Kind]...)); err != nil {
+	create := map[string][]string{"kv_namespace": {"kv", "namespace", "create", p.Name}, "d1": {"d1", "create", p.Name}, "r2_bucket": {"r2", "bucket", "create", p.Name}}
+	if _, err := wrangler.Output(r.wranglerCmd(ctx, create[p.Type]...)); err != nil {
 		return "", "", fmt.Errorf("making the previews' %s %s: %w", p.Kind, p.Name, err)
 	}
 	there, id, err := r.findPreview(ctx, p)
@@ -151,12 +151,12 @@ func (r repo) deletePreviewResource(ctx context.Context, p previewResource) stri
 		return "not there"
 	}
 	args := map[string][]string{
-		"KV": {"kv", "namespace", "delete", "--namespace-id", id, "--skip-confirmation"},
-		"D1": {"d1", "delete", p.Name, "--skip-confirmation"},
-		"R2": {"r2", "bucket", "delete", p.Name},
-	}[p.Kind]
+		"kv_namespace": {"kv", "namespace", "delete", "--namespace-id", id, "--skip-confirmation"},
+		"d1":           {"d1", "delete", p.Name, "--skip-confirmation"},
+		"r2_bucket":    {"r2", "bucket", "delete", p.Name},
+	}[p.Type]
 	if _, err := wrangler.Output(r.wranglerCmd(ctx, args...)); err != nil {
-		if p.Kind == "R2" && strings.Contains(err.Error(), "not empty") {
+		if p.Type == "r2_bucket" && strings.Contains(err.Error(), "not empty") {
 			return "not deleted: it still holds objects; delete them, then this again"
 		}
 		return "not deleted: " + err.Error()

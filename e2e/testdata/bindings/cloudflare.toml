@@ -1,3 +1,3 @@
-# The prove-bindings Worker's own login. No scopes line: the login holds exactly what its bindings need, worked out from
-# wrangler.jsonc, which is what the proof proves.
+# The prove-bindings Worker's own login. No scopes line: it asks for what wrangler's own login does, and the proof
+# proves every kind of binding the Worker has works on it.
 profile = "cloudflare-zero-bindings"

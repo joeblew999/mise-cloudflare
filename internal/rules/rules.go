@@ -82,21 +82,20 @@ func Check(dir string, w wconfig.Config, previews bool) ([]string, error) {
 }
 
 // IDs names every account or resource ID written into a raw wrangler config, at its top level and in each of its
-// environments (env.<name>): account_id, a D1's database_id or preview_database_id, a KV namespace's id or preview_id.
+// environments (env.<name>): account_id, and the resource IDs of the kinds wrangler deploy creates by name
+// (wconfig.Created: a KV namespace's id or preview_id, a D1's database_id or preview_database_id).
 func IDs(raw map[string]any) []string {
 	var out []string
 	section := func(where string, s map[string]any) {
 		if v, _ := s["account_id"].(string); v != "" {
 			out = append(out, where+"an account ID (account_id)")
 		}
-		for _, d := range list(s["d1_databases"]) {
-			if d["database_id"] != nil || d["preview_database_id"] != nil {
-				out = append(out, fmt.Sprintf("%sa resource ID (D1 %v)", where, d["binding"]))
-			}
-		}
-		for _, k := range list(s["kv_namespaces"]) {
-			if k["id"] != nil || k["preview_id"] != nil {
-				out = append(out, fmt.Sprintf("%sa resource ID (KV %v)", where, k["binding"]))
+		for _, typ := range slices.Sorted(maps.Keys(wconfig.Created)) {
+			c := wconfig.Created[typ]
+			for _, b := range list(s[c.Key]) {
+				if slices.ContainsFunc(c.IDs, func(f string) bool { return b[f] != nil }) {
+					out = append(out, fmt.Sprintf("%sa resource ID (%s %v)", where, c.What, b["binding"]))
+				}
 			}
 		}
 	}
@@ -133,32 +132,29 @@ func Previews(w wconfig.Config, need bool) []string {
 	return problems
 }
 
-// unnamedResources names the previews block's KV, D1 and R2 bindings that don't say which resource they use: wrangler
-// deploy creates those for production, wrangler preview doesn't.
+// unnamedResources names the previews block's bindings of the kinds wrangler deploy creates (KV, D1, R2) that don't say
+// which resource they use: wrangler deploy creates those for production, wrangler preview doesn't.
 func unnamedResources(previews map[string]any) []string {
 	var out []string
-	for _, k := range []struct{ kind, what, field string }{
-		{"kv_namespaces", "KV", "id"}, {"d1_databases", "D1", "database_id"}, {"r2_buckets", "R2", "bucket_name"},
-	} {
-		for _, b := range list(previews[k.kind]) {
-			if v, _ := b[k.field].(string); v == "" {
-				out = append(out, fmt.Sprintf("%s %v", k.what, b["binding"]))
+	for _, typ := range slices.Sorted(maps.Keys(wconfig.Created)) {
+		c := wconfig.Created[typ]
+		for _, b := range list(previews[c.Key]) {
+			if v, _ := b[c.Names].(string); v == "" {
+				out = append(out, fmt.Sprintf("%s %v", c.What, b["binding"]))
 			}
 		}
 	}
 	return out
 }
 
-// fromBase are the binding types a preview gets from the Worker's Previews Base (go tool cloudflare previews) when its
-// previews block leaves them out, and assets, which stay at the top level.
-var fromBase = []string{"kv_namespace", "d1", "r2_bucket", "assets"}
-
 // previewBindings names the Worker's bindings, as its wrangler converts them, that its previews block doesn't have: a
-// preview inherits none (Cloudflare's docs: vars, storage and API bindings alike go in the block), but for fromBase.
+// preview inherits none (Cloudflare's docs: vars, storage and API bindings alike go in the block), but for the kinds its
+// Previews Base gives it (wconfig.Created) and the static assets, which stay at the top level.
 func previewBindings(w wconfig.Config) []string {
 	var missing []string
 	for name, typ := range w.Bindings {
-		if _, ok := w.PreviewBindings[name]; !ok && !slices.Contains(fromBase, typ) {
+		_, created := wconfig.Created[typ]
+		if _, ok := w.PreviewBindings[name]; !ok && !created && typ != "assets" {
 			missing = append(missing, name)
 		}
 	}

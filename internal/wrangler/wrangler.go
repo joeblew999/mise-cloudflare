@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 )
@@ -161,6 +162,27 @@ func (w W) Token(ctx context.Context) (string, error) {
 	}
 	return t.Token, err
 }
+
+// Scopes are the OAuth scopes wrangler's own login asks for (wrangler login --scopes-list): wrangler keeps them, for
+// everything it does, so a repo's login with them can do what wrangler can.
+func (w W) Scopes(ctx context.Context) ([]string, error) {
+	cmd := w.Plain(ctx, "login", "--scopes-list")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("wrangler login --scopes-list: %w: %s", err, out)
+	}
+	var scopes []string
+	for _, m := range scopeRow.FindAllSubmatch(out, -1) {
+		scopes = append(scopes, string(m[1]))
+	}
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("wrangler login --scopes-list listed no scopes:\n%s", out)
+	}
+	return scopes, nil
+}
+
+// scopeRow is one scope in wrangler's table of them: "│ workers_kv:write │ See and change …".
+var scopeRow = regexp.MustCompile(`(?m)^│ ([a-z0-9][a-z0-9_:.-]*) +│`)
 
 // Device reports whether to log in with the OAuth device flow (a link to open on any device, a phone included) instead
 // of a browser on this machine: in a Claude Code cloud session, which has no browser, or when CLOUDFLARE_LOGIN=device.

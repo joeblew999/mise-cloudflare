@@ -197,27 +197,23 @@ func TestClaude(t *testing.T) {
 	}
 }
 
-// TestCITokenHelp: the dashboard link picks Workers Scripts and what the Worker's bindings need, and names what it can't.
+// TestCITokenHelp: the dashboard link picks every Workers permission it has a key for, and names the token.
 func TestCITokenHelp(t *testing.T) {
-	help := ciTokenHelp("w", []string{"d1", "kv_namespace", "r2_bucket", "secrets_store_secret"})
-	link := regexp.MustCompile(`https://dash\.cloudflare\.com/\S+`).FindString(help)
-	u, err := url.Parse(link)
+	help := ciTokenHelp("w")
+	u, err := url.Parse(regexp.MustCompile(`https://dash\.cloudflare\.com/\S+`).FindString(help))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var perms []struct{ Key, Type string }
 	if err := json.Unmarshal([]byte(u.Query().Get("permissionGroupKeys")), &perms); err != nil {
-		t.Fatalf("%s: %v", link, err)
+		t.Fatalf("%s: %v", u, err)
 	}
 	var got []string
 	for _, p := range perms {
 		got = append(got, p.Key+":"+p.Type)
 	}
-	want := []string{"workers_scripts:edit", "d1:edit", "workers_kv_storage:edit", "workers_r2:edit"}
+	want := []string{"workers_scripts:edit", "workers_kv_storage:edit", "workers_r2:edit", "d1:edit", "queues:edit", "workers_routes:edit", "zone:read"}
 	if !slices.Equal(got, want) || u.Query().Get("name") != "w GitHub Actions" {
 		t.Errorf("link picks %q named %q, want %q", got, u.Query().Get("name"), want)
-	}
-	if !strings.Contains(help, "Add Secrets Store Edit there too") {
-		t.Errorf("Secrets Store Edit isn't named:\n%s", help)
 	}
 }

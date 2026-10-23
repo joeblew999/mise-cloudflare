@@ -9,43 +9,33 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
 	"time"
 
 	"golang.org/x/term"
-
-	"github.com/joeblew999/mise-cloudflare/config"
 )
 
 // ciTokenHelp is how a person makes CI's token: Cloudflare gives no login the right to make API tokens (cf asks for
-// account_api_tokens:create; Cloudflare doesn't grant it), so it's made once in the dashboard, from a link that has the
-// permissions the Worker's bindings need picked already. An account's token, not a person's: it outlives anyone leaving.
-func ciTokenHelp(worker string, kinds []string) string {
-	type perm struct {
-		Key  string `json:"key"`
-		Type string `json:"type"`
-	}
-	perms := []perm{{"workers_scripts", "edit"}}
-	var byHand []string
-	for _, k := range kinds {
-		for _, p := range config.TokenPermissions[k] {
-			key, typ, _ := strings.Cut(p, ":")
-			if !slices.Contains(perms, perm{key, typ}) {
-				perms = append(perms, perm{key, typ})
-			}
-		}
-		byHand = append(byHand, config.TokenByHand[k]...)
-	}
-	b, _ := json.Marshal(perms)
+// account_api_tokens:create; Cloudflare doesn't grant it), so it's made once in the dashboard, from a link with every
+// Workers permission Cloudflare's token links can pick already picked. An account's token, not a person's: it outlives
+// anyone leaving.
+func ciTokenHelp(worker string) string {
+	b, _ := json.Marshal(ciTokenPermissions)
 	link := "https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=" + url.QueryEscape(string(b)) +
 		"&name=" + url.QueryEscape(worker+" GitHub Actions")
-	help := "Make it once, in Cloudflare's dashboard: open this link, pick your account, Continue to summary, Create Token.\n" +
-		"It has what the Worker needs picked already: Workers Scripts to deploy, and its bindings' own.\n  " + link
-	if len(byHand) > 0 {
-		help += "\nAdd " + strings.Join(byHand, ", ") + " there too: the link can't pick it."
-	}
-	return help
+	return "Make it once, in Cloudflare's dashboard: open this link, pick your account, Continue to summary, Create Token.\n" +
+		"It picks Workers Scripts, KV, R2, D1, Queues, Workers Routes and Zone Read; a Worker using more (Secrets Store,\n" +
+		"Pipelines, …) needs that permission added there too.\n  " + link
+}
+
+// ciTokenPermissions are the permissions CI's token link picks, by their keys in Cloudflare's token links
+// (fundamentals/api/how-to/account-owned-token-template): every Workers one those links have a key for.
+var ciTokenPermissions = []struct {
+	Key  string `json:"key"`
+	Type string `json:"type"`
+}{
+	{"workers_scripts", "edit"}, {"workers_kv_storage", "edit"}, {"workers_r2", "edit"}, {"d1", "edit"},
+	{"queues", "edit"}, {"workers_routes", "edit"}, {"zone", "read"},
 }
 
 // ciToken stores the Cloudflare API token GitHub Actions deploys with (cloudflare.toml's [workflow] deploy) as the
@@ -84,10 +74,10 @@ func (r repo) ciToken(ctx context.Context, off bool) {
 	if token == "" {
 		tty, err := os.Open("/dev/tty")
 		if err != nil {
-			fail(errors.New("no CLOUDFLARE_CI_TOKEN and no terminal to type it in.\n" + ciTokenHelp(r.wc.Name, r.wc.Kinds)))
+			fail(errors.New("no CLOUDFLARE_CI_TOKEN and no terminal to type it in.\n" + ciTokenHelp(r.wc.Name)))
 		}
 		defer tty.Close()
-		fmt.Fprintln(os.Stderr, ciTokenHelp(r.wc.Name, r.wc.Kinds))
+		fmt.Fprintln(os.Stderr, ciTokenHelp(r.wc.Name))
 		fmt.Fprint(os.Stderr, "Paste CI's token (hidden): ")
 		b, err := term.ReadPassword(int(tty.Fd()))
 		fmt.Fprintln(os.Stderr)
@@ -107,7 +97,7 @@ func (r repo) ciToken(ctx context.Context, off bool) {
 	json.NewDecoder(resp.Body).Decode(&check)
 	resp.Body.Close()
 	if !check.Success {
-		fail(fmt.Errorf("Cloudflare refused that token for the account's Workers (HTTP %d).\n%s", resp.StatusCode, ciTokenHelp(r.wc.Name, r.wc.Kinds)))
+		fail(fmt.Errorf("Cloudflare refused that token for the account's Workers (HTTP %d).\n%s", resp.StatusCode, ciTokenHelp(r.wc.Name)))
 	}
 	for _, s := range []struct{ name, value string }{{"CLOUDFLARE_API_TOKEN", token}, {"CLOUDFLARE_ACCOUNT_ID", account}} {
 		cmd := exec.CommandContext(ctx, "gh", "secret", "set", s.name, "--repo", repoName)

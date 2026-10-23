@@ -74,7 +74,7 @@ Rather have GitHub Actions deploy instead of Cloudflare? Set `[workflow] deploy 
 |---|---|
 | First deploy on your machine | **Allow**, in your browser |
 | `cloudflare:builds`, once per repo | **Allow**, once more (Cloudflare's own CLI asks for Workers Builds) |
-| You add a kind of binding (Queues, say), or a scope in `cloudflare.toml` | **Allow**, once |
+| wrangler is upgraded and asks for more, or you change `scopes` in `cloudflare.toml` | **Allow**, once |
 | GitHub Actions deploying instead, once per repo | Make CI's token from the link `cloudflare:ci-token` prints |
 | Anything else: deploys, previews, merges, GitHub Actions | Nothing |
 
@@ -82,7 +82,7 @@ Rather have GitHub Actions deploy instead of Cloudflare? Set `[workflow] deploy 
 
 | | What it is | Where | What you do |
 |---|---|---|---|
-| **The repo's login** | What you get by clicking Allow: a token on your machine that can do only what the repo's bindings need | Your machine, Claude Code | Allow, once |
+| **The repo's login** | What you get by clicking Allow: a token on your machine that can do what wrangler's own login can | Your machine, Claude Code | Allow, once |
 | **Cloudflare's build token** | Cloudflare's own, which never leaves Cloudflare | Workers Builds: previews, staging, production | Nothing |
 | **CI's API token** | A secret made in Cloudflare's dashboard | GitHub Actions, only if you have it deploy | Make it once, from the link `cloudflare:ci-token` gives |
 

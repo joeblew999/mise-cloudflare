@@ -20,13 +20,25 @@ type Config struct {
 	Name    string   `json:"name"`    // the Worker's name, as wrangler resolves it (CLOUDFLARE_ENV included)
 	Secrets []string `json:"secrets"` // secrets.required
 	// The Worker's bindings and its previews block's, name → type, as wrangler itself converts them (kv_namespace, d1,
-	// queue, workflow, …): no list of kinds here, so a kind wrangler adds is there too.
+	// queue, workflow, …).
 	Bindings        map[string]string `json:"bindings"`
 	PreviewBindings map[string]string `json:"previewBindings"`
-	// Kinds is the binding types the Worker has, and routes, containers and k2 if it has them (settings wrangler doesn't
-	// convert to bindings, and a login needs scopes for).
-	Kinds []string       `json:"kinds"`
-	Raw   map[string]any `json:"raw"` // the file as written, every environment in it
+	Raw             map[string]any    `json:"raw"` // the file as written, every environment in it
+}
+
+// Created is how wrangler deploy finds or creates a binding's resource by name when the config names none: KV, D1 and
+// R2, by wrangler's types for them. Wrangler preview creates none, so previews get their own another way (go tool
+// cloudflare previews), and IDs in the config for them are never needed.
+var Created = map[string]struct {
+	What    string   // KV
+	Key     string   // its list in a wrangler config: kv_namespaces
+	Names   string   // the field a binding names its resource by: id
+	IDs     []string // the fields that would put the account's resource IDs into the repo: id, preview_id
+	BaseKey string   // the field naming its resource in a preview's bindings: namespace_id
+}{
+	"kv_namespace": {"KV", "kv_namespaces", "id", []string{"id", "preview_id"}, "namespace_id"},
+	"d1":           {"D1", "d1_databases", "database_id", []string{"database_id", "preview_database_id"}, "database_id"},
+	"r2_bucket":    {"R2", "r2_buckets", "bucket_name", nil, "bucket_name"},
 }
 
 // script reads the config with the repo's own wrangler: unstable_readConfig is what wrangler deploy resolves,
@@ -37,12 +49,7 @@ const c = w.unstable_readConfig({ env: process.env.CLOUDFLARE_ENV || undefined }
 const r = await w.experimental_readRawConfig({});
 const types = (b) => Object.fromEntries(Object.entries(w.unstable_convertConfigBindingsToStartWorkerBindings(b ?? {}) ?? {}).map(([n, v]) => [n, v.type]));
 const bindings = types(c), previewBindings = types(c.previews);
-const kinds = [...new Set(Object.values(bindings))];
-if ((c.routes?.length ?? 0) > 0 || c.route) kinds.push('routes');
-if ((c.containers?.length ?? 0) > 0) kinds.push('containers');
-if ((c.k2?.length ?? 0) > 0) kinds.push('k2');
-kinds.sort();
-console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [], bindings, previewBindings, kinds, raw: r.rawConfig }));`
+console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [], bindings, previewBindings, raw: r.rawConfig }));`
 
 // Read asks the wrangler installed in dir (node_modules) for dir's config, in CLOUDFLARE_ENV's environment if it's set.
 func Read(ctx context.Context, dir string) (Config, error) {

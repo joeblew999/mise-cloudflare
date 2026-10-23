@@ -22,9 +22,6 @@ func TestRead(t *testing.T) {
 	if c.Name != "cloudflare-zero-example" || !slices.Equal(c.Secrets, []string{"GREETING"}) || filepath.Base(c.Path) != "wrangler.jsonc" {
 		t.Errorf("got %+v", c)
 	}
-	if !slices.Equal(c.Kinds, []string{"d1", "kv_namespace", "r2_bucket"}) {
-		t.Errorf("kinds %q, want D1, KV and R2", c.Kinds)
-	}
 	if want := map[string]string{"DB": "d1", "KV": "kv_namespace", "BUCKET": "r2_bucket"}; !maps.Equal(c.Bindings, want) {
 		t.Errorf("bindings %v, want %v", c.Bindings, want)
 	}

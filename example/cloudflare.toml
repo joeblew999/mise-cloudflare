@@ -4,6 +4,4 @@
 # The repo's own Cloudflare login, a wrangler auth profile. Default: the Worker's name, which it is here.
 profile = "cloudflare-zero-example"
 
-# What the login may do beyond what the Worker's D1, KV and R2 need (worked out from wrangler.jsonc): pipelines:write,
-# for Basin (mise-cloudflare's prove-basin), which isn't a binding. Change this and the next task logs in once more.
-scopes = ["pipelines:write"]
+# No scopes line: the login asks for what wrangler's own login does, so it can do whatever wrangler can.

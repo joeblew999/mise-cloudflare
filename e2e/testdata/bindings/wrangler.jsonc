@@ -1,6 +1,6 @@
-// The Worker mise run prove-bindings deploys: one of each kind of binding Cloudflare can make for nothing, so its login
-// holding exactly the scopes worked out from them (config.BindingScopes, cloudflare.toml has no scopes line) proves
-// that table. Its queue, Vectorize index and Workflow are its own: the proof makes them and deletes them.
+// The Worker mise run prove-bindings deploys: one of each kind of binding Cloudflare can make for nothing, on a login
+// with wrangler's own login's scopes. Its queue, Vectorize index and Workflow are its own: the proof makes them and
+// deletes them.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cloudflare-zero-bindings",

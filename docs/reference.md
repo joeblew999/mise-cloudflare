@@ -68,10 +68,9 @@ old Global API Key, which can do everything, is never used.
 
 ## The login: where it comes from, where it lives
 
-- **What it may do:** exactly what the Worker's bindings need, worked out from its wrangler config (the table below),
-  and any `scopes` in the repo's [cloudflare.toml](../example/cloudflare.toml) for what isn't a binding (OAuth scope
-  names as `wrangler login --scopes-list` gives them). `cloudflare:status` shows both: what the login holds, and what
-  it needs.
+- **What it may do:** what wrangler's own login asks for ([below](#what-the-login-may-do)), unless `scopes` in the
+  repo's [cloudflare.toml](../example/cloudflare.toml) says exactly which. `cloudflare:status` shows what it holds and
+  what it needs.
 - **Its name:** `profile` in `cloudflare.toml`, else the Worker's name. It's a
   [wrangler auth profile](https://developers.cloudflare.com/workers/wrangler/profiles/).
 - **Where it lives:** wrangler's folder in the person's home directory, never the repo:
@@ -80,74 +79,18 @@ old Global API Key, which can do everything, is never used.
 - **The first time:** the first task that needs it asks. On a machine with a browser, Cloudflare's consent page opens,
   listing exactly the repo's scopes: click Allow and pick your account. In a Claude Code cloud session, or with
   `CLOUDFLARE_LOGIN=device`, it prints a link with the code already in it: open it on any device, your phone included.
-- **Every time after:** each task compares the scopes the login holds with what the repo needs. Equal: nothing is
-  asked. A binding or a scope added or removed: it logs in once more, so the login always holds exactly that.
+- **Every time after:** each task compares the scopes the login holds with what it needs. Equal: nothing is asked.
+  Different (wrangler upgraded, or `scopes` changed): it logs in once more, so the login always holds exactly that.
 
-### Bindings and their permissions
+### What the login may do
 
-The kinds of binding a Worker has come from its own wrangler, at run time: wrangler converts the config's bindings
-(`unstable_convertConfigBindingsToStartWorkerBindings`), each with its type, so a kind wrangler adds is seen too. The
-scopes a login can ask for are wrangler's too (its login's list). Nothing joins the two: neither wrangler nor
-Cloudflare publishes which scope each kind needs (Cloudflare's own catalog of OAuth scopes maps none). So one table
-does, [config.BindingScopes](../config/config.go): each kind gets the scope whose description in wrangler's login names
-its product ("`workers_kv:write`: See and change Cloudflare Workers KV Storage data…"), or none where no scope does, as
-with wrangler's own login. Three things keep it honest:
-
-- `go test` reads the installed wrangler's binding types and its login's scopes, and fails if wrangler has a type the
-  table lacks or the table names a scope wrangler can't ask for. Upgrading wrangler can't leave it behind silently.
-- A Worker with a kind the table lacks is told so by `cloudflare:status`, `check` and `login`, never given nothing
-  silently: if wrangler is refused, add the scope it names to `cloudflare.toml`'s `scopes`.
-- Each entry is proven on a real account by a proof, or says it isn't yet. This table is generated from the code, and
-  `go test` fails if it differs:
-
-| Binding type (wrangler's) | Scope beyond the four | Proven on a real account |
-|---|---|---|
-| `agent_memory` | `agent-memory:write` | Not yet |
-| `ai` | `ai:write` | Yes (`prove-bindings`) |
-| `ai_search` | `ai-search:write` | Not yet |
-| `ai_search_namespace` | `ai-search:write` | Not yet |
-| `analytics` | none | Not yet |
-| `analytics_engine` | none | Yes (`prove-bindings`) |
-| `artifacts` | `artifacts:write` | Not yet |
-| `assets` | none | Not yet |
-| `browser` | `browser:write` | Yes (`prove-bindings`) |
-| `containers` | `containers:write`, `cloudchamber:write` | Not yet |
-| `d1` | `d1:write` | Yes (`prove`) |
-| `data_blob` | none | Not yet |
-| `dispatch_namespace` | none | Not yet |
-| `durable_object_namespace` | none | Yes (`prove-bindings`) |
-| `flagship` | `flagship:write` | Not yet |
-| `hyperdrive` | none | Not yet |
-| `images` | none | Yes (`prove-bindings`) |
-| `json` | none | Not yet |
-| `k2` | `k2.write` | Not yet |
-| `kv_namespace` | `workers_kv:write` | Yes (`prove`, `prove-builds`) |
-| `logfwdr` | none | Not yet |
-| `media` | none | Not yet |
-| `mtls_certificate` | `ssl_certs:write` | Not yet |
-| `pipeline` | `pipelines:write` | Not yet |
-| `plain_text` | none | Yes (`prove-builds`) |
-| `queue` | `queues:write` | Yes (`prove-bindings`) |
-| `r2_bucket` | none | Yes (`prove`, `prove-builds`) |
-| `ratelimit` | none | Yes (`prove-bindings`) |
-| `routes` | `workers_routes:write`, `zone:read` | Not yet |
-| `secrets_store_secret` | `secrets_store:write` | Not yet |
-| `service` | none | Not yet |
-| `stream` | none | Not yet |
-| `text_blob` | none | Not yet |
-| `unsafe_hello_world` | none | Not yet |
-| `vectorize` | none | Yes (`prove-bindings`) |
-| `version_metadata` | none | Not yet |
-| `vpc_network` | `connectivity:admin` | Not yet |
-| `vpc_service` | `connectivity:admin` | Not yet |
-| `wasm_module` | none | Not yet |
-| `worker_loader` | none | Not yet |
-| `workflow` | none | Yes (`prove-bindings`) |
-| `send_email` | unknown: `cloudflare:status` and `check` say so | Not yet |
-
-`routes`, `containers` and `k2` aren't bindings, but a Worker with them needs scopes too, so they're found by their
-settings. Not every product Cloudflare has is a binding, either: Basin's R2 Data Catalog, say, is reached with its
-own token, not through a binding.
+It asks for what wrangler's own login asks for: the list wrangler keeps, for everything it does, read from the repo's
+own wrangler (`wrangler login --scopes-list` shows it). So whatever wrangler can do with any kind of binding, the
+repo's login can, and nothing here lists kinds of binding or which scope each needs (neither wrangler nor Cloudflare
+publishes that). When an upgraded wrangler asks for more, the next task logs in once more. `scopes` in
+`cloudflare.toml` gives the login exactly those instead, for a narrower one. Proven on a real account: every kind of
+binding Cloudflare makes for nothing (`prove-bindings`: Queues, Vectorize, Workers AI, Durable Objects, Workflows,
+Analytics Engine, rate limits, Browser, Images), and D1, KV and R2 (`prove`).
 
 ## Workers Builds: production, staging, previews and pull requests
 
@@ -198,12 +141,9 @@ current), deleted when the pull request closes. It deploys with a Cloudflare API
 setup, because GitHub has no one to click Allow. You make it once in Cloudflare's dashboard, since Cloudflare lets no
 login make API tokens (tried: it leaves `account_api_tokens:create` out of every grant). `mise run cloudflare:ci-token`
 prints the link: an account's token (it outlives anyone leaving), no expiry unless you want one, with the permissions
-already picked from the Worker's bindings ([config.TokenPermissions](../config/config.go)). Deploying needs only
-Workers Scripts: Cloudflare's own words are "You do not need separate permissions on the bound resources to deploy the
-Worker". KV, D1 and R2 add their own, because wrangler creates them on a first deploy, and routes add Workers Routes
-and Zone Read; Secrets Store, which Cloudflare says deploying needs, the link can't pick, so `ci-token` names it. A new
-kind of binding means a new token from the new link. Proven so far: the deploy path, on the repo login's own token;
-a token made from the link, not yet. `ci-token` then takes the token, hidden, checks it against the account's Workers,
+already picked: Workers Scripts, KV, R2, D1, Queues, Workers Routes and Zone Read, every Workers one Cloudflare's token
+links can pick. A Worker using more (Secrets Store, Pipelines, …) needs that permission added there too. Proven so far:
+the deploy path, on the repo login's own token; a token made from the link, not yet. `ci-token` then takes the token, hidden, checks it against the account's Workers,
 and stores it and the account id as the repository's GitHub secrets with gh. It's never shown or written into the repo; `--off` deletes
 the secrets. This repo's own [ci.yml](../.github/workflows/ci.yml) runs its Go tests and checks its release config;
 example/'s [workflow](../.github/workflows/cloudflare-example.yml) is stamped by the tool, as any repo's is.
