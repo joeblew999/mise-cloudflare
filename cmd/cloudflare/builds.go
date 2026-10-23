@@ -232,9 +232,9 @@ func githubRepo(ctx context.Context, dir string) (ghRepo, error) {
 	if err != nil {
 		return g, err
 	}
-	g.root = "/"
+	g.root = "/" // as Cloudflare writes it, the repository's root
 	if rel != "." {
-		g.root = filepath.ToSlash(rel)
+		g.root = "/" + filepath.ToSlash(rel)
 	}
 	for _, token := range []string{cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN"), ""} {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+m[1]+"/"+m[2], nil)
