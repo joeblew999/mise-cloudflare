@@ -7,7 +7,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/joeblew999/mise-cloudflare.svg)](https://pkg.go.dev/github.com/joeblew999/mise-cloudflare)
 
 Cloudflare Workers for any repo, from mise: local development, a preview for every pull request, staging and
-production, the same on your machine and in Claude Code. No API tokens to make. The first time, you click **Allow** once.
+production, the same on your machine and in Claude Code. No API tokens to make (unless you have GitHub Actions deploy).
+The first time, you click **Allow** once.
 
 ## Set up
 
@@ -57,9 +58,12 @@ From then on, Cloudflare builds and deploys every push by itself:
 | Merge `main` into `production` | Deploys **production** |
 
 For staging, add `staging = "main"` under `[builds]` in `cloudflare.toml`; without it, `main` deploys production
-directly. Previews get a KV, D1 and R2 of their own, shared by all previews and never production's or staging's:
-Cloudflare gives previews none, so `builds` makes them (`<worker>-previews-…`), and nothing goes into your repo. Cloudflare's GitHub app needs to be on
-the repository: if it isn't, `builds` says so.
+directly.
+
+- **Previews' data:** previews get a KV, D1 and R2 of their own, shared by all previews, never production's or
+  staging's. Cloudflare gives previews none, so `builds` makes them (`<worker>-previews-…`), and nothing goes into your
+  repo. Add a KV, D1 or R2 binding later? Run `mise run cloudflare:previews` once.
+- **Cloudflare's GitHub app** needs to be on the repository: if it isn't, `builds` says so.
 
 Rather have GitHub Actions deploy instead of Cloudflare? Set `[workflow] deploy = true`; the
 [reference](docs/reference.md#github-actions) has the one-time steps.
@@ -71,6 +75,7 @@ Rather have GitHub Actions deploy instead of Cloudflare? Set `[workflow] deploy 
 | First deploy on your machine | **Allow**, in your browser |
 | `cloudflare:builds`, once per repo | **Allow**, once more (Cloudflare's own CLI asks for Workers Builds) |
 | You add a kind of binding (Queues, say), or a scope in `cloudflare.toml` | **Allow**, once |
+| GitHub Actions deploying instead, once per repo | Make CI's token from the link `cloudflare:ci-token` prints |
 | Anything else: deploys, previews, merges, GitHub Actions | Nothing |
 
 ## Claude Code

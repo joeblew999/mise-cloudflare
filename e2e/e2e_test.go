@@ -71,6 +71,9 @@ func (r repo) run(env []string, name string, args ...string) (string, error) {
 	cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
 	cmd.Stderr = io.MultiWriter(os.Stdout, &buf)
 	err := cmd.Run()
+	if out := buf.String(); out != "" && !strings.HasSuffix(out, "\n") {
+		fmt.Println() // a value printed bare (a KV key's), so the next line starts on its own
+	}
 	return buf.String(), err
 }
 
