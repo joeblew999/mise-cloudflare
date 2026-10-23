@@ -95,11 +95,9 @@ func (r repo) wrangler(args ...string) string {
 
 // status is go tool cloudflare status -json (its JSON only: the tool prints nothing else on stdout).
 type status struct {
-	Profile        string            `json:"profile"`
-	LoggedIn       bool              `json:"loggedIn"`
-	Needs          []string          `json:"needs"`
-	DefaultLogin   string            `json:"defaultLogin"`
-	FolderBindings map[string]string `json:"folderBindings"`
+	Profile  string   `json:"profile"`
+	LoggedIn bool     `json:"loggedIn"`
+	Needs    []string `json:"needs"`
 }
 
 func (r repo) status() status {
@@ -294,12 +292,9 @@ func (r repo) deleteAll() {
 	}
 }
 
-// prove is the whole proof on a Worker repo (example/, or a new one): local, deploy on its own login, live, a second
-// deploy, stray tokens, deleting everything, and with clean the login logged out.
+// prove is the one real deploy of a Worker repo: local, deploy on its own login, live, stray tokens, deleting
+// everything, and with clean the login logged out.
 func prove(t *testing.T, r repo, clean bool) {
-	defaultLogin := r.status().DefaultLogin
-	fmt.Printf("machine's default login: config/default.toml %s (a checksum; its contents are never read)\n", defaultLogin)
-
 	r.step("1. A developer with no Cloudflare login at all: setup, the rules, a local Worker")
 	r.must(nil, "mise", "run", "setup")
 	r.must(nil, "mise", "run", "cloudflare:check")
@@ -333,15 +328,7 @@ func prove(t *testing.T, r repo, clean bool) {
 	if !s.LoggedIn {
 		t.Fatalf("no login %s", r.worker)
 	}
-	r.pass("login %s exists", s.Profile)
-	if s.FolderBindings[r.realDir()] != s.Profile {
-		t.Fatalf("login not bound to %s: %v", r.realDir(), s.FolderBindings)
-	}
-	r.pass("login %s is bound to %s, by its real path", s.Profile, r.realDir())
-	if s.DefaultLogin != defaultLogin {
-		t.Fatal("the machine's default login changed")
-	}
-	r.pass("the machine's default login is untouched")
+	r.pass("deployed on the repo's own login, %s", s.Profile)
 
 	r.step("3. The live Worker: D1, KV, R2 and the secret")
 	url := r.deployedURL()
@@ -380,21 +367,13 @@ func prove(t *testing.T, r repo, clean bool) {
 	r.pass("no D1, KV or R2 left")
 
 	if clean {
-		r.step("6. Logout removes the login and its folder binding")
+		r.step("6. Logout removes the login")
 		r.cf(nil, "logout")
-		s := r.status()
-		if s.LoggedIn {
+		if r.status().LoggedIn {
 			t.Fatal("the login is still there")
 		}
-		if _, ok := s.FolderBindings[r.realDir()]; ok {
-			t.Fatal("the folder binding is still there")
-		}
-		r.pass("login and folder binding gone")
+		r.pass("the login is gone")
 	}
-	if r.status().DefaultLogin != defaultLogin {
-		t.Fatal("the machine's default login changed")
-	}
-	r.pass("the machine's default login was untouched throughout")
 	fmt.Println("\nALL PASSED")
 }
 

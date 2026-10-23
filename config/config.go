@@ -42,12 +42,8 @@ type Workflow struct {
 // Builds is how Cloudflare's Workers Builds builds and deploys the Worker from its GitHub repository (go tool cloudflare
 // builds). Every field has a default, filled in by the command: it knows the repository and the lockfile.
 type Builds struct {
-	Branch  string `toml:"branch"`  // the branch whose pushes deploy: default the repository's default branch
-	Root    string `toml:"root"`    // the folder, in the repository, its commands run in: default this one
-	Build   string `toml:"build"`   // installs the Worker's dependencies: default from its lockfile
-	Deploy  string `toml:"deploy"`  // default npx wrangler deploy (with --env when CLOUDFLARE_ENV is set)
-	Preview string `toml:"preview"` // every other branch's preview: default npx wrangler preview (with --env)
-	Token   string `toml:"token"`   // the name of the account's build token it deploys with: default the first
+	Branch string `toml:"branch"` // the branch whose pushes deploy: default the repository's default branch
+	Build  string `toml:"build"`  // the build command, before wrangler deploys: default installing from the lockfile
 	// Staging, if set, is the branch that deploys the wrangler environment staging: its own Worker (env.staging, with
 	// its own bindings), deployed with --env staging. Production's branch then defaults to "production".
 	Staging string `toml:"staging"`
@@ -96,21 +92,16 @@ const Template = `# cloudflare.toml: this repo on Cloudflare, for go tool cloudf
 # its own token, so GitHub never holds a Cloudflare credential. A push to branch deploys; every other branch gets a
 # preview, its URL on the pull request.
 [builds]
-# branch = "main"                              # default: the repository's default branch
-# root = "."                                   # the folder its commands run in; default: this one
-# build = "npm ci"                             # default: from the lockfile
-# deploy = "npx wrangler deploy"
-# preview = "npx wrangler preview"
-# token = "My Build Token"                     # which of the account's build tokens; default: the first
+# branch = "main"              # the branch whose pushes deploy production; default: the repository's default branch
+# build = "npm ci && npm run build"   # the build command; default: installing from the lockfile (npm ci, …)
 # For staging and production: a push to main deploys staging (the wrangler environment env.staging, its own Worker),
 # a push to production deploys production, and every other branch gets a preview.
 # staging = "main"
-# branch = "production"
 
 # The GitHub Actions workflow (go tool cloudflare workflow). It checks the repo on every push and pull request. With
 # deploy, GitHub Actions also deploys, instead of Workers Builds: production from branch, a preview pr-<number> per pull
 # request, deleted when it closes, with a token made once in Cloudflare's dashboard and stored by go tool cloudflare
-# ci-token as a GitHub secret. ci-token gives the link that makes it, with what the Worker's bindings need picked.
+# ci-token as a GitHub secret. ci-token gives the link that makes it.
 [workflow]
 # deploy = true
 # branch = "main"

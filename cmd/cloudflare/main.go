@@ -34,7 +34,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -190,7 +189,7 @@ func main() {
 	case "check":
 		r.check(ctx, *jsonOut)
 	case "logout":
-		if r.w.LoggedIn() {
+		if r.w.LoggedIn(ctx) {
 			r.refuseStrayTokens()
 			must(r.w.Delete(ctx))
 		}
@@ -250,7 +249,7 @@ func (r repo) login(ctx context.Context) wrangler.Who {
 	r.refuseStrayTokens()
 	want := r.wanted(ctx)
 	device := wrangler.Device()
-	if !r.w.LoggedIn() {
+	if !r.w.LoggedIn(ctx) {
 		must(r.w.Login(ctx, want, device))
 	} else {
 		must(r.w.Activate(ctx))
@@ -336,36 +335,19 @@ func (r repo) check(ctx context.Context, jsonOut bool) {
 
 // statusReport is go tool cloudflare status -json. It never logs in.
 type statusReport struct {
-	Profile        string             `json:"profile"`
-	LoggedIn       bool               `json:"loggedIn"`
-	Accounts       []wrangler.Account `json:"accounts"`
-	Scopes         []string           `json:"scopes"`
-	Needs          []string           `json:"needs"` // the scopes the login must hold: wrangler's own login's, or cloudflare.toml's
-	TokenInShell   bool               `json:"tokenInShell"`
-	TokenInEnv     []string           `json:"tokenInEnvFiles"`
-	WranglerFolder string             `json:"wranglerFolder"`
-	DefaultLogin   string             `json:"defaultLogin"` // a checksum of the machine's own wrangler login, never its contents
-	OtherProfiles  []string           `json:"otherProfiles"`
-	FolderBindings map[string]string  `json:"folderBindings"`
+	Profile      string             `json:"profile"`
+	LoggedIn     bool               `json:"loggedIn"`
+	Accounts     []wrangler.Account `json:"accounts"`
+	Scopes       []string           `json:"scopes"` // what the login holds
+	Needs        []string           `json:"needs"`  // what it must hold: wrangler's own login's, or cloudflare.toml's
+	TokenInShell bool               `json:"tokenInShell"`
+	TokenInEnv   []string           `json:"tokenInEnvFiles"`
 }
 
 func (r repo) status(ctx context.Context, jsonOut bool) {
 	rep := statusReport{
-		Profile: r.w.Profile, LoggedIn: r.w.LoggedIn(), Accounts: []wrangler.Account{}, Scopes: []string{},
-		Needs:        r.wanted(ctx),
+		Profile: r.w.Profile, LoggedIn: r.w.LoggedIn(ctx), Accounts: []wrangler.Account{}, Scopes: []string{}, Needs: r.wanted(ctx),
 		TokenInShell: os.Getenv("CLOUDFLARE_API_TOKEN") != "", TokenInEnv: tokenEnvFiles(r.dir),
-		WranglerFolder: wrangler.Home(), DefaultLogin: fileHash(wrangler.DefaultLogin()), OtherProfiles: []string{},
-		FolderBindings: map[string]string{},
-	}
-	if entries, err := os.ReadDir(filepath.Join(rep.WranglerFolder, "config")); err == nil {
-		for _, e := range entries {
-			if name, ok := strings.CutSuffix(e.Name(), ".toml"); ok && name != "default" && name != r.w.Profile {
-				rep.OtherProfiles = append(rep.OtherProfiles, name)
-			}
-		}
-	}
-	if b, err := os.ReadFile(wrangler.Bindings()); err == nil {
-		json.Unmarshal(b, &rep.FolderBindings)
 	}
 	if rep.LoggedIn && !rep.TokenInShell && len(rep.TokenInEnv) == 0 {
 		must(r.w.Activate(ctx))
@@ -379,8 +361,6 @@ func (r repo) status(ctx context.Context, jsonOut bool) {
 		emit(rep)
 		return
 	}
-	home, _ := os.UserHomeDir()
-	short := func(s string) string { return strings.ReplaceAll(s, home, "~") }
 	yes := map[bool]string{true: "logged in", false: "not logged in"}
 	fmt.Printf("this repo's login    %s: %s\n", rep.Profile, yes[rep.LoggedIn])
 	for _, a := range rep.Accounts {
@@ -396,11 +376,7 @@ func (r repo) status(ctx context.Context, jsonOut bool) {
 	fmt.Printf("needs                %s (%s)\n", strings.Join(rep.Needs, " "), source)
 	fmt.Printf("CLOUDFLARE_API_TOKEN %s\n", map[bool]string{true: "SET in this shell (would override every login)", false: "not set"}[rep.TokenInShell])
 	fmt.Printf(".env with a token    %s\n", cmp.Or(strings.Join(rep.TokenInEnv, " "), "none"))
-	fmt.Printf("wrangler folder      %s\n", short(rep.WranglerFolder))
-	fmt.Printf("default login        config/default.toml %s\n", rep.DefaultLogin)
-	fmt.Printf("other logins         %s\n", cmp.Or(strings.Join(rep.OtherProfiles, " "), "none"))
-	b, _ := json.Marshal(rep.FolderBindings)
-	fmt.Printf("folder bindings      %s\n", short(string(b)))
+	fmt.Println("(wrangler auth list shows this machine's other logins, and the folders each is bound to)")
 }
 
 func accountNames(who wrangler.Who) string {
@@ -409,15 +385,6 @@ func accountNames(who wrangler.Who) string {
 		names = append(names, a.Name)
 	}
 	return strings.Join(names, ", ")
-}
-
-// fileHash is a short sha256 of a file, or "none"; the file's contents are never printed.
-func fileHash(path string) string {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return "none"
-	}
-	return fmt.Sprintf("%x", sha256.Sum256(b))[:16]
 }
 
 func exitCode(err error) int {

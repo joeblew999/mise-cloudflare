@@ -94,7 +94,7 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		if err != nil {
 			fail(err)
 		}
-		workers = append(workers, buildWorker{Env: "staging", Worker: sc.Name, Branch: b.Staging, Deploy: orDefault(b.Deploy, "npx wrangler deploy") + " --env staging"})
+		workers = append(workers, buildWorker{Env: "staging", Worker: sc.Name, Branch: b.Staging, Deploy: "npx wrangler deploy --env staging"})
 	}
 	for i := range workers {
 		workers[i].ScriptTag = workerTag(ctx, c, workers[i].Worker, workers[i].Env)
@@ -121,40 +121,33 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	if err != nil {
 		fail(err)
 	}
-	// The build token Workers Builds deploys with: one Cloudflare made (connecting a repository in the dashboard makes
-	// one), cloudflare.toml's by name, else the first. Cloudflare's own covers Workers Scripts, KV, R2 and Workers Routes;
-	// a Worker binding anything else (D1, Queues, …) needs that permission added to it in the dashboard.
+	// The build token Workers Builds deploys with: the account's first, which Cloudflare made (connecting a repository
+	// in the dashboard makes one). It covers Workers Scripts, KV, R2 and Workers Routes; a Worker binding anything else
+	// (D1, Queues, …) needs that permission added to it in the dashboard.
 	tokens, err := buildTokens(ctx, c)
 	if err != nil {
 		fail(err)
 	}
-	for _, t := range tokens {
-		if b.Token == "" || t.Name == b.Token {
-			rep.Token, b.Token = t.UUID, t.Name
-			break
-		}
+	var tokenName string
+	if len(tokens) > 0 {
+		rep.Token, tokenName = tokens[0].UUID, tokens[0].Name
 	}
 	if rep.Token == "" {
-		if b.Token != "" {
-			fail(fmt.Errorf("the account has no Workers Builds token named %q", b.Token))
-		}
 		fail(errors.New("the account has no Workers Builds token yet: connect any repository once in Cloudflare's dashboard (a Worker's Settings, Builds), which makes one, then run this again"))
 	}
 	rep.Repository = gh.Owner.Login + "/" + gh.Name
-	rep.Root = orDefault(b.Root, gh.root)
+	rep.Root = gh.root
 	rep.Build = orDefault(b.Build, installCommand(r.dir))
 	prodBranch := gh.DefaultBranch
 	if b.Staging != "" {
 		prodBranch = "production"
 	}
 	workers[0].Branch = orDefault(b.Branch, prodBranch)
-	workers[0].Deploy = orDefault(b.Deploy, "npx wrangler deploy") + envFlag(env)
-	workers[0].Preview = orDefault(b.Preview, "npx wrangler preview") + envFlag(env)
+	workers[0].Deploy = "npx wrangler deploy" + envFlag(env)
+	workers[0].Preview = "npx wrangler preview" + envFlag(env)
 	// Worker Previews (wrangler preview) need a previews block with every binding in it; Cloudflare's build fails without.
-	if strings.Contains(workers[0].Preview, "wrangler preview") {
-		if problems := rules.Previews(r.wc, true); len(problems) > 0 {
-			fail(errors.New(strings.Join(problems, "\n") + "\n(or set cloudflare.toml's [builds] preview to another command)"))
-		}
+	if problems := rules.Previews(r.wc, true); len(problems) > 0 {
+		fail(errors.New(strings.Join(problems, "\n")))
 	}
 	if len(workers) > 1 && workers[0].Branch == workers[1].Branch {
 		fail(fmt.Errorf("production and staging both deploy from %s: give them different branches", workers[0].Branch))
@@ -188,16 +181,14 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		}
 	}
 	// Previews get their own KV, D1 and R2, which wrangler preview doesn't make.
-	if strings.Contains(workers[0].Preview, "wrangler preview") {
-		rep.Previews = r.previews(ctx, false, jsonOut)
-	}
+	rep.Previews = r.previews(ctx, false, jsonOut)
 	// A branch's preview goes when the branch does; GitHub deletes a pull request's branch when it merges, with this on.
 	rep.DeleteMergedBranches = deleteMergedBranches(ctx, gh)
 	if jsonOut {
 		emit(rep)
 		return
 	}
-	fmt.Printf("✓ Workers Builds builds from %s, in %s, installing with %s:\n", rep.Repository, rep.Root, rep.Build)
+	fmt.Printf("✓ Workers Builds builds from %s, in %s, with %s:\n", rep.Repository, rep.Root, rep.Build)
 	for _, w := range workers {
 		name := "production"
 		if w.Env != "" {
@@ -206,7 +197,7 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		fmt.Printf("  %-10s %s: a push to %s runs %s\n", name, w.Worker, w.Branch, w.Deploy)
 	}
 	fmt.Printf("  previews   any other branch: %s, its URL on the pull request\n", workers[0].Preview)
-	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", b.Token)
+	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", tokenName)
 	fmt.Printf("  · Cloudflare's build token covers Workers Scripts, KV, R2 and Workers Routes: a Worker using more (D1, say) needs that permission added to it in the dashboard\n")
 	if rep.DeleteMergedBranches {
 		fmt.Printf("  GitHub deletes a pull request's branch when it merges, and Workers Builds its preview with it\n")

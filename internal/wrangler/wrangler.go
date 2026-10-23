@@ -77,35 +77,16 @@ func Output(cmd *exec.Cmd) ([]byte, error) {
 	return out, nil
 }
 
-// Home is wrangler's own folder on this machine, found the way wrangler finds it: ~/.wrangler if it exists, else
-// $XDG_CONFIG_HOME/.wrangler, else ~/Library/Preferences/.wrangler on macOS or ~/.config/.wrangler elsewhere.
-func Home() string {
-	home, _ := os.UserHomeDir()
-	if st, err := os.Stat(filepath.Join(home, ".wrangler")); err == nil && st.IsDir() {
-		return filepath.Join(home, ".wrangler")
-	}
-	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
-		return filepath.Join(x, ".wrangler")
-	}
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, "Library", "Preferences", ".wrangler")
-	}
-	return filepath.Join(home, ".config", ".wrangler")
+// LoggedIn reports whether the profile has a login on this machine, from wrangler's own list of them (wrangler auth
+// list).
+func (w W) LoggedIn(ctx context.Context) bool {
+	out, err := w.Plain(ctx, "auth", "list").CombinedOutput()
+	return err == nil && listed(out, w.Profile)
 }
 
-// ProfileFile is the file holding a profile's login.
-func ProfileFile(profile string) string { return filepath.Join(Home(), "config", profile+".toml") }
-
-// DefaultLogin is the machine's own wrangler login (wrangler login), which the tasks never use or change.
-func DefaultLogin() string { return filepath.Join(Home(), "config", "default.toml") }
-
-// Bindings is wrangler's file of folder → profile bindings.
-func Bindings() string { return filepath.Join(Home(), "profiles", "directory-bindings.json") }
-
-// LoggedIn reports whether the profile has a login on this machine.
-func (w W) LoggedIn() bool {
-	_, err := os.Stat(ProfileFile(w.Profile))
-	return err == nil
+// listed reports whether wrangler auth list's table has profile in its first column.
+func listed(table []byte, profile string) bool {
+	return regexp.MustCompile(`(?m)^│ ` + regexp.QuoteMeta(profile) + ` +│`).Match(table)
 }
 
 // Account is a Cloudflare account the login can use.
@@ -191,20 +172,27 @@ func Device() bool {
 }
 
 // Login makes or remakes the profile's login with exactly scopes, then binds the profile to the repo folder for anyone
-// running wrangler there by hand.
-//
-// In a browser (wrangler auth create), or with the device flow: wrangler auth create has no device flow (checked on
-// wrangler 4.151.3 and 4.152.0), so wrangler login --device logs in inside a temporary wrangler folder and its login
-// file becomes the profile's. wrangler writes a profile and its default login the same way (getAuthConfigFilePath in
-// wrangler 4.151.3), differing only in the file's name.
+// running wrangler there by hand: in a browser with wrangler auth create, or with the device flow (a link to open on
+// any device), which only wrangler login has (not auth create, as of wrangler 4.152.0), so deviceLogin gets the profile
+// from it.
 func (w W) Login(ctx context.Context, scopes []string, device bool) error {
-	if !device {
-		fmt.Printf("Logging in %s: your browser opens. Click Allow and pick the account.\n", w.Profile)
-		if err := Interactive(w.Plain(ctx, append([]string{"auth", "create", w.Profile, "--scopes"}, scopes...)...)); err != nil {
-			return fmt.Errorf("wrangler auth create %s: %w", w.Profile, err)
+	if device {
+		if err := w.deviceLogin(ctx, scopes); err != nil {
+			return err
 		}
 		return w.Activate(ctx)
 	}
+	fmt.Printf("Logging in %s: your browser opens. Click Allow and pick the account.\n", w.Profile)
+	if err := Interactive(w.Plain(ctx, append([]string{"auth", "create", w.Profile, "--scopes"}, scopes...)...)); err != nil {
+		return fmt.Errorf("wrangler auth create %s: %w", w.Profile, err)
+	}
+	return w.Activate(ctx)
+}
+
+// deviceLogin logs in with wrangler login --device inside a temporary wrangler folder (XDG_CONFIG_HOME), and makes the
+// login file it leaves the profile's: wrangler writes a profile's file and its default login's the same way
+// (getAuthConfigFilePath in wrangler 4.151.3), in its folder's config/, differing only in the name.
+func (w W) deviceLogin(ctx context.Context, scopes []string) error {
 	home, _ := os.UserHomeDir()
 	if st, err := os.Stat(filepath.Join(home, ".wrangler")); err == nil && st.IsDir() {
 		return fmt.Errorf("%s exists, so wrangler would ignore a temporary folder and overwrite the default login in it: move it away", filepath.Join(home, ".wrangler"))
@@ -224,13 +212,18 @@ func (w W) Login(ctx context.Context, scopes []string, device bool) error {
 	if err != nil {
 		return fmt.Errorf("the device login left no login file: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(ProfileFile(w.Profile)), 0o700); err != nil {
+	// wrangler's own folder: ~/.wrangler if it exists (refused above), else XDG_CONFIG_HOME's, else the OS's.
+	folder := filepath.Join(home, ".config", ".wrangler")
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+		folder = filepath.Join(x, ".wrangler")
+	} else if runtime.GOOS == "darwin" {
+		folder = filepath.Join(home, "Library", "Preferences", ".wrangler")
+	}
+	file := filepath.Join(folder, "config", w.Profile+".toml")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(ProfileFile(w.Profile), b, 0o600); err != nil {
-		return err
-	}
-	return w.Activate(ctx)
+	return os.WriteFile(file, b, 0o600)
 }
 
 // Activate binds the profile to the repo folder by its real path, the path wrangler looks a folder up by: bound by a

@@ -94,7 +94,8 @@ publishes that). When an upgraded wrangler asks for more, the next task logs in 
 
 `mise run cloudflare:builds` connects the Worker to its GitHub repository on Cloudflare: the repository's ids, the
 folder (a monorepo's subfolder works), the install command from the lockfile committed to git, `npx wrangler deploy` for
-the deploy branch and `npx wrangler preview` for every other branch (`cloudflare.toml`'s `[builds]` overrides any). With
+the deploy branch and `npx wrangler preview` for every other branch (`[builds] build` in `cloudflare.toml` gives a build
+command of its own, `npm ci && npm run build` say, and `[builds] branch` the deploy branch). With
 `[builds] staging = "main"`, as go-htmx4 has it, a push to `main` deploys **staging** (the wrangler environment
 `env.staging`, its own Worker with its own bindings), a push to `production` deploys **production**, and every other
 branch gets a preview. Then:

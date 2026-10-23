@@ -55,6 +55,9 @@ func TestExampleIsCurrent(t *testing.T) {
 			t.Errorf("%s/.mise/tasks/cloudflare.toml is stale: run mise run example (%v)", d, err)
 		}
 	}
+	if b, err := os.ReadFile("../../example/cloudflare.toml"); err != nil || string(b) != config.Template {
+		t.Errorf("example/cloudflare.toml isn't init's template, as it should be, every setting at its default (%v)", err)
+	}
 	want, _ := os.ReadFile("../../skills/cloudflare/SKILL.md")
 	if b, err := os.ReadFile("../../example/.claude/skills/cloudflare/SKILL.md"); err != nil || string(b) != string(want) {
 		t.Errorf("example/.claude/skills/cloudflare/SKILL.md is stale: run go tool cloudflare skill in example/ (%v)", err)

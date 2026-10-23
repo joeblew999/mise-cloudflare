@@ -1,8 +1,6 @@
 package wrangler
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -18,19 +16,11 @@ func TestScopes(t *testing.T) {
 	}
 }
 
-func TestHome(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
-	if got := Home(); got != filepath.Join(home, "xdg", ".wrangler") {
-		t.Errorf("with XDG_CONFIG_HOME: %s", got)
-	}
-	os.Mkdir(filepath.Join(home, ".wrangler"), 0o700)
-	if got := Home(); got != filepath.Join(home, ".wrangler") {
-		t.Errorf("~/.wrangler wins: %s", got)
-	}
-	if got := ProfileFile("p"); got != filepath.Join(home, ".wrangler", "config", "p.toml") {
-		t.Errorf("profile file %s", got)
+// TestListed: a profile is in wrangler auth list's table when it's the whole first column of a row.
+func TestListed(t *testing.T) {
+	table := []byte("│ Profile                 │ Bound Directories │\n│ my-repo                 │ /src/my-repo      │\n│ default                 │ -                 │\n")
+	if !listed(table, "my-repo") || listed(table, "my") || listed(nil, "my-repo") {
+		t.Error("a profile is listed when it's a row's whole first column")
 	}
 }
 
