@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -45,7 +44,6 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		fail(errors.New("cf isn't installed: run mise run cloudflare:builds, which brings it"))
 	}
 	r.refuseStrayTokens()
-	tag := r.workerTag()
 	c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
 	who, err := c.Whoami(ctx)
 	if err != nil {
@@ -64,6 +62,7 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		fail(fmt.Errorf("the cf login %s can use %d accounts; log it in again and pick one", c.Profile, len(who.Accounts)))
 	}
 	c.Account = who.Accounts[0].ID
+	tag := r.workerTag(ctx, c)
 	rep := buildsReport{Worker: r.wc.Name, ScriptTag: tag}
 
 	if off {
@@ -146,30 +145,23 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", b.Token)
 }
 
-// workerTag is the deployed Worker's tag, which Workers Builds attaches to, from what the last deploy here wrote to
-// .wrangler/output.json (mise run cloudflare:deploy).
-func (r repo) workerTag() string {
-	f, err := os.Open(filepath.Join(r.dir, ".wrangler", "output.json"))
-	tag := ""
-	if err == nil {
-		defer f.Close()
-		sc := bufio.NewScanner(f)
-		sc.Buffer(nil, 1<<20)
-		for sc.Scan() {
-			var e struct {
-				Type   string `json:"type"`
-				Worker string `json:"worker_name"`
-				Tag    string `json:"worker_tag"`
-			}
-			if json.Unmarshal(sc.Bytes(), &e) == nil && e.Type == "deploy" && e.Worker == r.wc.Name && e.Tag != "" {
-				tag = e.Tag
-			}
+// workerTag is the deployed Worker's tag, which Workers Builds attaches to, as Cloudflare has it (cf workers scripts
+// search: its id). The search matches names partly, so only the exact name counts.
+func (r repo) workerTag(ctx context.Context, c cf.CF) string {
+	var found []struct {
+		ID   string `json:"id"`
+		Name string `json:"script_name"`
+	}
+	if err := c.JSON(ctx, &found, "workers", "scripts", "search", "--name", r.wc.Name); err != nil {
+		fail(err)
+	}
+	for _, f := range found {
+		if f.Name == r.wc.Name && f.ID != "" {
+			return f.ID
 		}
 	}
-	if tag == "" {
-		fail(fmt.Errorf("Workers Builds attaches to a deployed Worker: deploy %s once from here first (mise run cloudflare:deploy), then run this again", r.wc.Name))
-	}
-	return tag
+	fail(fmt.Errorf("Workers Builds attaches to a deployed Worker, and %s isn't deployed: deploy it once first (mise run cloudflare:deploy), then run this again", r.wc.Name))
+	return ""
 }
 
 // installCommand installs the Worker's dependencies on Workers Builds, by its lockfile; npm when there's none, or one
