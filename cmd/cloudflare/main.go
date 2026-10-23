@@ -129,12 +129,13 @@ func main() {
 		claude(ctx, dir)
 		return
 	}
+	// No person in CI to click Allow, so no login: a CLOUDFLARE_API_TOKEN given to CI as a secret is CI's login. Said
+	// first, before anything else is needed.
+	if ci() && (args[0] == "login" || args[0] == "wrangler") && os.Getenv("CLOUDFLARE_API_TOKEN") == "" {
+		fail(errors.New("in CI there's no one to log in: give CI a CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID) as secrets, or deploy with Cloudflare's own Workers Builds"))
+	}
 	r := openRepo(ctx, dir, cfg, *profile)
 	if ci() && (args[0] == "login" || args[0] == "wrangler") {
-		// No person in CI to click Allow, so no login: a CLOUDFLARE_API_TOKEN given to CI as a secret is CI's login.
-		if os.Getenv("CLOUDFLARE_API_TOKEN") == "" {
-			fail(errors.New("in CI there's no one to log in: give CI a CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID) as secrets, or deploy with Cloudflare's own Workers Builds"))
-		}
 		if args[0] == "login" {
 			fmt.Println("✓ CI: wrangler uses CLOUDFLARE_API_TOKEN")
 			return
