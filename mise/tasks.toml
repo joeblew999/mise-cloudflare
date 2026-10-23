@@ -1,0 +1,40 @@
+# cloudflare-zero's mise tasks: the repo's own Cloudflare login, and the repo's wrangler on it (github.com/joeblew999/
+# cloudflare-zero). In a repo, go tool cloudflare tasks writes this file to .mise/tasks/cloudflare.toml, one of mise's
+# default task directories, from the cloudflare-zero version in its go.mod: don't edit it, run that again after
+# upgrading. --json prints one JSON document for a program; exit codes: 0 ok, 1 problems.
+
+["cloudflare:login"]
+description = "The repo's own Cloudflare login, with exactly cloudflare.toml's scopes: a browser on this machine, or a link to open on any device (Claude Code cloud sessions, CLOUDFLARE_LOGIN=device). Once, then again only when the scopes change"
+run = "go tool cloudflare login"
+
+["cloudflare:deploy"]
+description = "wrangler deploy on the repo's own login (logs in first if needed); what it deployed, URLs included, goes to .wrangler/output.json"
+env = { WRANGLER_OUTPUT_FILE_PATH = ".wrangler/output.json" }
+run = "go tool cloudflare wrangler deploy"
+
+["cloudflare:wrangler"]
+description = "Any wrangler command, with the repo's pinned wrangler on its own login: mise run cloudflare:wrangler -- d1 list"
+usage = 'arg "<args>" var=#true help="the wrangler command and its arguments"'
+run = "go tool cloudflare wrangler ${usage_args}"
+
+["cloudflare:status"]
+description = "The repo's login (logged in or not, its account and scopes), stray tokens, and this machine's other wrangler logins (a checksum, never their contents)"
+usage = 'flag "--json" help="one JSON document on stdout"'
+run = "go tool cloudflare -json=${usage_json:-false} status"
+
+["cloudflare:check"]
+description = "The repo's rules: no account or resource IDs in its wrangler config, no tokens in its files and nothing calling the machine's own login, .dev.vars and .env git-ignored, .dev.vars.example matching secrets.required, wrangler pinned. No account needed"
+usage = 'flag "--json" help="one JSON document on stdout"'
+run = "go tool cloudflare -json=${usage_json:-false} check"
+
+["cloudflare:logout"]
+description = "Log the repo's login out on Cloudflare and delete it, with its folder binding; the next task logs in again"
+run = "go tool cloudflare logout"
+
+["cloudflare:skill"]
+description = "Install or update the cloudflare agent skill (.claude/skills/cloudflare), which Claude Code uses to work on Cloudflare from this repo"
+run = "go tool cloudflare skill"
+
+["cloudflare:tasks"]
+description = "Write this file again from the cloudflare-zero version in go.mod: run it after upgrading"
+run = "go tool cloudflare tasks"
