@@ -108,12 +108,12 @@ ensure_login() {
   [ "$(granted_scopes | sort -u)" = "$want" ] || { echo "the new login's scopes still don't match CF_SCOPES ($CF_SCOPES)" >&2; exit 1; }
 }
 
-# Whether this repo's Worker exists on the login's account: exit 0 if it does, 1 if not (Cloudflare's error 10007).
-# Any other failure is printed and exits 2.
+# Whether this repo's Worker exists on the login's account: 0 if it does, 3 if not (Cloudflare's error 10007).
+# Any other failure is printed and returns 2. 3, not 1, so a failure elsewhere (an `exit 1`) can't read as "not deployed".
 worker_exists() {
   local out
   out=$(wrangler deployments list --name "$(worker_config | jq -r .name)" --json </dev/null 2>&1) && return 0
-  grep -q 'code: 10007' <<<"$out" && return 1
+  grep -q 'code: 10007' <<<"$out" && return 3
   echo "$out" >&2; return 2
 }
 
