@@ -1,0 +1,13 @@
+# prove-actions' Worker, set up as a repo whose GitHub Actions deploy it ([workflow] deploy in cloudflare.toml).
+
+[settings]
+idiomatic_version_file_enable_tools = ["go"]
+
+[tools]
+node = "26.11.1"
+
+[tasks.setup]
+run = "npm ci --no-audit --no-fund"
+
+[task_config]
+includes = [".mise/tasks/cloudflare.toml"]

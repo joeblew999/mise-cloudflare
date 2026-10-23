@@ -1,0 +1,27 @@
+# The cloudflare binary for every machine, on each v* tag (.github/workflows/release.yml), so a repo without Go gets it
+# with mise: "github:joeblew999/mise-cloudflare" = "<version>". A repo with Go uses go tool cloudflare instead.
+version: 2
+project_name: mise-cloudflare
+builds:
+  - id: cloudflare
+    main: ./cmd/cloudflare
+    binary: cloudflare
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+release:
+  github:
+    owner: joeblew999
+    name: mise-cloudflare
+changelog:
+  disable: true

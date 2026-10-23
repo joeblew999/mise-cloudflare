@@ -1,16 +1,22 @@
-# A minimal repo that uses the shared Cloudflare tasks in ../shared, as any other repo would.
-# It refers only to ../shared and ../PLAN.md, never to anything else in this repo.
+# A Worker repo that uses mise-cloudflare exactly as any other repo would: go.mod's tool line, cloudflare.toml, and the
+# tasks go tool cloudflare tasks writes into .mise/tasks/.
+
+[settings]
+# go.mod's toolchain line is the Go pin; this makes mise install honour it.
+idiomatic_version_file_enable_tools = ["go"]
 
 [tools]
 node = "26.11.1"   # runs wrangler
 aube = "2.8.1"     # installs wrangler from package.json
-jq = "1.8.2"       # reads wrangler's JSON
 
-[env]
-CF_PROFILE = "cloudflare-zero-example"   # this repo's own Cloudflare login (a wrangler profile)
-CF_SCOPES = "account:read user:read workers:write workers_kv:write workers_scripts:write d1:write pipelines:write"  # what it may do
+[tasks.setup]
+description = "Install the pinned wrangler, and make .dev.vars from .dev.vars.example for wrangler dev (no account)"
+run = ["aube install", "cp -n .dev.vars.example .dev.vars || true"]
 
+[tasks.dev]
+description = "wrangler dev: the Worker on http://localhost:8787, with local D1, KV and R2 and .dev.vars (no account)"
+run = "node node_modules/wrangler/bin/wrangler.js dev"
+
+# mise-cloudflare's tasks, as go tool cloudflare tasks writes them.
 [task_config]
-# Another repo writes git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=<tag>
-# here (and sets [settings] experimental = true, which mise needs for git includes).
-includes = ["{{config_root}}/../shared", "mise-tasks"]
+includes = [".mise/tasks/cloudflare.toml"]

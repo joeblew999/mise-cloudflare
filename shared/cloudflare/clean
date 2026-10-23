@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Remove this repo's local state (node_modules, .wrangler) and its Cloudflare login (wrangler auth delete {{env.CF_PROFILE}}, which also drops its folder binding). Keeps .dev.vars, which may hold your own values, and the machine's other logins"
-#MISE depends=["cloudflare:setup"]
-#MISE timeout="2m"
-set -euo pipefail
-. "$(dirname "$0")/.helpers.sh"
-if [ -f "$(profile_file)" ]; then refuse_stray_tokens; wrangler auth delete "$CF_PROFILE" </dev/null; fi
-rm -rf node_modules .wrangler
-echo "removed node_modules, .wrangler and the $CF_PROFILE login"

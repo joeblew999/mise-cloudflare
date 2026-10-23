@@ -1,0 +1,52 @@
+# mise-cloudflare's CI: the Go tests and the release config, which need no Cloudflare account (example/ has its own
+# workflow, cloudflare-example.yml, stamped by the tool as any repo's is). Cloudflare credentials
+# never come here. Shell steps only, as go-htmx4's: no JavaScript actions.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # mise's GitHub downloads
+      MISE_YES: "1"
+    steps:
+      - name: Check out with git (no actions/checkout)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+          git log --oneline -1
+
+      - name: mise and the pinned tools
+        run: |
+          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_QUIET=1 sh
+          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          mise install
+
+      - name: The Go tests (no Cloudflare account)
+        run: mise run test
+
+      - name: The release config is valid
+        run: mise exec -- goreleaser check
+
+      - name: "In CI with no token, a login stops at once instead of waiting for a browser"
+        working-directory: example
+        run: |
+          if out=$(mise run cloudflare:login 2>&1); then echo "$out"; echo "logged in with no one to log in"; exit 1; fi
+          grep -q "in CI there's no one to log in" <<<"$out" && echo "stopped, as it should"

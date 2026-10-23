@@ -1,20 +1,48 @@
-# cloudflare-zero: Cloudflare without the token mess. Each repo gets its own wrangler login (a profile named after it,
-# bound to its folder) and a few shared mise tasks for the glue. Plan: PLAN.md
+# mise-cloudflare: a repo's own Cloudflare login, and wrangler on it, as a Go tool (go tool cloudflare) with its mise
+# tasks and agent skill, the way github.com/joeblew999/go-htmx4's seo and intl are built. README.md says how to use it.
 #
-#   shared/cloudflare/  the shared tasks (cloudflare:<verb>). Other repos include shared/ by git URL, pinned to a tag:
-#                       git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=<tag>
-#   example/            a minimal repo that uses them, as any other repo would. It has its own mise.toml, but mise also
-#                       reads this one above it, so runs that prove it stands alone use a copy outside this repo.
-#
-# Shared tasks may only use settings the including repo is told to set (CF_PROFILE), never anything else of its.
+#   cmd/cloudflare/  the command;  config/  cloudflare.toml;  mise/  its tasks;  skills/  its agent skill
+#   example/         a Worker repo that uses it, exactly as any other repo would
+#   e2e/             the proofs, on a real Cloudflare account (mise run prove …)
+
+[settings]
+# go.mod's toolchain line is the Go pin; this makes mise install honour it.
+idiomatic_version_file_enable_tools = ["go"]
 
 [tools]
-jq = "1.8.2"       # reads wrangler's JSON
-usage = "7.0.1"    # --help and tab-completion for the tasks' #USAGE flags
+node = "26.11.1"   # example/'s wrangler
+aube = "2.8.1"     # installs it
+usage = "7.0.1"    # --help and tab-completion for the tasks' flags
+goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
+"npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI: prove-builds' Workers Builds (a repo gets it from the cloudflare:builds task)
 
-[env]
-CF_PROFILE = "cloudflare-zero"   # this repo's own Cloudflare login (a wrangler profile)
-CF_ZERO_REF = "main"             # the ref of this repo that prove-other-repo includes by git URL
+[tasks.example]
+description = "Stamp example/ the way any repo gets mise-cloudflare: go tool cloudflare tasks, skill, workflow and claude there, from this version (the Go tests and cloudflare:check fail while it's stale)"
+dir = "example"
+run = ["go tool cloudflare tasks", "go tool cloudflare skill", "go tool cloudflare workflow", "go tool cloudflare claude"]
 
-[task_config]
-includes = ["shared", "mise-tasks"]   # the shared tasks also run here, on this repo's own login; then its own
+[tasks.test]
+description = "The Go tests: no Cloudflare account, nothing deployed"
+run = "go vet ./... && go test ./..."
+
+[tasks.prove]
+description = "Prove it end to end in example/, on its own login (a browser, or with CLOUDFLARE_LOGIN=device a link for any device, the first time only): a local Worker with no login at all, deploy, the live Worker's D1, KV, R2 and secret, a second deploy that asks nothing, stray tokens refused, everything deleted again, the machine's default login untouched. --clean also logs the login out"
+usage = 'flag "--clean" help="also log the example login out and delete it; the next run logs in again"'
+run = "CLOUDFLARE_E2E=1 PROVE_CLEAN=${usage_clean:-false} go test ./e2e -run '^TestProve$' -count=1 -v -timeout 30m"
+
+[tasks.prove-other-repo]
+description = "Prove a brand-new repo gets it all from config alone: go get -tool from GitHub (MISE_CLOUDFLARE_REF, default main), go tool cloudflare init, then the same proof on its own login (cloudflare-zero-other, kept for the next run; --clean logs it out)"
+usage = 'flag "--clean" help="also log its login out and delete it"'
+run = "CLOUDFLARE_E2E=1 PROVE_CLEAN=${usage_clean:-false} go test ./e2e -run '^TestOtherRepo$' -count=1 -v -timeout 30m"
+
+[tasks.prove-basin]
+description = "Prove Basin works on a repo's own login, no API token: in example/ make an R2 bucket, turn on Basin Catalog, create a Basin Pipeline (stream, catalog sink, SQL), send events with the login's token, read them back with Basin SQL, then remove it all"
+run = "CLOUDFLARE_E2E=1 go test ./e2e -run '^TestBasin$' -count=1 -v -timeout 30m"
+
+[tasks.prove-builds]
+description = "Prove go tool cloudflare builds: Workers Builds deploys e2e/testdata/builds from GitHub with Cloudflare's own token, a push to a throwaway deploy branch going live and another branch getting a preview URL; then the setup, the branches and the Worker removed. main is never touched"
+run = "CLOUDFLARE_E2E=1 go test ./e2e -run '^TestBuilds$' -count=1 -v -timeout 45m"
+
+[tasks.prove-actions]
+description = "Prove the GitHub Actions deploy path ([workflow] deploy): cloudflare ci-token stores CI's token as this repository's secrets; on a throwaway branch with the stamped workflow, GitHub Actions deploys e2e/testdata/actions; a pull request gets a preview pr-<number>, its URL commented; closing it deletes the preview; then everything is removed. main is never touched. The first time, a cf login approved on any device"
+run = "CLOUDFLARE_E2E=1 go test ./e2e -run '^TestActions$' -count=1 -v -timeout 60m"

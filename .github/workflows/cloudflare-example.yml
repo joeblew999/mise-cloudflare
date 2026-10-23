@@ -1,0 +1,51 @@
+# Written by mise-cloudflare (cloudflare workflow, 0.0.0): don't edit it. After upgrading, run
+# mise run cloudflare:workflow again; cloudflare:check fails while it's out of date.
+#
+# What GitHub Actions runs for the Worker in example on every push and pull request: its setup and test tasks if it has
+# them, then cloudflare:check (no account or resource IDs, no tokens, secrets listed, wrangler pinned). No Cloudflare
+# credentials: Cloudflare's Workers Builds deploys (mise run cloudflare:builds). Shell steps only: no JavaScript actions.
+name: cloudflare-example
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-example-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # A pull request from this repository already ran as a push; one from a fork runs here, read-only.
+    if: github.event_name == 'push' || (github.event.action != 'closed' && github.event.pull_request.head.repo.full_name != github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # mise's GitHub downloads
+      MISE_YES: "1"
+    steps:
+      - name: Check out with git (no actions/checkout)
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+          git log --oneline -1
+
+      - name: mise and the pinned tools
+        run: |
+          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_QUIET=1 sh
+          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          cd "example" && mise install
+
+      - name: setup, test and cloudflare:check, in example
+        working-directory: example
+        run: |
+          if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
+          if mise tasks info test > /dev/null 2>&1; then mise run test; fi
+          mise run cloudflare:check

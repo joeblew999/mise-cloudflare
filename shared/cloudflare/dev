@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Run this repo's Worker locally with wrangler dev (http://localhost:8787), with local D1, KV and R2 and .dev.vars. No Cloudflare account needed. Stop with Ctrl-C"
-#MISE depends=["cloudflare:setup"]
-set -euo pipefail
-. "$(dirname "$0")/.helpers.sh"
-wrangler dev

@@ -1,0 +1,95 @@
+
+  # cloudflare.toml's [workflow] deploy: GitHub Actions deploys, instead of Workers Builds, with the CLOUDFLARE_API_TOKEN
+  # and CLOUDFLARE_ACCOUNT_ID secrets (cloudflare ci-token puts them there): a push to BRANCH deploys production, and
+  # each pull request from this repository gets a preview named pr-<number>, its URL commented on the pull request,
+  # deleted when the pull request closes.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/BRANCH'
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MISE_YES: "1"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check out with git (no actions/checkout)
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+      - name: mise, the pinned tools, setup
+        run: |
+          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_QUIET=1 sh
+          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
+      - name: Deploy production
+        working-directory: DIR
+        run: mise run cloudflare:deploy
+
+  preview:
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # the preview's URL on the pull request
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MISE_YES: "1"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check out with git (no actions/checkout)
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+      - name: mise, the pinned tools, setup
+        run: |
+          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_QUIET=1 sh
+          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
+      - name: Deploy the preview pr-${{ github.event.number }}, and comment its URL
+        working-directory: DIR
+        env:
+          PR: ${{ github.event.number }}
+        run: |
+          out=$(mise run cloudflare:wrangler -- preview --name "pr-$PR" 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' <<<"$out" | head -1)
+          body="Preview pr-$PR of NAME: $url (deployed by GitHub Actions at ${GITHUB_SHA:0:7}). <!-- mise-cloudflare:NAME -->"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq '[.[] | select(.body | contains("<!-- mise-cloudflare:NAME -->"))][0].id // empty')
+          if [ -n "$id" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" > /dev/null
+          else gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null; fi
+
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MISE_YES: "1"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check out with git (no actions/checkout)
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+      - name: mise, the pinned tools, setup
+        run: |
+          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_QUIET=1 sh
+          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
+      - name: Delete the preview pr-${{ github.event.number }}
+        working-directory: DIR
+        run: mise run cloudflare:wrangler -- preview delete --name "pr-${{ github.event.number }}" --skip-confirmation

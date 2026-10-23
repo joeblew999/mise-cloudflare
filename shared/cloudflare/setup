@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Get this repo ready for local dev, no Cloudflare account needed: install its pinned wrangler (aube install), and copy .dev.vars.example to .dev.vars if there isn't one"
-#MISE timeout="5m"
-set -euo pipefail
-aube install
-if [ -f .dev.vars.example ] && [ ! -f .dev.vars ]; then cp .dev.vars.example .dev.vars && echo "made .dev.vars from .dev.vars.example"; fi
