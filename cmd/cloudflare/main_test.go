@@ -12,16 +12,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joeblew999/mise-cloudflare/config"
 	"github.com/joeblew999/mise-cloudflare/mise"
 )
 
-var commands = []string{"init", "dev", "login", "wrangler", "status", "check", "builds", "previews", "ci-token", "logout", "version"}
+var commands = []string{"init", "update", "help", "dev", "deploy", "preview", "wrangler", "github", "actions", "check", "login", "logout", "version"}
 
 // TestTasks: every command the tasks run is one cloudflare has, and tasks writes them.
 func TestTasks(t *testing.T) {
-	for _, m := range regexp.MustCompile(`go tool cloudflare (?:-\S+ )*([\w-]+)`).FindAllStringSubmatch(string(mise.Tasks), -1) {
-		if !slices.Contains(commands, m[1]) {
+	// go tool cloudflare, its flags, then its command: none is the guide.
+	for _, m := range regexp.MustCompile(`go tool cloudflare(?: -\S+)*(?: ([a-z][\w-]*))?`).FindAllStringSubmatch(string(mise.Tasks), -1) {
+		if m[1] != "" && !slices.Contains(commands, m[1]) {
 			t.Errorf("mise/tasks.toml runs cloudflare %s, which it doesn't have", m[1])
 		}
 	}
@@ -40,9 +40,9 @@ func TestSkill(t *testing.T) {
 	if err != nil || !regexp.MustCompile(`(?s)^---\nname: cloudflare\ndescription: .+\n---\n`).Match(b) {
 		t.Fatalf("SKILL.md: %v\n%.200s", err, b)
 	}
-	for _, m := range regexp.MustCompile(`cloudflare:([\w-]+)`).FindAllStringSubmatch(string(b), -1) {
-		if !regexp.MustCompile(`\["cloudflare:` + m[1] + `"\]`).Match(mise.Tasks) {
-			t.Errorf("the skill names cloudflare:%s, which the tasks don't have", m[1])
+	for _, m := range regexp.MustCompile(`mise run cloudflare ([a-z][\w-]*)`).FindAllStringSubmatch(string(b), -1) {
+		if !slices.Contains(commands, m[1]) && m[1] != "help" {
+			t.Errorf("the skill names cloudflare %s, which isn't a command", m[1])
 		}
 	}
 }
@@ -53,9 +53,6 @@ func TestExampleIsCurrent(t *testing.T) {
 		if b, err := os.ReadFile(filepath.Join("../..", d, tasksFile)); err != nil || string(b) != string(mise.Tasks) {
 			t.Errorf("%s/%s is stale: run mise run example (%v)", d, tasksFile, err)
 		}
-	}
-	if b, err := os.ReadFile("../../example/cloudflare.toml"); err != nil || string(b) != config.Template {
-		t.Errorf("example/cloudflare.toml isn't init's template, as it should be, every setting at its default (%v)", err)
 	}
 	want, _ := os.ReadFile("../../skills/cloudflare/SKILL.md")
 	if b, err := os.ReadFile("../../example/.claude/skills/cloudflare/SKILL.md"); err != nil || string(b) != string(want) {
@@ -121,14 +118,14 @@ func TestTasksFor(t *testing.T) {
 		t.Error("tasks for a repo without Go run go tool")
 	}
 	pin := `"github:joeblew999/mise-cloudflare" = "0.1.0"`
-	if n, tasks := strings.Count(string(b), pin), strings.Count(string(b), `["cloudflare:`); n != tasks {
+	if n, tasks := strings.Count(string(b), pin), len(regexp.MustCompile(`(?m)^\["cloudflare(:[^"]+)?"\]`).FindAll(b, -1)); n != tasks {
 		t.Errorf("%d of %d tasks pin the release:\n%s", n, tasks, b)
 	}
 	if !strings.Contains(string(b), `tools = { `+pin+`, "npm:cf" = "`) {
-		t.Errorf("cloudflare:builds pins both cloudflare and cf in one tools table:\n%s", b)
+		t.Errorf("cloudflare github pins both cloudflare and cf in one tools table:\n%s", b)
 	}
-	if !regexp.MustCompile(`(?m)^run = "cloudflare -off=`).Match(b) {
-		t.Errorf("builds runs the binary:\n%s", b)
+	if !regexp.MustCompile(`(?m)^run = "cloudflare"$`).Match(b) || strings.Contains(string(b), `run = "go tool`) {
+		t.Errorf("the tasks run the binary:\n%s", b)
 	}
 }
 
@@ -142,7 +139,7 @@ func TestWorkflowFor(t *testing.T) {
 	sub := filepath.Join(top, "workers", "api")
 	os.MkdirAll(sub, 0o755)
 	for dir, want := range map[string]string{top: "cloudflare.yml", sub: "cloudflare-workers-api.yml"} {
-		path, b, err := workflowFor(context.Background(), dir, config.Workflow{})
+		path, b, err := workflowFor(context.Background(), dir, false, "")
 		if err != nil || filepath.Base(path) != want || filepath.Dir(path) != filepath.Join(mustReal(t, top), ".github", "workflows") {
 			t.Errorf("%s: %s, %v", dir, path, err)
 		}
@@ -150,14 +147,14 @@ func TestWorkflowFor(t *testing.T) {
 			t.Errorf("%s: placeholders left:\n%s", want, b)
 		}
 	}
-	_, b, _ := workflowFor(context.Background(), sub, config.Workflow{})
+	_, b, _ := workflowFor(context.Background(), sub, false, "")
 	if !strings.Contains(string(b), "working-directory: workers/api") || !strings.Contains(string(b), "name: cloudflare-workers-api") {
 		t.Errorf("the subfolder's workflow:\n%s", b)
 	}
 	if strings.Contains(string(b), "CLOUDFLARE_API_TOKEN") {
 		t.Error("a workflow that doesn't deploy holds a Cloudflare token")
 	}
-	_, b, _ = workflowFor(context.Background(), sub, config.Workflow{Deploy: true, Branch: "release"})
+	path, b, _ := workflowFor(context.Background(), sub, true, "release")
 	for _, want := range []string{"refs/heads/release", "--name \"pr-$PR\"", "preview delete", "secrets.CLOUDFLARE_API_TOKEN", "pull-requests: write"} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("the deploying workflow lacks %q", want)
@@ -165,6 +162,12 @@ func TestWorkflowFor(t *testing.T) {
 	}
 	if regexp.MustCompile(`\b(VERSION|NAME|DIR|BRANCH)\b|: &\w+|- \*\w+`).Match(b) {
 		t.Errorf("placeholders or YAML anchors left:\n%s", b)
+	}
+	// The workflow itself says whether it deploys, and from which branch: init keeps it so.
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, b, 0o644)
+	if deploys, branch := workflowMode(context.Background(), sub); !deploys || branch != "release" {
+		t.Errorf("a deploying workflow reads as deploys=%v from %q", deploys, branch)
 	}
 }
 
@@ -199,9 +202,9 @@ func TestClaude(t *testing.T) {
 	}
 }
 
-// TestCITokenHelp: the dashboard link picks every Workers permission it has a key for, and names the token.
-func TestCITokenHelp(t *testing.T) {
-	help := ciTokenHelp("w")
+// TestActionsTokenHelp: the dashboard link picks every Workers permission it has a key for, and names the token.
+func TestActionsTokenHelp(t *testing.T) {
+	help := actionsTokenHelp("w")
 	u, err := url.Parse(regexp.MustCompile(`https://dash\.cloudflare\.com/\S+`).FindString(help))
 	if err != nil {
 		t.Fatal(err)

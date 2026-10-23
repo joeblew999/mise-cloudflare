@@ -16,7 +16,7 @@ var Tasks []byte
 //go:embed workflow.yml
 var Workflow []byte
 
-// WorkflowDeploy is the jobs workflow.yml gets when GitHub Actions deploys (cloudflare.toml's [workflow] deploy):
+// WorkflowDeploy is the jobs workflow.yml gets when GitHub Actions deploys (cloudflare actions):
 // production from BRANCH, a preview per pull request, deleted when it closes.
 //
 //go:embed workflow-deploy.yml

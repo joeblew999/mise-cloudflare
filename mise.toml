@@ -1,7 +1,7 @@
 # mise-cloudflare: a repo's own Cloudflare login, and wrangler on it, as a Go tool (go tool cloudflare) with its mise
 # tasks and agent skill, the way github.com/joeblew999/go-htmx4's seo and intl are built. README.md says how to use it.
 #
-#   cmd/cloudflare/  the command;  config/  cloudflare.toml;  mise/  its tasks;  skills/  its agent skill
+#   cmd/cloudflare/  the command, a file per command;  mise/  what init writes into a repo;  skills/  its agent skill
 #   example/         a Worker repo that uses it, exactly as any other repo would
 #   e2e/             one real deploy, before a release (mise run prove)
 
@@ -14,10 +14,10 @@ node = "26.11.1"   # example/'s wrangler
 aube = "2.8.1"     # installs it
 usage = "7.0.1"    # --help and tab-completion for the tasks' flags
 goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
-"npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI, for cloudflare:builds (a repo gets it from that task's tools)
+"npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI, for cloudflare github (a repo gets it from that task's tools)
 
 [tasks.example]
-description = "Set example/ up with this version, as any repo is: go tool cloudflare init there (the Go tests and cloudflare:check fail while it's stale)"
+description = "Set example/ up with this version, as any repo is: go tool cloudflare init there (the Go tests and cloudflare check fail while it's stale)"
 dir = "example"
 run = "go tool cloudflare init"
 

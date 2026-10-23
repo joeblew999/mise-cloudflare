@@ -37,16 +37,7 @@ type previewResource struct {
 // and production's and staging's stay theirs. Run again, it makes only what's new. With off, it takes them out of the
 // Previews Base and deletes them. The Worker must be on Cloudflare already: deployed once, or by Workers Builds.
 func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource {
-	// The Worker's bindings of the kinds wrangler deploy creates (wconfig.Created: KV, D1, R2) that the previews block
-	// leaves out, by wrangler's own types for them.
-	var out []previewResource
-	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
-		typ := r.wc.Bindings[n]
-		c, created := wconfig.Created[typ]
-		if _, declared := r.wc.PreviewBindings[n]; created && !declared {
-			out = append(out, previewResource{Binding: n, Type: typ, Kind: c.What, Name: previewName(r.wc.Name, n)})
-		}
-	}
+	out := r.previewNeeds()
 	if len(out) == 0 {
 		if !jsonOut {
 			fmt.Printf("✓ %s has no KV, D1 or R2 binding for its previews to get their own of\n", r.wc.Name)
@@ -89,6 +80,51 @@ func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource
 		}
 	}
 	return out
+}
+
+// previewNeeds is the previews' own KV, D1 and R2 the Worker needs: one for each of its bindings of the kinds wrangler
+// deploy creates (wconfig.Created) that its previews block leaves out, by wrangler's own types for them.
+func (r repo) previewNeeds() []previewResource {
+	var out []previewResource
+	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
+		typ := r.wc.Bindings[n]
+		c, created := wconfig.Created[typ]
+		if _, declared := r.wc.PreviewBindings[n]; created && !declared {
+			out = append(out, previewResource{Binding: n, Type: typ, Kind: c.What, Name: previewName(r.wc.Name, n)})
+		}
+	}
+	return out
+}
+
+// previewsMissing names the previews' own KV, D1 and R2 the Worker's Previews Base on Cloudflare doesn't have yet: a
+// binding added since they were made. Nil if it can't tell.
+func (r repo) previewsMissing(ctx context.Context, token, account string) []string {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://api.cloudflare.com/client/v4/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	var res struct {
+		Success bool
+		Result  struct {
+			Base struct {
+				Env map[string]any `json:"env"`
+			} `json:"previews_base_config"`
+		}
+	}
+	if json.NewDecoder(resp.Body).Decode(&res) != nil || !res.Success {
+		return nil
+	}
+	var missing []string
+	for _, p := range r.previewNeeds() {
+		if _, ok := res.Result.Base.Env[p.Binding]; !ok {
+			missing = append(missing, p.Kind+" "+p.Binding)
+		}
+	}
+	return missing
 }
 
 // previewName is the name of the previews' own resource for a binding: <worker>-previews-<binding>, lowercase, with
@@ -193,7 +229,7 @@ func (r repo) cloudflareAPI(ctx context.Context) (token, account string) {
 	if ci() {
 		token, account = os.Getenv("CLOUDFLARE_API_TOKEN"), os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 		if token == "" || account == "" {
-			fail(errors.New("in CI this needs the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets (cloudflare ci-token stores them)"))
+			fail(errors.New("in CI this needs the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets (mise run cloudflare actions stores them)"))
 		}
 		return token, account
 	}
@@ -236,7 +272,7 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 	case res.Success:
 		return nil
 	case resp.StatusCode == http.StatusNotFound:
-		return fmt.Errorf("%s %w: deploy it once first (mise run cloudflare:deploy), then this again", worker, errNotOnCloudflare)
+		return fmt.Errorf("%s %w: deploy it once first (mise run cloudflare deploy), then this again", worker, errNotOnCloudflare)
 	default:
 		return fmt.Errorf("Cloudflare refused %s's Previews Base (HTTP %d): %v", worker, resp.StatusCode, res.Errors)
 	}

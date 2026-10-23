@@ -21,6 +21,6 @@ are. README.md is the whole picture; read it first.
   Workers Builds deploys with Cloudflare's own build token. The one token is CI's, as a GitHub secret.
 - Never parse a wrangler config here: wrangler reads it (`internal/wconfig`).
 - The repo's login asks for wrangler's own login's scopes, read from the repo's wrangler (`wrangler login
-  --scopes-list`): never a list of binding kinds or a binding-to-scope table here. `cloudflare.toml`'s scopes replace
-  them exactly, for a narrower login.
+  --scopes-list`): never a list of binding kinds or a binding-to-scope table here. There's no settings file: every choice is a
+  task's flag, kept where it lives (Cloudflare's Workers Builds setup, the repo's workflow file).
 - Work with the cloud session through pull request comments, never through the owner copying text between devices.

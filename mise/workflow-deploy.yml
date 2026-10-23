@@ -1,6 +1,6 @@
 
-  # cloudflare.toml's [workflow] deploy: GitHub Actions deploys, instead of Workers Builds, with the CLOUDFLARE_API_TOKEN
-  # and CLOUDFLARE_ACCOUNT_ID secrets (cloudflare ci-token puts them there): a push to BRANCH deploys production, and
+  # GitHub Actions deploys, instead of Workers Builds (mise run cloudflare actions), with the CLOUDFLARE_API_TOKEN
+  # and CLOUDFLARE_ACCOUNT_ID secrets it stored: a push to BRANCH deploys production, and
   # each pull request from this repository gets a preview named pr-<number>, its URL commented on the pull request,
   # deleted when the pull request closes.
   deploy:
@@ -28,7 +28,7 @@
           cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
       - name: Deploy production
         working-directory: DIR
-        run: mise run cloudflare:deploy
+        run: mise run cloudflare deploy
 
   preview:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
@@ -55,15 +55,12 @@
           curl -fsSL https://mise.run | MISE_QUIET=1 sh
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
-      - name: The previews' own KV, D1 and R2, in the Worker's Previews Base
-        working-directory: DIR
-        run: mise run cloudflare:previews
       - name: Deploy the preview pr-${{ github.event.number }}, and comment its URL
         working-directory: DIR
         env:
           PR: ${{ github.event.number }}
         run: |
-          out=$(mise run cloudflare:wrangler -- preview --name "pr-$PR" 2>&1) || { echo "$out"; exit 1; }
+          out=$(mise run cloudflare preview --name "pr-$PR" 2>&1) || { echo "$out"; exit 1; }
           echo "$out"
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' <<<"$out" | head -1)
           body="Preview pr-$PR of NAME: $url (deployed by GitHub Actions at ${GITHUB_SHA:0:7}). <!-- mise-cloudflare:NAME -->"
@@ -95,4 +92,4 @@
           cd "DIR" && mise install && if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
       - name: Delete the preview pr-${{ github.event.number }}
         working-directory: DIR
-        run: mise run cloudflare:wrangler -- preview delete --name "pr-${{ github.event.number }}" --skip-confirmation
+        run: mise run cloudflare wrangler preview delete --name "pr-${{ github.event.number }}" --skip-confirmation

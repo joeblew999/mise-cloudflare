@@ -93,7 +93,7 @@ func (r repo) wrangler(args ...string) string {
 	return r.cf(nil, append([]string{"wrangler"}, args...)...)
 }
 
-// status is go tool cloudflare status -json (its JSON only: the tool prints nothing else on stdout).
+// status is cloudflare -json, the guide (its JSON only: the tool prints nothing else on stdout).
 type status struct {
 	Profile  string   `json:"profile"`
 	LoggedIn bool     `json:"loggedIn"`
@@ -102,7 +102,7 @@ type status struct {
 
 func (r repo) status() status {
 	r.t.Helper()
-	name, a := r.toolArgs("-json", "status")
+	name, a := r.toolArgs("-json")
 	cmd := exec.Command(name, a...)
 	cmd.Dir = r.dir
 	cmd.Stderr = os.Stderr
@@ -297,7 +297,7 @@ func (r repo) deleteAll() {
 func prove(t *testing.T, r repo, clean bool) {
 	r.step("1. A developer with no Cloudflare login at all: setup, the rules, a local Worker")
 	r.must(nil, "mise", "run", "setup")
-	r.must(nil, "mise", "run", "cloudflare:check")
+	r.must(nil, "mise", "run", "cloudflare", "check")
 	if body := r.localWorker(); !allWork(body) {
 		t.Fatalf("the local Worker answered %s", body)
 	}
@@ -413,21 +413,21 @@ func TestOtherRepo(t *testing.T) {
 	r.cf(nil, "init")
 	r.must(nil, "mise", "trust", "-q", "mise.toml")
 	r.must(nil, "git", "add", "-A")
-	r.must(nil, "wc", "-l", "go.mod", "cloudflare.toml", "mise.toml", "wrangler.jsonc", "package.json", ".dev.vars.example", ".gitignore", "src/worker.js")
+	r.must(nil, "wc", "-l", "go.mod", "mise.toml", "wrangler.jsonc", "package.json", ".dev.vars.example", ".gitignore", "src/worker.js")
 	r.must(nil, "mise", "run", "setup")
 	// The login's binding to this folder goes with the folder: wrangler would keep it, for a folder that's gone.
 	t.Cleanup(func() { r.run(nil, "npx", "wrangler", "auth", "deactivate", r.realDir()) })
 	if s := r.status(); s.Profile != r.worker {
 		t.Fatalf("its login is %q, not the Worker's name", s.Profile)
 	}
-	r.pass("cloudflare.toml's defaults: the login is named after the Worker, %s", r.worker)
+	r.pass("its login is named after the Worker, %s", r.worker)
 
 	r.step("Its rules and a local Worker, with no Cloudflare login at all: init gave it everything")
 	r.cf(nil, "check")
 	if body := r.localWorker(); !allWork(body) {
 		t.Fatalf("the local Worker: %s", body)
 	}
-	r.pass("cloudflare:check passes, and the local Worker's D1, KV, R2 and secret work")
+	r.pass("cloudflare check passes, and the local Worker's D1, KV, R2 and secret work")
 	fmt.Println("\nALL PASSED")
 }
 

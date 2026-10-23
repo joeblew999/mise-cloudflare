@@ -28,7 +28,7 @@ type Config struct {
 
 // Created is how wrangler deploy finds or creates a binding's resource by name when the config names none: KV, D1 and
 // R2, by wrangler's types for them. Wrangler preview creates none, so previews get their own another way (go tool
-// cloudflare previews), and IDs in the config for them are never needed.
+// cloudflare deploy, preview and github), and IDs in the config for them are never needed.
 var Created = map[string]struct {
 	What    string   // KV
 	Key     string   // its list in a wrangler config: kv_namespaces

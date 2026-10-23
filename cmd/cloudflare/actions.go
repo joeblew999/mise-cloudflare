@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,18 +10,19 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"golang.org/x/term"
 )
 
-// ciTokenHelp is how a person makes CI's token: Cloudflare gives no login the right to make API tokens (cf asks for
+// actionsTokenHelp is how a person makes CI's token: Cloudflare gives no login the right to make API tokens (cf asks for
 // account_api_tokens:create; Cloudflare doesn't grant it), so it's made once in the dashboard, from a link with every
 // Workers permission Cloudflare's token links can pick already picked. An account's token, not a person's: it outlives
 // anyone leaving.
-func ciTokenHelp(worker string) string {
-	b, _ := json.Marshal(ciTokenPermissions)
+func actionsTokenHelp(worker string) string {
+	b, _ := json.Marshal(actionsTokenPermissions)
 	link := "https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=" + url.QueryEscape(string(b)) +
 		"&name=" + url.QueryEscape(worker+" GitHub Actions")
 	return "Make it once, in Cloudflare's dashboard: open this link, pick your account, Continue to summary, Create Token.\n" +
@@ -28,9 +30,9 @@ func ciTokenHelp(worker string) string {
 		"Pipelines, …) needs that permission added there too.\n  " + link
 }
 
-// ciTokenPermissions are the permissions CI's token link picks, by their keys in Cloudflare's token links
+// actionsTokenPermissions are the permissions CI's token link picks, by their keys in Cloudflare's token links
 // (fundamentals/api/how-to/account-owned-token-template): every Workers one those links have a key for.
-var ciTokenPermissions = []struct {
+var actionsTokenPermissions = []struct {
 	Key  string `json:"key"`
 	Type string `json:"type"`
 }{
@@ -38,17 +40,43 @@ var ciTokenPermissions = []struct {
 	{"queues", "edit"}, {"workers_routes", "edit"}, {"zone", "read"},
 }
 
-// ciToken stores the Cloudflare API token GitHub Actions deploys with (cloudflare.toml's [workflow] deploy) as the
+// actions turns GitHub Actions deploying on, instead of Cloudflare's Workers Builds: the repo's workflow gets the
+// deploy jobs (production from branch, default the repository's default branch; a preview per pull request, deleted
+// when it closes) and its GitHub secrets the Cloudflare token they deploy with. Off, the workflow only checks again
+// and the secrets go.
+func (r repo) actions(ctx context.Context, branch string, off bool) {
+	if ci() {
+		fail(errors.New("GitHub Actions deploying is turned on once, from a machine or a Claude Code session, not in CI"))
+	}
+	if !off && branch == "" {
+		if _, now := workflowMode(ctx, r.dir); now != "" {
+			branch = now
+		} else if gh, err := githubRepo(ctx, r.dir); err == nil {
+			branch = gh.DefaultBranch
+		}
+	}
+	path, b, err := workflowFor(ctx, r.dir, !off, branch)
+	if err != nil {
+		fail(err)
+	}
+	r.actionsToken(ctx, off)
+	writeFile(path, b)
+	if !off {
+		fmt.Printf("✓ GitHub Actions deploys %s: production from %s, a preview for every pull request. Commit %s\n", r.wc.Name, cmp.Or(branch, "main"), filepath.Base(path))
+	}
+}
+
+// actionsToken stores the Cloudflare API token GitHub Actions deploys with as the
 // repository's GitHub secrets, with gh: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. The token comes from
 // CLOUDFLARE_CI_TOKEN, else it's typed in, hidden; it's checked against Cloudflare first, goes to gh on stdin, and is
 // never printed or written into the repo. The one Cloudflare token in the whole setup: GitHub has no one to click Allow.
 // With off it deletes the secrets (the token itself is revoked in the dashboard).
-func (r repo) ciToken(ctx context.Context, off bool) {
+func (r repo) actionsToken(ctx context.Context, off bool) {
 	if ci() {
 		fail(errors.New("CI's token is stored once, from a machine or a Claude Code session, not in CI"))
 	}
 	if _, err := exec.LookPath("gh"); err != nil {
-		fail(errors.New("gh isn't installed: run mise run cloudflare:ci-token, which brings it"))
+		fail(errors.New("gh isn't installed: run mise run cloudflare actions, which brings it"))
 	}
 	if exec.CommandContext(ctx, "gh", "auth", "status").Run() != nil {
 		fail(errors.New("gh isn't logged in: run gh auth login (it gives a code to approve on GitHub), then this again"))
@@ -74,10 +102,10 @@ func (r repo) ciToken(ctx context.Context, off bool) {
 	if token == "" {
 		tty, err := os.Open("/dev/tty")
 		if err != nil {
-			fail(errors.New("no CLOUDFLARE_CI_TOKEN and no terminal to type it in.\n" + ciTokenHelp(r.wc.Name)))
+			fail(errors.New("no CLOUDFLARE_CI_TOKEN and no terminal to type it in.\n" + actionsTokenHelp(r.wc.Name)))
 		}
 		defer tty.Close()
-		fmt.Fprintln(os.Stderr, ciTokenHelp(r.wc.Name))
+		fmt.Fprintln(os.Stderr, actionsTokenHelp(r.wc.Name))
 		fmt.Fprint(os.Stderr, "Paste CI's token (hidden): ")
 		b, err := term.ReadPassword(int(tty.Fd()))
 		fmt.Fprintln(os.Stderr)
@@ -97,7 +125,7 @@ func (r repo) ciToken(ctx context.Context, off bool) {
 	json.NewDecoder(resp.Body).Decode(&check)
 	resp.Body.Close()
 	if !check.Success {
-		fail(fmt.Errorf("Cloudflare refused that token for the account's Workers (HTTP %d).\n%s", resp.StatusCode, ciTokenHelp(r.wc.Name)))
+		fail(fmt.Errorf("Cloudflare refused that token for the account's Workers (HTTP %d).\n%s", resp.StatusCode, actionsTokenHelp(r.wc.Name)))
 	}
 	for _, s := range []struct{ name, value string }{{"CLOUDFLARE_API_TOKEN", token}, {"CLOUDFLARE_ACCOUNT_ID", account}} {
 		cmd := exec.CommandContext(ctx, "gh", "secret", "set", s.name, "--repo", repoName)

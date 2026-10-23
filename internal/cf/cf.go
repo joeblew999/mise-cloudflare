@@ -18,7 +18,7 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-// Scopes is what go tool cloudflare builds needs: the account and Workers Builds.
+// Scopes is what cloudflare github needs: the account and Workers Builds.
 var Scopes = []string{"account:read", "user:read", "workers:write", "workers_scripts:write", "workers_builds:write"}
 
 // CF is cf on one profile, in one folder, on one account (once known).
@@ -28,7 +28,7 @@ type CF struct {
 	Account string
 }
 
-// Installed reports whether cf is on the PATH (the cloudflare:builds task brings it).
+// Installed reports whether cf is on the PATH (the cloudflare github task brings it).
 func Installed() bool {
 	_, err := exec.LookPath("cf")
 	return err == nil
@@ -104,7 +104,7 @@ func (c CF) Whoami(ctx context.Context) (Who, error) {
 	return who, nil
 }
 
-// HasScopes reports whether the login holds every scope go tool cloudflare builds needs.
+// HasScopes reports whether the login holds every scope cloudflare github needs.
 func (w Who) HasScopes() bool {
 	for _, s := range Scopes {
 		if !slices.Contains(w.Scopes, s) {

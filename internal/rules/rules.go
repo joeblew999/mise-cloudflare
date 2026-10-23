@@ -113,7 +113,7 @@ func IDs(raw map[string]any) []string {
 // Previews returns the problems with the Worker's previews block, which Worker Previews (wrangler preview) run on; with
 // no block, none unless need. Previews inherit nothing from production, and Cloudflare makes them no KV, D1 or R2 of
 // their own (only Durable Objects and Containers). A KV, D1 or R2 binding left out of the block comes from the Worker's
-// Previews Base, where go tool cloudflare previews puts the previews' own; one in it names an existing resource, since
+// Previews Base, where cloudflare deploy, preview and github put the previews' own; one in it names an existing resource, since
 // wrangler preview sends it as it is. Every other binding (vars, Queues, Workers AI, …) is declared there again.
 func Previews(w wconfig.Config, need bool) []string {
 	previews, ok := w.Raw["previews"].(map[string]any)
@@ -128,7 +128,7 @@ func Previews(w wconfig.Config, need bool) []string {
 		problems = append(problems, fmt.Sprintf("%s's previews block lacks the bindings %s: a preview inherits none from production (only KV, D1 and R2 come from its Previews Base), so it would fail on its first use of one; add them there, pointed at preview-safe resources (vars with preview values)", filepath.Base(w.Path), strings.Join(missing, ", ")))
 	}
 	if unnamed := unnamedResources(previews); len(unnamed) > 0 {
-		problems = append(problems, fmt.Sprintf("%s's previews block has %s with no resource named, which wrangler preview sends as it is and Cloudflare refuses: leave it out, and mise run cloudflare:previews gives previews their own, or name an existing one (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
+		problems = append(problems, fmt.Sprintf("%s's previews block has %s with no resource named, which wrangler preview sends as it is and Cloudflare refuses: leave it out, and mise run cloudflare deploy gives previews their own, or name an existing one (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
 	}
 	return problems
 }

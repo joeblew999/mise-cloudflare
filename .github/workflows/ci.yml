@@ -51,5 +51,5 @@ jobs:
       - name: "In CI with no token, a login stops at once instead of waiting for a browser"
         working-directory: example
         run: |
-          if out=$(mise run cloudflare:login 2>&1); then echo "$out"; echo "logged in with no one to log in"; exit 1; fi
+          if out=$(mise run cloudflare login 2>&1); then echo "$out"; echo "logged in with no one to log in"; exit 1; fi
           grep -q "in CI there's no one to log in" <<<"$out" && echo "stopped, as it should"

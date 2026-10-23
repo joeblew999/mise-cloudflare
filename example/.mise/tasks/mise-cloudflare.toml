@@ -1,63 +1,11 @@
-# Written by mise-cloudflare (github.com/joeblew999/mise-cloudflare): don't edit it. mise run cloudflare:update
-# writes it again after upgrading. The repo's own settings are in cloudflare.toml.
+# This repo's Cloudflare Worker:
+#
+#   mise run cloudflare        where it is, step by step, and what to run next
+#   mise run cloudflare help   every command
+#
+# Written by mise-cloudflare (github.com/joeblew999/mise-cloudflare): don't edit it.
 
-["cloudflare:dev"]
-description = "Run the Worker locally (wrangler dev), with local D1, KV and R2: no Cloudflare account needed"
-run = "go tool cloudflare dev"
-
-["cloudflare:deploy"]
-description = "Deploy the Worker (wrangler deploy), on the repo's own login: the first time, it asks you to Allow"
-env = { WRANGLER_OUTPUT_FILE_PATH = ".wrangler/output.json" }
-run = "go tool cloudflare wrangler deploy"
-
-["cloudflare:wrangler"]
-description = "Any wrangler command, on the repo's own login: mise run cloudflare:wrangler -- d1 list"
-usage = 'arg "<args>" var=#true help="the wrangler command and its arguments"'
-run = "go tool cloudflare wrangler ${usage_args}"
-
-["cloudflare:login"]
-description = "Log the repo in to Cloudflare: other tasks do it when they need to"
-run = "go tool cloudflare login"
-
-["cloudflare:logout"]
-description = "Log the repo out of Cloudflare, and delete its login"
-run = "go tool cloudflare logout"
-
-["cloudflare:status"]
-description = "The repo's login: its account, the permissions it holds and needs, and any stray API token"
-usage = 'flag "--json" help="one JSON document on stdout"'
-run = "go tool cloudflare -json=${usage_json:-false} status"
-
-["cloudflare:check"]
-description = "Check the repo: no tokens or account IDs in it, secrets and .env git-ignored, wrangler pinned, these files current"
-usage = 'flag "--json" help="one JSON document on stdout"'
-run = "go tool cloudflare -json=${usage_json:-false} check"
-
-["cloudflare:builds"]
-description = "Have Cloudflare build and deploy every push: a preview for every pull request, then staging and production"
+["cloudflare"]
+description = "This repo's Cloudflare Worker: on its own, where it is and what to run next; help lists every command"
 tools = { "npm:cf" = "1.0.0-beta.20", gh = "2.103.0" }
-usage = '''
-flag "--off" help="remove the Workers Builds setup"
-flag "--branch <branch>" help="the branch whose pushes deploy production; default cloudflare.toml's, else the repository's default, or production with staging"
-flag "--staging <branch>" help="the branch whose pushes deploy staging (env.staging); default cloudflare.toml's"
-flag "--json" help="one JSON document on stdout"
-'''
-run = "go tool cloudflare -off=${usage_off:-false} -branch=${usage_branch:-} -staging=${usage_staging:-} -json=${usage_json:-false} builds"
-
-["cloudflare:previews"]
-description = "Give previews their own KV, D1 and R2 (cloudflare:builds does it): run it again after adding one of those"
-usage = '''
-flag "--off" help="take them out of the Previews Base and delete them"
-flag "--json" help="one JSON document on stdout"
-'''
-run = "go tool cloudflare -off=${usage_off:-false} -json=${usage_json:-false} previews"
-
-["cloudflare:ci-token"]
-description = "Only if GitHub Actions deploys: store the Cloudflare token it deploys with as GitHub secrets"
-tools = { gh = "2.103.0" }
-usage = 'flag "--off" help="delete the secrets"'
-run = "go tool cloudflare -off=${usage_off:-false} ci-token"
-
-["cloudflare:update"]
-description = "After upgrading mise-cloudflare: write these tasks, the agent skill, the GitHub workflow and the Claude Code hook again"
-run = "go tool cloudflare init"
+run = "go tool cloudflare"

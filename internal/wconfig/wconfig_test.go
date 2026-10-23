@@ -13,7 +13,7 @@ import (
 func TestRead(t *testing.T) {
 	dir, _ := filepath.Abs("../../example")
 	if _, err := os.Stat(filepath.Join(dir, "node_modules", "wrangler")); err != nil {
-		t.Skip("example/ has no wrangler installed: run mise run cloudflare:setup there")
+		t.Skip("example/ has no wrangler installed: run mise run cloudflare setup there")
 	}
 	c, err := Read(context.Background(), dir)
 	if err != nil {

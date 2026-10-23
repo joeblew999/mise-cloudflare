@@ -14,29 +14,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joeblew999/mise-cloudflare/config"
 	"github.com/joeblew999/mise-cloudflare/internal/cf"
 	"github.com/joeblew999/mise-cloudflare/internal/rules"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-// buildsReport is go tool cloudflare builds -json: how Workers Builds builds each of the repo's Workers now.
-type buildsReport struct {
-	Repository string        `json:"repository"`
-	Root       string        `json:"root"`
-	Build      string        `json:"build"`
-	Token      string        `json:"token"`
-	Workers    []buildWorker `json:"workers"`
-	Removed    bool          `json:"removed,omitempty"`
-	// The previews' own KV, D1 and R2, in the Worker's Previews Base (cloudflare previews).
+// githubReport is cloudflare github -json: how Workers Builds builds each of the repo's Workers now.
+type githubReport struct {
+	Repository string         `json:"repository"`
+	Root       string         `json:"root"`
+	Build      string         `json:"build"`
+	Token      string         `json:"token"`
+	Workers    []githubWorker `json:"workers"`
+	Removed    bool           `json:"removed,omitempty"`
+	// The previews' own KV, D1 and R2, in the Worker's Previews Base.
 	Previews []previewResource `json:"previews,omitempty"`
 	// GitHub deletes merged pull requests' branches, and Workers Builds their previews with them.
 	DeleteMergedBranches bool `json:"deleteMergedBranches"`
 }
 
-// buildWorker is one Worker Workers Builds deploys: production, or a wrangler environment's (staging).
-type buildWorker struct {
+// githubWorker is one Worker Workers Builds deploys: production, or a wrangler environment's (staging).
+type githubWorker struct {
 	Env       string `json:"env,omitempty"` // "" for production
 	Worker    string `json:"worker"`
 	ScriptTag string `json:"scriptTag"`
@@ -45,17 +44,20 @@ type buildWorker struct {
 	Preview   string `json:"preview,omitempty"` // every other branch's preview; production only
 }
 
-// builds sets Cloudflare's Workers Builds up for the repo's Workers: a push to the branch deploys production, and every
-// other branch gets a preview with its URL on the pull request; with cloudflare.toml's staging, a push to that branch
-// deploys staging (the wrangler environment env.staging, its own Worker). Cloudflare does all of it with its own build
+// builds is how Workers Builds builds the repo: github's flags, else what Cloudflare has now.
+type builds struct{ Branch, Staging, Build string }
+
+// github sets Cloudflare's Workers Builds up for the repo's Workers: a push to the branch deploys production, and every
+// other branch gets a preview with its URL on the pull request; with a staging branch, a push to it deploys staging
+// (the wrangler environment env.staging, its own Worker). Run again with no flags, it keeps what Cloudflare has. Cloudflare does all of it with its own build
 // token, so GitHub never holds a Cloudflare credential. It runs on the repo's cf login (Workers Builds' scope, which
 // wrangler's login can't have), made the first time with the device flow. With off it removes the setup again.
-func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
+func (r repo) github(ctx context.Context, b builds, off, jsonOut bool) {
 	if ci() {
 		fail(errors.New("Workers Builds is set up once, from a machine or a Claude Code session, not in CI"))
 	}
 	if !cf.Installed() {
-		fail(errors.New("cf isn't installed: run mise run cloudflare:builds, which brings it"))
+		fail(errors.New("cf isn't installed: run mise run cloudflare github, which brings it"))
 	}
 	r.refuseStrayTokens()
 	c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
@@ -76,8 +78,11 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		fail(fmt.Errorf("the cf login %s can use %d accounts; log it in again and pick one", c.Profile, len(who.Accounts)))
 	}
 	c.Account = who.Accounts[0].ID
+	if b == (builds{}) && !off {
+		b = r.currentBuilds(ctx, c)
+	}
 
-	// The Workers: production, the Worker CLOUDFLARE_ENV picks (none, usually), and staging's if cloudflare.toml has it.
+	// The Workers: production, the Worker CLOUDFLARE_ENV picks (none, usually), and staging's if there's a staging branch.
 	env := os.Getenv("CLOUDFLARE_ENV")
 	envFlag := func(e string) string {
 		if e == "" {
@@ -85,21 +90,21 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 		}
 		return " --env " + e
 	}
-	workers := []buildWorker{{Env: env, Worker: r.wc.Name}}
+	workers := []githubWorker{{Env: env, Worker: r.wc.Name}}
 	if b.Staging != "" {
 		if !slices.Contains(r.wc.Envs(), "staging") {
-			fail(fmt.Errorf("cloudflare.toml's [builds] staging needs the wrangler environment staging in %s (env.staging, with its own bindings)", filepath.Base(r.wc.Path)))
+			fail(fmt.Errorf("a staging branch needs the wrangler environment staging in %s (env.staging, with its own bindings)", filepath.Base(r.wc.Path)))
 		}
 		sc, err := wconfig.ReadEnv(ctx, r.dir, "staging")
 		if err != nil {
 			fail(err)
 		}
-		workers = append(workers, buildWorker{Env: "staging", Worker: sc.Name, Branch: b.Staging, Deploy: "npx wrangler deploy --env staging"})
+		workers = append(workers, githubWorker{Env: "staging", Worker: sc.Name, Branch: b.Staging, Deploy: "npx wrangler deploy --env staging"})
 	}
 	for i := range workers {
 		workers[i].ScriptTag = workerTag(ctx, c, workers[i].Worker, workers[i].Env)
 	}
-	rep := buildsReport{Workers: workers}
+	rep := githubReport{Workers: workers}
 
 	if off {
 		for _, w := range workers {
@@ -206,7 +211,7 @@ func (r repo) builds(ctx context.Context, b config.Builds, off, jsonOut bool) {
 	}
 }
 
-func workerNames(ws []buildWorker) string {
+func workerNames(ws []githubWorker) string {
 	var names []string
 	for _, w := range ws {
 		names = append(names, w.Worker)
@@ -217,24 +222,58 @@ func workerNames(ws []buildWorker) string {
 // workerTag is a deployed Worker's tag, which Workers Builds attaches to, as Cloudflare has it (cf workers scripts
 // search: its id). The search matches names partly, so only the exact name counts.
 func workerTag(ctx context.Context, c cf.CF, name, env string) string {
-	var found []struct {
-		ID   string `json:"id"`
-		Name string `json:"script_name"`
+	if tag := findWorker(ctx, c, name); tag != "" {
+		return tag
 	}
-	if err := c.JSON(ctx, &found, "workers", "scripts", "search", "--name", name); err != nil {
-		fail(err)
-	}
-	for _, f := range found {
-		if f.Name == name && f.ID != "" {
-			return f.ID
-		}
-	}
-	deploy := "mise run cloudflare:deploy"
+	deploy := "mise run cloudflare deploy"
 	if env != "" {
 		deploy += " -- --env " + env
 	}
 	fail(fmt.Errorf("Workers Builds attaches to a deployed Worker, and %s isn't deployed: deploy it once first (%s), then run this again", name, deploy))
 	return ""
+}
+
+// findWorker is the Worker's tag on Cloudflare, "" if it isn't there.
+func findWorker(ctx context.Context, c cf.CF, name string) string {
+	var found []struct {
+		ID   string `json:"id"`
+		Name string `json:"script_name"`
+	}
+	if c.JSON(ctx, &found, "workers", "scripts", "search", "--name", name) != nil {
+		return ""
+	}
+	for _, f := range found {
+		if f.Name == name {
+			return f.ID
+		}
+	}
+	return ""
+}
+
+// currentBuilds is how Workers Builds builds the repo's Workers now, empty if it doesn't.
+func (r repo) currentBuilds(ctx context.Context, c cf.CF) builds {
+	var b builds
+	get := func(worker string) (branch, build string) {
+		var w struct {
+			Git struct {
+				Branch string `json:"branch"`
+			} `json:"git_repository"`
+			Production struct {
+				Build string `json:"build_command"`
+			} `json:"production_settings"`
+		}
+		if tag := findWorker(ctx, c, worker); tag != "" && c.JSON(ctx, &w, "builds", "workers", "get", tag) == nil {
+			return w.Git.Branch, w.Production.Build
+		}
+		return "", ""
+	}
+	b.Branch, b.Build = get(r.wc.Name)
+	if slices.Contains(r.wc.Envs(), "staging") {
+		if sc, err := wconfig.ReadEnv(ctx, r.dir, "staging"); err == nil {
+			b.Staging, _ = get(sc.Name)
+		}
+	}
+	return b
 }
 
 // installCommand installs the Worker's dependencies on Workers Builds, by the lockfile committed in dir: Workers Builds
@@ -346,7 +385,7 @@ func buildTokens(ctx context.Context, c cf.CF) ([]buildToken, error) {
 }
 
 // deleteMergedBranches switches on the repository's "Automatically delete head branches" setting, with GITHUB_TOKEN or
-// the gh CLI's login (the cloudflare:builds task brings gh), and reports whether it's on. Without a GitHub login that
+// the gh CLI's login (the cloudflare github task brings gh), and reports whether it's on. Without a GitHub login that
 // may change it, it's left to the person.
 func deleteMergedBranches(ctx context.Context, g ghRepo) bool {
 	token := cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN")

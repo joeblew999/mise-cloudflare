@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joeblew999/mise-cloudflare/config"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 )
 
@@ -83,17 +82,9 @@ func TestCheckFinds(t *testing.T) {
 	}
 }
 
-// TestInitPasses: what go tool cloudflare init writes into a repo passes the rules.
-func TestInitPasses(t *testing.T) {
-	files := good()
-	files["cloudflare.toml"] = config.Template
-	if p, err := Check(repo(t, files), cfg(), false); err != nil || len(p) != 0 {
-		t.Errorf("problems %q, %v", p, err)
-	}
-}
 
 // TestPreviewBindings: a binding the previews block doesn't have is named, but for KV, D1 and R2, which the Previews Base
-// gives (go tool cloudflare previews).
+// gives (cloudflare deploy, preview and github).
 func TestPreviewBindings(t *testing.T) {
 	c := cfg()
 	c.PreviewBindings = map[string]string{"AI": "ai"}

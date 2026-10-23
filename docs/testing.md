@@ -13,7 +13,6 @@ build and its link, and each deploy's result. The deploy workflow's runs show Gi
 | Folder | What |
 |---|---|
 | [cmd/cloudflare/](../cmd/cloudflare/) | the command |
-| [config/](../config/) | `cloudflare.toml` |
 | [mise/](../mise/) | the tasks, workflow and Claude Code hook `cloudflare init` writes into a repo |
 | [skills/](../skills/) | the agent skill `cloudflare init` installs |
 | [internal/](../internal/) | the login (`wrangler`), cf (`cf`), the Worker's config as wrangler reads it (`wconfig`), the rules (`rules`) |

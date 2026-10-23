@@ -1,9 +1,9 @@
-# Written by mise-cloudflare (0.0.0): don't edit it. After upgrading, mise run cloudflare:update writes it again;
-# cloudflare:check fails while it's out of date.
+# Written by mise-cloudflare (0.0.0): don't edit it. After upgrading, mise run cloudflare update writes it again;
+# cloudflare check fails while it's out of date.
 #
 # What GitHub Actions runs for the Worker in example on every push and pull request: its setup and test tasks if it has
-# them, then cloudflare:check (no account or resource IDs, no tokens, secrets listed, wrangler pinned). No Cloudflare
-# credentials: Cloudflare's Workers Builds deploys (mise run cloudflare:builds). Shell steps only: no JavaScript actions.
+# them, then cloudflare check (no account or resource IDs, no tokens, secrets listed, wrangler pinned). No Cloudflare
+# credentials: Cloudflare's Workers Builds deploys (mise run cloudflare github), or GitHub Actions (cloudflare actions). Shell steps only: no JavaScript actions.
 name: cloudflare-example
 
 on:
@@ -45,9 +45,9 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           cd "example" && mise install
 
-      - name: setup, test and cloudflare:check, in example
+      - name: setup, test and cloudflare check, in example
         working-directory: example
         run: |
           if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
           if mise tasks info test > /dev/null 2>&1; then mise run test; fi
-          mise run cloudflare:check
+          mise run cloudflare check
