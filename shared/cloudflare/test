@@ -21,7 +21,7 @@ have=$(grep -oE '^[A-Z_][A-Z0-9_]*=' .dev.vars.example 2>/dev/null | tr -d = | s
 [ "$want" = "$have" ] || bad ".dev.vars.example lists [$(echo $have)], secrets.required lists [$(echo $want)]"
 pin=$(jq -r '.devDependencies.wrangler // .dependencies.wrangler // "missing"' package.json)
 [[ $pin =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || bad "wrangler isn't pinned to an exact version in package.json ($pin)"
-# The shared helpers are the one place allowed to call it: in a cloud session only, into the repo's own .wrangler/home.
+# The shared helpers are the one place allowed to call it: in a Claude Code cloud session, to get the profile's token.
 grep -rnE 'wrangler +login' --exclude-dir=node_modules --exclude-dir=.git $(grep -vx 'shared/cloudflare/.helpers.sh' <<<"$files") 2>/dev/null \
   && bad "something calls the machine-wide wrangler login"
 [ $fail = 0 ] && echo "rules: pass" || exit 1
