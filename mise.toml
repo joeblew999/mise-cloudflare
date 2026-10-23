@@ -14,6 +14,7 @@ usage = "7.0.1"    # --help and tab-completion for the tasks' #USAGE flags
 
 [env]
 CF_PROFILE = "cloudflare-zero"   # this repo's own Cloudflare login (a wrangler profile)
+CF_ZERO_REF = "main"             # the ref of this repo that prove-other-repo includes by git URL
 
 [task_config]
 includes = ["shared", "mise-tasks"]   # the shared tasks also run here, on this repo's own login; then its own

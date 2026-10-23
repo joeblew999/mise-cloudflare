@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#MISE description="Prove any other repo gets the same thing from config alone: make a new repo in a temporary folder with only a mise.toml (including the shared tasks from https://github.com/joeblew999/cloudflare-zero by git URL, ref {{env.CF_ZERO_REF}}), a wrangler.jsonc without IDs, package.json, .dev.vars.example, .gitignore and a tiny Worker; then local test, deploy on its own login (profile cloudflare-zero-other; the browser opens once), live test, teardown, clean. Prints how many lines that repo carries"
+#MISE timeout="20m"
+set -euo pipefail
+. "$(dirname "$0")/../shared/cloudflare/.helpers.sh"
+src="$(cd "$(dirname "$0")/../example" && pwd)"
+repo=$(mktemp -d)/other-repo; mkdir -p "$repo"; cd "$repo"
+step() { printf '\n=== %s\n' "$*"; }
+pass() { echo "PASS $*"; }
+fail() { echo "FAIL $*"; exit 1; }
+
+step "A new repo at $repo, config only"
+cp -R "$src/src" "$src/package.json" "$src/.dev.vars.example" "$src/.gitignore" .
+sed 's/"cloudflare-zero-example"/"cloudflare-zero-other"/' "$src/wrangler.jsonc" > wrangler.jsonc
+scopes=$(cd "$src" && mise env --json | jq -r .CF_SCOPES)
+cat > mise.toml <<TOML
+[settings]
+experimental = true   # mise needs this for git includes
+
+[tools]
+node = "26.11.1"
+aube = "2.8.1"
+jq = "1.8.2"
+
+[env]
+CF_PROFILE = "cloudflare-zero-other"
+CF_SCOPES = "$scopes"
+
+[task_config]
+includes = ["git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=$CF_ZERO_REF"]
+TOML
+git init -q && git add -A
+mise trust -q mise.toml
+wc -l mise.toml wrangler.jsonc package.json .dev.vars.example .gitignore src/worker.js
+mise tasks | grep -q '^cloudflare:deploy' && pass "the shared tasks came in from GitHub" || { mise tasks; fail "no shared tasks"; }
+
+step "Local test, no login"
+XDG_CONFIG_HOME=$(mktemp -d) mise run cloudflare:test
+step "Deploy on its own login"
+GREETING=set-by-prove-other-repo mise run cloudflare:deploy
+step "Live test"
+mise run cloudflare:test --prod
+step "Teardown and clean"
+mise run cloudflare:teardown
+mise run cloudflare:clean
+[ ! -f "$(CF_PROFILE=cloudflare-zero-other profile_file)" ] && pass "its login is gone" || fail "its login is still there"
+cd / && rm -rf "$(dirname "$repo")"
+echo; echo "ALL PASSED"
