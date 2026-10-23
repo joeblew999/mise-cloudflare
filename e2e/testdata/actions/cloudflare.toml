@@ -7,4 +7,4 @@ scopes = ["d1:write", "pipelines:write"]
 # GitHub Actions deploys it. The proof sets branch to its throwaway branch, on that branch only.
 [workflow]
 deploy = true
-branch = "main"
+branch = "cfz-actions-prod-1792761937"
