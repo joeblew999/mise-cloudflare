@@ -1,5 +1,5 @@
 # A minimal repo that uses the shared Cloudflare tasks in ../shared, as any other repo would.
-# It never refers to the basin-cube repo around it. Plan: ../PLAN.md
+# It refers only to ../shared and ../PLAN.md, never to anything else in this repo.
 
 [tools]
 node = "26.11.1"   # runs wrangler
