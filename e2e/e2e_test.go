@@ -457,6 +457,8 @@ func TestOtherRepo(t *testing.T) {
 	r.must(nil, "git", "add", "-A")
 	r.must(nil, "wc", "-l", "go.mod", "cloudflare.toml", "mise.toml", "wrangler.jsonc", "package.json", ".dev.vars.example", ".gitignore", "src/worker.js")
 	r.must(nil, "mise", "run", "setup")
+	// The login's binding to this folder goes with the folder: wrangler would keep it, for a folder that's gone.
+	t.Cleanup(func() { r.run(nil, "npx", "wrangler", "auth", "deactivate", r.realDir()) })
 	if s := r.status(); s.Profile != r.worker {
 		t.Fatalf("its login is %q, not the Worker's name", s.Profile)
 	}
