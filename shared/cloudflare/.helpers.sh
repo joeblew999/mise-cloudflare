@@ -49,13 +49,17 @@ profile_file() { echo "$(wrangler_home)/config/$CF_PROFILE.toml"; }
 # same on every machine; only how its token is obtained differs:
 # - On a machine with a browser (a Mac): `wrangler auth create`. The browser opens; click Allow.
 # - In a Claude Code cloud session (CLAUDE_CODE_REMOTE=true, set by Claude Code): there's no browser, and `wrangler auth
-#   create` has no device flow (wrangler 4.152.0). So `wrangler login --device` prints a link to open on any device,
-#   writes its token into a temporary folder, and the token is saved as the profile's file. wrangler writes a profile and
-#   its default login the same way, differing only in the file's name (getAuthConfigFilePath, wrangler 4.151.3).
+#   create` has no device flow (checked on wrangler 4.151.3, pinned here, and 4.152.0; `wrangler login` has --device on
+#   both). So `wrangler login --device` prints a link to open on any device, writes its token into a temporary folder
+#   (XDG_CONFIG_HOME), and the token is saved as the profile's file. wrangler writes a profile and its default login the
+#   same way, differing only in the file's name (getAuthConfigFilePath, read in wrangler 4.151.3's code).
 #   Remove this branch once `wrangler auth create` takes --device.
 repo_login() {
   # shellcheck disable=SC2086 # CF_SCOPES is a list
   if [ "${CLAUDE_CODE_REMOTE:-}" = true ]; then
+    # wrangler uses ~/.wrangler instead of XDG_CONFIG_HOME when it exists: the device login would then overwrite that
+    # folder's default login instead of going into the temporary folder.
+    [ ! -d "$HOME/.wrangler" ] || { echo "refusing: $HOME/.wrangler exists, so wrangler would ignore the temporary folder and overwrite the default login in it. Move it away and run again." >&2; exit 1; }
     echo "Logging in $CF_PROFILE from a Claude Code cloud session: open the link below on any device, click Allow and pick the account."
     local tmp; tmp=$(mktemp -d)
     XDG_CONFIG_HOME=$tmp wrangler login --device --browser=false ${CF_SCOPES:+--scopes $CF_SCOPES}
@@ -102,6 +106,15 @@ ensure_login() {
   repo_login
   wrangler auth activate "$CF_PROFILE" "$PWD" > /dev/null
   [ "$(granted_scopes | sort -u)" = "$want" ] || { echo "the new login's scopes still don't match CF_SCOPES ($CF_SCOPES)" >&2; exit 1; }
+}
+
+# Whether this repo's Worker exists on the login's account: exit 0 if it does, 1 if not (Cloudflare's error 10007).
+# Any other failure is printed and exits 2.
+worker_exists() {
+  local out
+  out=$(wrangler deployments list --name "$(worker_config | jq -r .name)" --json </dev/null 2>&1) && return 0
+  grep -q 'code: 10007' <<<"$out" && return 1
+  echo "$out" >&2; return 2
 }
 
 # The URL of the last deploy from this folder, saved by cloudflare:deploy.

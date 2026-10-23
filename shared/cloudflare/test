@@ -29,7 +29,8 @@ grep -rnE 'wrangler +login' --exclude-dir=node_modules --exclude-dir=.git $(grep
 if [ "${usage_prod:-false}" = true ]; then
   url=$(deployed_url); [ -n "$url" ] || { echo "FAIL no deployed URL: run cloudflare:deploy"; exit 1; }
   echo "calling $url"
-  got=$(curl -fsS -m 20 "$url")
+  # A Worker just deployed can answer 500, then 404 (error 1042), for up to a minute before it's live everywhere.
+  got=$(curl -fsS -m 20 --retry 12 --retry-delay 5 --retry-all-errors "$url")
 else
   echo "calling a temporary local Worker"
   got=$(node --input-type=module -e "const { unstable_startWorker } = await import('wrangler');

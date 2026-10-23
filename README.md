@@ -50,14 +50,18 @@ You also need:
 
 - **The repo says what it may do:** `CF_SCOPES` in `mise.toml`, the OAuth scopes from `wrangler login --scopes-list`.
 - **Everyone gets the same:** the first deploy opens Cloudflare's consent page listing exactly those scopes. Whoever clicks Allow, you or any other developer, gets a login that can do only that.
-- **When the repo needs more:** add the scope to `CF_SCOPES`. The next deploy sees the login lacks it and opens the browser once more.
+- **When the repo's scopes change:** edit `CF_SCOPES`. The next deploy (or teardown) compares it with the login's scopes. If they differ either way, a scope added or one removed, it logs in once more, so the login always holds exactly `CF_SCOPES`. A login made before this check that holds extra scopes also gets replaced, once.
 - **Whose account:** each person picks the account at the consent page. To deploy to a shared account, they need a role on it that allows those actions. Members are invited in the Cloudflare dashboard.
 - **R2:** works with `workers:write`. wrangler has no R2 scope, yet creating, using and emptying buckets all worked, as the proofs show.
 - **Basin, tested 23 Oct 2026 with a repo's own login:** turning on Basin Catalog, Basin SQL queries (through wrangler and through Cloudflare's API) and creating a Basin Pipeline stream all work, with no API token. A fake token gets HTTP 403. One thing needs a stored API token: a Basin Pipeline's sink into Basin Catalog. Cloudflare keeps that token and uses it itself, and it rejected the login's token: the pipeline went to `failed` with "The sink token is expired or invalid". `mise run prove-basin` shows this.
 
 ## Claude Code cloud sessions
 
-A cloud session (claude.ai/code, or the Claude iOS app) starts on a bare Linux machine. [.claude/settings.json](.claude/settings.json) runs [.claude/hooks/session-start.sh](.claude/hooks/session-start.sh) at the start of each session. It installs mise, then every tool the repo pins, so `mise run …` works straight away. On your own machine it does nothing. The cloud environment's network settings must allow mise's downloads: mise.run, GitHub, nodejs.org and the npm registry.
+A cloud session (claude.ai/code, or the Claude iOS app) starts on a bare Linux machine. [.claude/settings.json](.claude/settings.json) runs [.claude/hooks/session-start.sh](.claude/hooks/session-start.sh) at the start of each session. It installs mise, then every tool the repo pins, so `mise run …` works straight away. On your own machine it does nothing. The cloud environment's network settings must allow mise's downloads: mise.run, GitHub, nodejs.org and the npm registry. The hook hides the session's GitHub token from mise: that token can only see the session's own repos, and GitHub answers 404 when mise sends it to download from others.
+
+The tasks are the same as on your machine, and so is the login: the repo's profile, bound to its folder, with exactly `CF_SCOPES`. Only how it's made differs. A cloud session has no browser, and `wrangler auth create` can't log in without one, so when Claude Code sets `CLAUDE_CODE_REMOTE=true` the tasks log in with wrangler's device flow instead: wrangler prints a link and a code, you open the link on your phone or computer, click Allow, and the login is saved as the repo's profile. It lasts as long as that cloud session's machine.
+
+Don't prove the same repo on two machines against the same account at once: both deploy the same Worker, and one's teardown deletes the other's. `mise run prove` refuses to start if the Worker is already deployed.
 
 ## Why it's safe
 

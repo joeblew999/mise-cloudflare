@@ -18,7 +18,15 @@ step "1. A developer with no Cloudflare login at all: setup and local test"
 XDG_CONFIG_HOME=$(mktemp -d) mise run cloudflare:test
 pass "local dev works with no Cloudflare login"
 
-step "2. Deploy on the repo's own login, $CF_PROFILE (the browser opens once if it isn't logged in yet)"
+step "2. Deploy on the repo's own login, $CF_PROFILE (logs in once if it isn't logged in yet)"
+# Every machine proving this repo on the same account deploys the same Worker, and one's teardown would delete the
+# other's. So start only if it isn't deployed already. mise exec gives example/'s own settings (CF_SCOPES and the rest).
+mise exec -- bash -c '. ../shared/cloudflare/.helpers.sh; ensure_login; worker_exists' && rc=0 || rc=$?
+case $rc in
+  1) pass "the Worker isn't deployed on this account yet, so nothing else is using it" ;;
+  0) fail "the Worker is already deployed on this account: another machine may be proving it now. Wait for it, or run cloudflare:teardown here if it's left over" ;;
+  *) fail "couldn't check whether the Worker is deployed" ;;
+esac
 repo_before=$(git status --porcelain .)
 GREETING=set-by-prove mise run cloudflare:deploy
 [ -f "$(profile_file)" ] && pass "profile $CF_PROFILE exists" || fail "no profile $CF_PROFILE"
