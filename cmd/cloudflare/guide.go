@@ -72,13 +72,16 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	}
 	// What GitHub deploying needs from the wrangler config first (a previews block with the Worker's bindings), and,
 	// once Workers Builds deploys, any KV, D1 or R2 added since the previews' own were made.
-	var previewProblems, previewsMissing []string
+	var previewProblems, previewsMissing, previewSecrets []string
 	if rep.Deployed && rep.GitHub == "" {
 		previewProblems = rules.Previews(r.wc, true)
 	}
-	if rep.GitHub == "Workers Builds" && len(rep.Accounts) == 1 {
+	if rep.GitHub != "" && len(rep.Accounts) == 1 {
 		if token, err := r.w.Token(ctx); err == nil {
-			previewsMissing = r.previewsMissing(ctx, token, rep.Accounts[0].ID)
+			previewsMissing, previewSecrets = r.previewsMissing(ctx, token, rep.Accounts[0].ID)
+		}
+		if rep.GitHub == "GitHub Actions" {
+			previewsMissing = nil // its preview job makes them, every time
 		}
 	}
 	switch {
@@ -92,6 +95,8 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 		rep.Next = previewProblems[0] + "; then mise run cloudflare:github"
 	case rep.GitHub == "":
 		rep.Next = "mise run cloudflare:github"
+	case len(previewSecrets) > 0:
+		rep.Next = "mise run cloudflare wrangler preview base-config secret put " + previewSecrets[0] + " (previews don't get the Worker's secrets: it asks for the value they use)"
 	case len(previewsMissing) > 0:
 		rep.Next = "mise run cloudflare:github: previews don't have their own " + strings.Join(previewsMissing, ", ") + " yet"
 	default:

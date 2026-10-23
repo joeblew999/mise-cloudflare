@@ -96,15 +96,16 @@ func (r repo) previewNeeds() []previewResource {
 	return out
 }
 
-// previewsMissing names the previews' own KV, D1 and R2 the Worker's Previews Base on Cloudflare doesn't have yet: a
-// binding added since they were made. Nil if it can't tell.
-func (r repo) previewsMissing(ctx context.Context, token, account string) []string {
+// previewsMissing is what the Worker's Previews Base on Cloudflare, which every new preview starts from, doesn't have
+// yet: the previews' own KV, D1 and R2 (a binding added since they were made), and the secrets the Worker requires,
+// which previews don't inherit either. Nil if it can't tell.
+func (r repo) previewsMissing(ctx context.Context, token, account string) (resources, secrets []string) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://api.cloudflare.com/client/v4/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	defer resp.Body.Close()
 	var res struct {
@@ -116,15 +117,19 @@ func (r repo) previewsMissing(ctx context.Context, token, account string) []stri
 		}
 	}
 	if json.NewDecoder(resp.Body).Decode(&res) != nil || !res.Success {
-		return nil
+		return nil, nil
 	}
-	var missing []string
 	for _, p := range r.previewNeeds() {
 		if _, ok := res.Result.Base.Env[p.Binding]; !ok {
-			missing = append(missing, p.Kind+" "+p.Binding)
+			resources = append(resources, p.Kind+" "+p.Binding)
 		}
 	}
-	return missing
+	for _, s := range r.wc.Secrets {
+		if _, ok := res.Result.Base.Env[s]; !ok {
+			secrets = append(secrets, s)
+		}
+	}
+	return resources, secrets
 }
 
 // previewName is the name of the previews' own resource for a binding: <worker>-previews-<binding>, lowercase, with
