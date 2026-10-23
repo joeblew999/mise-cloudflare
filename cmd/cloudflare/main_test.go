@@ -38,7 +38,7 @@ func TestSkill(t *testing.T) {
 	if err != nil || !regexp.MustCompile(`(?s)^---\nname: cloudflare\ndescription: .+\n---\n`).Match(b) {
 		t.Fatalf("SKILL.md: %v\n%.200s", err, b)
 	}
-	for _, m := range regexp.MustCompile(`cloudflare:(\w+)`).FindAllStringSubmatch(string(b), -1) {
+	for _, m := range regexp.MustCompile(`cloudflare:([\w-]+)`).FindAllStringSubmatch(string(b), -1) {
 		if !regexp.MustCompile(`\["cloudflare:` + m[1] + `"\]`).Match(mise.Tasks) {
 			t.Errorf("the skill names cloudflare:%s, which the tasks don't have", m[1])
 		}

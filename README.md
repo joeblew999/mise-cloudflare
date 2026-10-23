@@ -19,7 +19,7 @@ One command, `cloudflare`, with its mise tasks and agent skill, built the way
 
 ```sh
 go get -tool github.com/joeblew999/mise-cloudflare/cmd/cloudflare@latest
-go tool cloudflare init    # cloudflare.toml, .mise/tasks/cloudflare.toml, .claude/skills/cloudflare
+go tool cloudflare init    # cloudflare.toml, its mise tasks, agent skill, GitHub Actions workflow and Claude Code hook
 ```
 
 **Without Go** (the released binary, through mise):
@@ -40,13 +40,31 @@ aube = "2.8.1"     # or whichever package manager installs the repo's package.js
 includes = [".mise/tasks/cloudflare.toml"]
 ```
 
-(With Go, add `[settings] idiomatic_version_file_enable_tools = ["go"]` so mise installs go.mod's Go.) The repo also
-has what any Worker repo does: a wrangler config with no account or resource IDs (`"secrets": { "required": [...] }`
-for its secrets), `.dev.vars.example` with a dummy for each, wrangler pinned exactly in `package.json`, and `.gitignore`
-covering `.dev.vars`, `.env*`, `.wrangler/` and `node_modules/`. [example/](example/) is exactly that.
+(With Go, add `[settings] idiomatic_version_file_enable_tools = ["go"]` so mise installs go.mod's Go.)
+[example/](example/) is a repo set up exactly so.
 
-After upgrading, `mise run cloudflare:tasks` and `mise run cloudflare:skill` write the tasks and the skill again from
-the new version.
+### What a repo needs, and what checks it
+
+| Needs | Checked by |
+|---|---|
+| A wrangler config with no account or resource IDs, in any environment; its secrets in `"secrets": { "required": [...] }` | `cloudflare:check` |
+| `"previews": {}` in it (Worker Previews need the block; it can stay empty) | `cloudflare:check` |
+| `.dev.vars.example` with a dummy for each required secret; `.dev.vars` and `.env` git-ignored | `cloudflare:check` |
+| wrangler pinned exactly in `package.json`; a lockfile, if any, committed (Workers Builds installs from git) | `cloudflare:check`, `cloudflare:builds` |
+| The tasks, skill, workflow and Claude Code hook mise-cloudflare wrote, current for its version | `cloudflare:check` |
+| For Workers Builds: Cloudflare's GitHub app on the repository, a build token on the account | `cloudflare:builds` says which is missing and how to add it |
+
+### What mise-cloudflare writes into the repo
+
+Like charter's and go-htmx4's own, these are stamped from the copy inside mise-cloudflare, at its version: don't edit
+them; after upgrading, write them again (`cloudflare:check` fails while they're out of date).
+
+| File | Written by |
+|---|---|
+| `.mise/tasks/cloudflare.toml` | `mise run cloudflare:tasks` |
+| `.claude/skills/cloudflare/SKILL.md` | `mise run cloudflare:skill` |
+| `.github/workflows/cloudflare.yml` (`cloudflare-<folder>.yml` for a Worker in a subfolder) | `mise run cloudflare:workflow` |
+| `.claude/hooks/mise-cloudflare-session-start.sh`, and its entry in `.claude/settings.json` | `mise run cloudflare:claude` |
 
 ## Where it builds and deploys
 
@@ -56,7 +74,10 @@ Pick one per repo; they don't mix up.
 |---|---|---|
 | **Locally**: a Mac, or a Claude Code cloud session | Trying something now, by hand | `mise run cloudflare:deploy`, on the repo's own login |
 | **Cloudflare**: Workers Builds | Every push deploys by itself; a preview for every other branch, its URL on the pull request; GitHub holds no Cloudflare credential | `mise run cloudflare:builds`, once per repo |
-| **GitHub Actions** | GitHub builds and tests first | CI deploys with a `CLOUDFLARE_API_TOKEN` it's given as a secret (GitHub has no one to click Allow). A `workflow` command that writes the workflow, with previews named `pr-<number>`, comes next |
+| **GitHub Actions** | GitHub builds and tests, and deploys | `[workflow] deploy = true`, then `mise run cloudflare:workflow` and `mise run cloudflare:ci-token`: the branch deploys production, each pull request gets a preview `pr-<number>`, its URL commented, deleted when it closes |
+
+Whichever deploys, the repo's workflow checks every push and pull request (its `setup` and `test` tasks, then
+`cloudflare:check`), with no Cloudflare credential unless GitHub Actions deploys.
 
 ## The tasks
 
@@ -65,7 +86,10 @@ Pick one per repo; they don't mix up.
 | `mise run cloudflare:login` | The repo's own login, with exactly `cloudflare.toml`'s scopes | The first time, and when the scopes change |
 | `mise run cloudflare:deploy` | `wrangler deploy` on that login; what it deployed, URLs included, goes to `.wrangler/output.json` | If needed |
 | `mise run cloudflare:wrangler -- <args>` | Any wrangler command on that login: `d1 list`, `secret put`, `delete`, `tail`, `preview`, … | If needed |
-| `mise run cloudflare:builds` | Workers Builds for the Worker: a push to the branch deploys, any other branch gets a preview; `--off` removes it | A cf login, the first time |
+| `mise run cloudflare:builds` | Workers Builds for the Worker: a push to the branch deploys production, any other branch gets a preview; with `[builds] staging`, its branch deploys staging; `--off` removes it | A cf login, the first time |
+| `mise run cloudflare:ci-token` | For GitHub Actions deploying: CI's Cloudflare token, made and stored as the repository's GitHub secrets, never shown; `--off` deletes it | A cf login, the first time |
+| `mise run cloudflare:workflow` | Writes the GitHub Actions workflow | Never |
+| `mise run cloudflare:claude` | Writes the Claude Code cloud session hook | Never |
 | `mise run cloudflare:status` | The repo's login, its account and scopes, stray tokens, this machine's other wrangler logins | Never |
 | `mise run cloudflare:check` | The repo's rules: no account or resource IDs (in any environment), no tokens, `.dev.vars` and `.env` git-ignored, `.dev.vars.example` matching `secrets.required`, wrangler pinned | Never |
 | `mise run cloudflare:logout` | Logs the repo's logins out on Cloudflare and deletes them | Never |
@@ -95,11 +119,14 @@ There's no complete list of which permission each binding needs, not even Cloudf
 repo states what its login may do (`scopes`); a binding that needs more fails with wrangler naming the Cloudflare API call
 that was refused, and you add the scope. R2 works with `workers:write`: wrangler has no R2 scope.
 
-## Workers Builds, previews and pull requests
+## Workers Builds: production, staging, previews and pull requests
 
 `mise run cloudflare:builds` connects the Worker to its GitHub repository on Cloudflare: the repository's ids, the
 folder (a monorepo's subfolder works), the install command from the lockfile committed to git, `npx wrangler deploy` for
-the deploy branch and `npx wrangler preview` for every other branch (`cloudflare.toml`'s `[builds]` overrides any). Then:
+the deploy branch and `npx wrangler preview` for every other branch (`cloudflare.toml`'s `[builds]` overrides any). With
+`[builds] staging = "main"`, as go-htmx4 has it, a push to `main` deploys **staging** (the wrangler environment
+`env.staging`, its own Worker with its own bindings), a push to `production` deploys **production**, and every other
+branch gets a preview. Then:
 
 - **A push to the deploy branch** is built and deployed by Cloudflare, with Cloudflare's own build token.
 - **Any other branch** gets a [Worker Preview](https://developers.cloudflare.com/workers/previews/) at
@@ -115,11 +142,20 @@ token in the dashboard, as Cloudflare documents. Workers Builds' own scope isn't
 `builds` uses Cloudflare's own CLI, [cf](https://github.com/cloudflare/cf), on a cf login for the repo; the task brings
 cf.
 
-## CI
+## GitHub Actions
 
-In CI (`CI=true`) there's no one to click Allow: login and wrangler use a `CLOUDFLARE_API_TOKEN` given to CI as a secret,
-or stop at once saying so. The rules (`cloudflare:check`) need no account. [ci.yml](.github/workflows/ci.yml) runs this
-repo's Go tests and example/'s rules, with no Cloudflare credential.
+`mise run cloudflare:workflow` writes the repo's workflow: on every push and pull request, mise and its pinned tools, the
+repo's own `setup` and `test` tasks, then `cloudflare:check`. GitHub Actions never asks anyone anything: the checks need
+no Cloudflare account, and in CI (`CI=true`) a task that would log in uses the `CLOUDFLARE_API_TOKEN` secret instead, or
+stops at once saying so.
+
+With `[workflow] deploy = true` it deploys too: production from `[workflow] branch` (default `main`), a preview
+`pr-<number>` for each pull request from the repository, its URL commented on the pull request (one comment, kept
+current), deleted when the pull request closes. `mise run cloudflare:ci-token` makes the token it deploys with, on the
+repo's cf login, with Cloudflare's usual Workers permissions plus `[workflow] permissions` for other bindings (such as
+`"D1 Write"`), and stores it and the account id as the repository's GitHub secrets with gh: it's never shown, and a rerun
+replaces it. This repo's own [ci.yml](.github/workflows/ci.yml) runs its Go tests and checks its release config;
+example/'s [workflow](.github/workflows/cloudflare-example.yml) is stamped by the tool, as any repo's is.
 
 ## Why it's safe
 
@@ -134,10 +170,11 @@ repo's Go tests and example/'s rules, with no Cloudflare credential.
 
 ## Claude Code cloud sessions
 
-A cloud session starts on a bare Linux machine with only the repo. [.claude/settings.json](.claude/settings.json) runs
-[.claude/hooks/session-start.sh](.claude/hooks/session-start.sh): it installs mise and every pinned tool, then runs each
-folder's own `setup` task. It sets up the folders named after it (this repo's settings name `. example`); another repo
-copies both files. On your own machine it does nothing. The cloud environment's network settings must allow mise.run,
+A cloud session starts on a bare Linux machine with only the repo. `mise run cloudflare:claude` writes the hook
+[.claude/hooks/mise-cloudflare-session-start.sh](.claude/hooks/mise-cloudflare-session-start.sh) and adds it to
+`.claude/settings.json` (keeping what's there): when a session starts, it installs mise and every pinned tool, then runs
+the Worker folder's own `setup` task, so the tasks work straight away. This repo's settings name `. example`. On your
+own machine it does nothing. The cloud environment's network settings must allow mise.run,
 GitHub, nodejs.org, the npm registry, proxy.golang.org and sum.golang.org.
 
 ## Releases
@@ -153,7 +190,8 @@ release, and the module is fetched through proxy.golang.org so pkg.go.dev and `g
 | `mise run test` | The Go tests: the rules, the scope comparison, the login's guard, the device link, the tasks for repos with and without Go, the skill, example/ current | No |
 | `mise run prove` | In example/: a local Worker with no login; deploy on its own login, bound by its real path; the live D1, KV, R2 and secret; a second deploy that asks nothing and writes nothing into the repo; stray tokens refused; everything deleted again; the machine's default login untouched | Yes |
 | `mise run prove-other-repo` | A new repo gets mise-cloudflare from GitHub (`go get -tool`, ref `MISE_CLOUDFLARE_REF`), runs `init`, then the same proof on a login of its own | Yes |
-| `mise run prove-builds` | Workers Builds deploys a Worker with KV and R2 from a throwaway branch with Cloudflare's own token, and builds a preview of another; then all of it removed. main is never touched | Yes |
+| `mise run prove-builds` | Workers Builds, with Cloudflare's own token: staging from one throwaway branch, production from another, both with KV and R2 working; a preview of a third; the preview gone once its branch is deleted; then all of it removed. main is never touched | Yes |
+| `mise run prove-actions` | GitHub Actions deploying: `ci-token` stores CI's token; a throwaway branch with the stamped workflow deploys a Worker nothing else deploys; a pull request gets its `pr-<number>` preview, URL commented; closing it deletes the preview; then all of it removed | Yes |
 | `mise run prove-basin` | Basin on a repo's own login: works up to a Basin Pipeline's catalog sink, which needs a stored API token Cloudflare keeps ("The sink token is expired or invalid") | Yes |
 
 They're Go tests in [e2e/](e2e/), run only with `CLOUDFLARE_E2E=1` (the tasks set it). Each refuses to start while its
@@ -168,5 +206,5 @@ Worker or its D1, KV or R2 exists, and deletes what it made even when it fails.
 | [mise/](mise/) | its tasks, written into a repo by `cloudflare tasks` |
 | [skills/](skills/) | its agent skill, installed by `cloudflare skill` |
 | [internal/](internal/) | the login (`wrangler`), cf (`cf`), the Worker's config as wrangler reads it (`wconfig`), the rules (`rules`) |
-| [example/](example/) | a Worker repo that uses it, exactly as any other repo would |
-| [e2e/](e2e/) | the proofs |
+| [example/](example/) | a Worker repo that uses it, exactly as any other repo would (`mise run example` stamps it) |
+| [e2e/](e2e/) | the proofs, and their Workers in [e2e/testdata/](e2e/testdata/) |

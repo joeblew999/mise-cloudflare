@@ -30,6 +30,22 @@ staging, a wrangler environment (`env.staging`) is its own Worker: run it again 
 `--branch main`, and the production Worker with its own branch. `--off` removes the setup. If Cloudflare can't see the
 repository, the person gives Cloudflare's GitHub app access to it on GitHub.
 
+## GitHub Actions
+
+`mise run cloudflare:workflow` writes the repo's workflow (checks on every push and pull request, no Cloudflare
+credential). With `[workflow] deploy = true` in `cloudflare.toml` it also deploys: production from its branch, a preview
+`pr-<number>` per pull request, its URL commented, deleted when the pull request closes. Then
+`mise run cloudflare:ci-token` makes the token it deploys with and stores it as the repository's GitHub secrets: never
+ask the person for a token, and never print one. A binding beyond Workers Scripts, KV and R2 (D1, Queues, …) needs its
+permission group in `[workflow] permissions` (`"D1 Write"`), then `ci-token` again.
+
+## Files mise-cloudflare writes
+
+`.mise/tasks/cloudflare.toml`, `.claude/skills/cloudflare/SKILL.md`, the workflow and
+`.claude/hooks/mise-cloudflare-session-start.sh` are stamped from mise-cloudflare at its version: never edit them. After
+upgrading, run `mise run cloudflare:tasks`, `cloudflare:skill`, `cloudflare:workflow` and `cloudflare:claude`;
+`cloudflare:check` names any that are out of date. A wrangler config needs `"previews": {}` for Worker Previews.
+
 ## Logging in
 
 `mise run cloudflare:login` logs in once. On a machine with a browser, it opens; in a Claude Code cloud session (or with
