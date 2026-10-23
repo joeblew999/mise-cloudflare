@@ -53,7 +53,7 @@ You also need:
 - **When the repo needs more:** add the scope to `CF_SCOPES`. The next deploy sees the login lacks it and opens the browser once more.
 - **Whose account:** each person picks the account at the consent page. To deploy to a shared account, they need a role on it that allows those actions. Members are invited in the Cloudflare dashboard.
 - **R2:** works with `workers:write`. wrangler has no R2 scope, yet creating, using and emptying buckets all worked, as the proofs show.
-- **What a login can't do:** Basin SQL and Basin Catalog need a stored API token; no OAuth scope covers them. See [PLAN.md](PLAN.md).
+- **Basin works too, despite Cloudflare's docs:** tested 23 Oct 2026 with a repo's own login and no API token. Turning on Basin Catalog for a bucket and Basin SQL queries both worked, through wrangler and through Cloudflare's API. The same query with a fake token got HTTP 403. Not proven yet: writing tables into the catalog, and a Basin Pipeline writing into it. Cloudflare keeps such a pipeline's token on its side, and a login token expires within hours, so that may still need a stored token.
 
 ## Why it's safe
 
