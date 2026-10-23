@@ -23,5 +23,12 @@ release:
   github:
     owner: joeblew999
     name: mise-cloudflare
+# Each release lists every commit since the previous tag, each with its link and author, so a person or
+# an agent can see what changed with `gh release view <tag>`. "github" goes by commits, not pull requests: most changes
+# here go straight to main, so GitHub's own PR-based notes would be nearly empty.
 changelog:
-  disable: true
+  use: github
+  abbrev: 7
+  filters:
+    exclude:
+      - "^Merge "
