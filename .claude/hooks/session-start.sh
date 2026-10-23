@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # A Claude Code cloud session starts on a bare Linux machine with only the repo cloned. Install mise, then every tool
-# the repo pins, and get each Worker folder ready, so `mise run …` works straight away. Does nothing on your own machine.
+# the repo pins (Go from go.mod), then run each folder's own setup task if it has one, so `mise run …` works straight
+# away. Does nothing on your own machine.
 # Usage: session-start.sh [folder …], folders relative to the repo; with none, the repo's own folder.
 set -euo pipefail
 [ "${CLAUDE_CODE_REMOTE:-}" = true ] || exit 0
@@ -17,8 +18,7 @@ for dir in "$@"; do
     cd "$dir"
     mise trust -q mise.toml
     mise install
-    # A folder with a wrangler config is a Worker: install its pinned wrangler.
-    if [ -f wrangler.json ] || [ -f wrangler.jsonc ] || [ -f wrangler.toml ]; then mise run cloudflare:setup; fi
+    if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
   )
 done
 # Keep mise on PATH for the rest of the session's commands.

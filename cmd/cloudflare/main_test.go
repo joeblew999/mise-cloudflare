@@ -62,3 +62,13 @@ func TestTokenEnvFiles(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestCI: CI=true is CI; unset, false or 0 isn't.
+func TestCI(t *testing.T) {
+	for v, want := range map[string]bool{"true": true, "1": true, "": false, "false": false, "0": false} {
+		t.Setenv("CI", v)
+		if ci() != want {
+			t.Errorf("CI=%q: %v", v, !want)
+		}
+	}
+}

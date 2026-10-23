@@ -13,7 +13,9 @@
 // The login is a wrangler auth profile (cloudflare.toml's profile, default the Worker's name), passed to every wrangler
 // command with --profile, so nothing depends on which login wrangler would pick for the folder. It logs in in a browser
 // on this machine, or with a link to open on any device, a phone included (the OAuth device flow), in a Claude Code cloud
-// session or with CLOUDFLARE_LOGIN=device. Anything else, deploying and deleting included, is wrangler's own job.
+// session or with CLOUDFLARE_LOGIN=device. In CI (CI=true) there's no one to log in: a CLOUDFLARE_API_TOKEN given to CI
+// as a secret is its login, and without one login and wrangler stop. Anything else, deploying and deleting included,
+// is wrangler's own job.
 //
 // Flags go before the command; for wrangler, everything after it is wrangler's. -json prints one JSON document on
 // stdout instead of text. Exit codes: 0 ok, 1 problems, 2 usage.
@@ -87,6 +89,20 @@ func main() {
 		return
 	}
 	r := openRepo(ctx, dir, cfg, *profile)
+	if ci() && (args[0] == "login" || args[0] == "wrangler") {
+		// No person in CI to click Allow, so no login: a CLOUDFLARE_API_TOKEN given to CI as a secret is CI's login.
+		if os.Getenv("CLOUDFLARE_API_TOKEN") == "" {
+			fail(errors.New("in CI there's no one to log in: give CI a CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID) as secrets, or deploy with Cloudflare's own Workers Builds"))
+		}
+		if args[0] == "login" {
+			fmt.Println("✓ CI: wrangler uses CLOUDFLARE_API_TOKEN")
+			return
+		}
+		if err := wrangler.Interactive(r.w.Plain(ctx, args[1:]...)); err != nil {
+			os.Exit(exitCode(err))
+		}
+		return
+	}
 	switch args[0] {
 	case "login":
 		who := r.login(ctx)
@@ -173,9 +189,12 @@ func (r repo) login(ctx context.Context) wrangler.Who {
 	return who
 }
 
+// ci reports whether this runs in CI, where CI=true (GitHub Actions and every other CI set it).
+func ci() bool { return os.Getenv("CI") != "" && os.Getenv("CI") != "false" && os.Getenv("CI") != "0" }
+
 // refuseStrayTokens: a CLOUDFLARE_API_TOKEN beats every login, so outside CI one in the shell or in a .env is refused.
 func (r repo) refuseStrayTokens() {
-	if os.Getenv("CI") != "" {
+	if ci() {
 		return
 	}
 	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" {

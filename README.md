@@ -1,81 +1,135 @@
 # cloudflare-zero
 
-Cloudflare without the token mess. A repo that uses this gets its own Cloudflare login, made with one browser click. No API tokens to create, nothing machine-wide, and no Cloudflare scripts in the repo itself.
+Cloudflare without the token mess. Anyone who pulls a repo that uses this gets their own Cloudflare login for it, with
+exactly the scopes the repo says, made with one click on Allow; the repo's own wrangler then runs on that login. No API
+tokens to make, nothing about Cloudflare in the repo, and the same on a Mac and in a Claude Code cloud session.
 
-## Use it in your repo
+One Go command, `go tool cloudflare`, with its mise tasks and agent skill, the way
+[go-htmx4](https://github.com/joeblew999/go-htmx4)'s `seo` and `intl` are built.
 
-Your repo carries config only. The tasks come from this repo, through mise's git includes.
+## In a repo
 
-```toml
-# mise.toml
-[settings]
-experimental = true   # mise needs this for git includes
-
-[tools]
-node = "26.11.1"
-aube = "2.8.1"   # or pnpm, bun, yarn: whichever your lockfile is for (npm comes with node)
-jq = "1.8.2"
-
-[env]
-CF_PROFILE = "my-repo"   # the repo's own Cloudflare login (a wrangler auth profile)
-CF_SCOPES = "account:read user:read workers:write workers_kv:write workers_scripts:write d1:write"   # what it may do
-
-[task_config]
-includes = ["git::https://github.com/joeblew999/cloudflare-zero.git//shared?ref=main"]
+```sh
+go get -tool github.com/joeblew999/cloudflare-zero/cmd/cloudflare@main
+go tool cloudflare init    # cloudflare.toml, .mise/tasks/cloudflare.toml, .claude/skills/cloudflare
 ```
 
-mise downloads the shared tasks once and keeps reusing that copy; it doesn't fetch `main` again by itself. To get the current ones, run a task with `MISE_TASK_REMOTE_NO_CACHE=true`.
+Then the repo's `mise.toml` takes Go from `go.mod` and includes the tasks:
 
-You also need:
+```toml
+[settings]
+idiomatic_version_file_enable_tools = ["go"]   # go.mod's toolchain line is the Go pin
 
-- `wrangler.jsonc` with no `account_id` and no resource IDs: bindings only, plus `"secrets": { "required": [...] }`
+[tools]
+node = "26.11.1"   # runs wrangler
+aube = "2.8.1"     # or whichever package manager installs the repo's package.json
+
+[task_config]
+includes = [".mise/tasks/cloudflare.toml"]
+```
+
+The repo also has, as any Worker repo does:
+
+- a wrangler config (`wrangler.jsonc`) with no `account_id` and no resource IDs: bindings only, plus
+  `"secrets": { "required": [...] }`
 - `.dev.vars.example`, with a dummy value for each required secret
 - wrangler pinned to an exact version in `package.json`
 - `.gitignore` covering `.dev.vars`, `.env*`, `.wrangler/` and `node_modules/`
 
-[example/](example/) is exactly that.
+[example/](example/) is exactly that. After upgrading cloudflare-zero, `mise run cloudflare:tasks` and
+`mise run cloudflare:skill` write the tasks and the skill again from the new version.
 
-## What a developer does
+## The tasks
 
-| Task | Does | Cloudflare account |
+| Task | Does | Logs in |
 |---|---|---|
-| `mise run cloudflare:setup` | Installs the pinned wrangler with the package manager your lockfile is for, and makes `.dev.vars` from the example | No |
-| `mise run cloudflare:dev` | Runs the Worker locally, with local D1, KV and R2 | No |
-| `mise run cloudflare:check` | Checks the repo rules: no IDs or tokens in its files, `.dev.vars` and `.env` git-ignored, secrets listed, wrangler pinned | No |
-| `mise run cloudflare:deploy` | First time: the browser opens, you click Allow and pick the account. Then wrangler creates any missing D1, KV and R2, it asks once for each missing secret, deploys and prints the workers.dev URL. After that it asks nothing | Yes |
-| `mise run cloudflare:status` | The login, its account and scopes, the URL, the resources, and any stray tokens | Yes |
-| `mise run cloudflare:teardown` | Deletes the Worker. Its D1, KV and R2 and their data are kept | Yes |
-| `mise run cloudflare:teardown --data` | Also deletes every D1, KV and R2 in the repo's wrangler config, and all their data | Yes |
-| `mise run cloudflare:clean` | Removes local state and the repo's login | No |
+| `mise run cloudflare:login` | The repo's own login, with exactly `cloudflare.toml`'s scopes | The first time, and when the scopes change |
+| `mise run cloudflare:deploy` | `wrangler deploy` on that login; what it deployed, URLs included, goes to `.wrangler/output.json` | If needed |
+| `mise run cloudflare:wrangler -- <args>` | Any wrangler command on that login: `d1 list`, `secret put`, `delete`, `tail`, … | If needed |
+| `mise run cloudflare:status` | The repo's login, its account and scopes, stray tokens, this machine's other wrangler logins | Never |
+| `mise run cloudflare:check` | The repo's rules: no account or resource IDs (in any environment), no tokens, `.dev.vars` and `.env` git-ignored, `.dev.vars.example` matching `secrets.required`, wrangler pinned | Never |
+| `mise run cloudflare:logout` | Logs the repo's login out on Cloudflare and deletes it | Never |
 
-Testing your Worker is your repo's own job, as it is in [example/mise-tasks/test](example/mise-tasks/test).
+Each runs `go tool cloudflare …`; `-json` gives one JSON document instead of text. Deploying, deleting and everything
+else on Cloudflare is wrangler's own job, done by the repo's own wrangler.
 
-## Rights: how a repo asks for them, and how people get them
+## The login: where it comes from, where it lives
 
-- **The repo says what it may do:** `CF_SCOPES` in `mise.toml`, the OAuth scopes from `wrangler login --scopes-list`.
-- **Everyone gets the same:** the first deploy opens Cloudflare's consent page listing exactly those scopes. Whoever clicks Allow, you or any other developer, gets a login that can do only that.
-- **When the repo's scopes change:** edit `CF_SCOPES`. The next deploy (or teardown) compares it with the login's scopes. If they differ either way, a scope added or one removed, it logs in once more, so the login always holds exactly `CF_SCOPES`. A login made before this check that holds extra scopes also gets replaced, once.
-- **Whose account:** each person picks the account at the consent page. To deploy to a shared account, they need a role on it that allows those actions. Members are invited in the Cloudflare dashboard.
-- **R2:** works with `workers:write`. wrangler has no R2 scope, yet creating, using and emptying buckets all worked, as the proofs show.
-- **Basin, tested 23 Oct 2026 with a repo's own login:** turning on Basin Catalog, Basin SQL queries (through wrangler and through Cloudflare's API) and creating a Basin Pipeline stream all work, with no API token. A fake token gets HTTP 403. One thing needs a stored API token: a Basin Pipeline's sink into Basin Catalog. Cloudflare keeps that token and uses it itself, and it rejected the login's token: the pipeline went to `failed` with "The sink token is expired or invalid". `mise run prove-basin` shows this.
-
-## Claude Code cloud sessions
-
-A cloud session (claude.ai/code, or the Claude iOS app) starts on a bare Linux machine. [.claude/settings.json](.claude/settings.json) runs [.claude/hooks/session-start.sh](.claude/hooks/session-start.sh) at the start of each session. It installs mise, then every tool the repo pins, and runs `cloudflare:setup` in each folder with a wrangler config, so `mise run …` works straight away. On your own machine it does nothing. It sets up the repo's own folder, or the folders named after it: this repo's settings name `. example`. To use it in another repo, copy both files into its `.claude/` and drop `example`. The cloud environment's network settings must allow mise's downloads: mise.run, GitHub, nodejs.org and the npm registry. The hook hides the session's GitHub token from mise: that token can only see the session's own repos, and GitHub answers 404 when mise sends it to download from others.
-
-The tasks are the same as on your machine, and so is the login: the repo's profile, bound to its folder, with exactly `CF_SCOPES`. Only how it's made differs. A cloud session has no browser, and `wrangler auth create` can't log in without one, so when Claude Code sets `CLAUDE_CODE_REMOTE=true` the tasks log in with wrangler's device flow instead: wrangler prints a link and a code, you open the link on your phone or computer, click Allow, and the login is saved as the repo's profile. It lasts as long as that cloud session's machine.
-
-Don't prove the same repo on two machines against the same account at once: both deploy the same Worker, and one's teardown deletes the other's. `mise run prove` refuses to start if the Worker is already deployed.
+- **What it may do:** `scopes` in the repo's [cloudflare.toml](example/cloudflare.toml), OAuth scopes from
+  `wrangler login --scopes-list`. Without that line, the default: `account:read user:read workers:write
+  workers_kv:write workers_scripts:write d1:write`, what a Worker with D1, KV and R2 needs.
+- **Its name:** `profile` in `cloudflare.toml`, else the Worker's name from its wrangler config. It's a
+  [wrangler auth profile](https://developers.cloudflare.com/workers/wrangler/profiles/).
+- **Where it lives:** in wrangler's folder in the person's home directory, never in the repo:
+  `~/Library/Preferences/.wrangler/config/<profile>.toml` on a Mac, `~/.config/.wrangler/config/<profile>.toml` on
+  Linux. It holds an OAuth token that lasts an hour and a refresh token wrangler renews it with.
+- **The first time:** there is no login, so the first task that needs one asks. On a machine with a browser, it opens
+  Cloudflare's consent page listing exactly the repo's scopes: click Allow and pick your account. In a Claude Code
+  cloud session, or with `CLOUDFLARE_LOGIN=device`, wrangler prints a link and a code instead: open it on any device,
+  your phone included.
+- **Every time after:** each task compares the scopes the login holds (`wrangler whoami`) with the repo's. Equal:
+  nothing is asked. Different either way, a scope added to `cloudflare.toml` or one removed: it logs in once more, so
+  the login always holds exactly the repo's scopes.
+- **R2** works with `workers:write`: wrangler has no R2 scope.
 
 ## Why it's safe
 
-- The login is a [wrangler auth profile](https://developers.cloudflare.com/workers/wrangler/profiles/) (beta), named after the repo and bound to its folder. The machine's default `wrangler login` and other repos' logins are untouched.
-- A `CLOUDFLARE_API_TOKEN` in your shell or in a `.env` would silently override the login, so the tasks refuse to run with one (except in CI).
-- The repo never holds account IDs, resource IDs, tokens or secret values. `cloudflare:check` fails if it does.
+- Every wrangler command gets `--profile <the repo's login>`. `wrangler whoami`, which takes no `--profile`, runs on
+  the folder's binding, made by the folder's real path, and the task stops unless wrangler names the repo's login as the
+  active one. The machine's own `wrangler login` and other repos' logins are never used or changed; the proof checks
+  the default login's file is byte for byte the same before and after.
+- A `CLOUDFLARE_API_TOKEN` in the shell or in a `.env` would override the login, so every task refuses to run with one
+  (except in CI).
+- The repo never holds account IDs, resource IDs, tokens or secret values: `cloudflare:check` fails if it does.
 
-## Proof
+## Claude Code cloud sessions
 
-Both tasks below were run on 23 Oct 2026, and both passed.
+A cloud session (claude.ai/code, or the Claude iOS app) starts on a bare Linux machine with only the repo.
+[.claude/settings.json](.claude/settings.json) runs [.claude/hooks/session-start.sh](.claude/hooks/session-start.sh)
+when it starts: it installs mise and every tool the repo pins (Go from `go.mod`), then runs each folder's `setup` task
+if it has one, so the tasks work straight away. It sets up the repo's own folder, or the folders named after it (this
+repo's settings name `. example`); another repo copies both files. On a machine of your own it does nothing.
 
-- `mise run prove`: covers `example/` end to end. A local test with no login. Deploy on the repo's own login, created with one click the first time. A live test of D1, KV, R2 and the secret. A second deploy that asks nothing, keeps the same resources and leaves the repo unchanged. Stray tokens refused, in the shell and in `.env`. Teardown removes the Worker and keeps the data; `teardown --data` then leaves nothing. The machine's default login is untouched throughout. `--clean` also removes the login.
-- `mise run prove-other-repo`: makes a brand-new repo in a temporary folder with config only (53 lines including the Worker) and the shared tasks pulled from GitHub. Then the rules check and its local test, deploy on its own login, live test, `teardown --data` and clean.
+The cloud environment's network settings must allow mise.run, GitHub, nodejs.org, the npm registry, proxy.golang.org
+and sum.golang.org. The hook hides the session's GitHub token from mise: that token can see only the session's own
+repos, and GitHub answers 404 when mise sends it elsewhere.
+
+There's no browser in a cloud session, so its login uses the link: wrangler prints it, you open it on your phone and
+click Allow. `wrangler auth create` has no device flow (wrangler 4.151.3 and 4.152.0), so `wrangler login --device`
+logs in inside a temporary wrangler folder and its login file becomes the profile's; wrangler writes both the same way.
+The login lasts as long as that cloud session's machine.
+
+Don't prove the same repo on two machines at once: both deploy the same Worker to the same account. `mise run prove`
+stops if the Worker is already deployed.
+
+## Basin
+
+Tested 23 Oct 2026 with a repo's own login: turning on Basin Catalog, Basin SQL queries (through wrangler and through
+Cloudflare's API) and creating a Basin Pipeline stream all work, with no API token; a fake token gets HTTP 403. One
+thing needs a stored API token: a Basin Pipeline's sink into Basin Catalog. Cloudflare keeps that token and uses it
+itself, and it rejected the login's token: the pipeline went to `failed` with "The sink token is expired or invalid".
+`mise run prove-basin` shows this.
+
+## Proofs
+
+| Task | Proves | Cloudflare |
+|---|---|---|
+| `mise run test` | The Go tests: the rules, the scope comparison, the login's guard, the tasks and the skill, `example/` current | No |
+| `mise run prove` | In `example/`: a local Worker with no login at all; deploy on its own login, bound by its real path; the live Worker's D1, KV, R2 and secret; a second deploy that asks nothing and writes nothing into the repo; stray tokens refused, in the shell and in `.env`; everything deleted again with wrangler; the machine's default login untouched. `--clean` also logs the login out | Yes |
+| `mise run prove-other-repo` | A brand-new repo in a temporary folder gets cloudflare-zero from GitHub (`go get -tool`, ref `CF_ZERO_REF`, default `main`) and `go tool cloudflare init`, then the same proof on its own login, `cloudflare-zero-other`, made the first time (kept for the next run; `--clean` logs it out) | Yes |
+| `mise run prove-basin` | Basin, above | Yes |
+
+The proofs are Go tests in [e2e/](e2e/), run only with `CLOUDFLARE_E2E=1` (the tasks set it), so `go test ./...` never
+touches Cloudflare. A proof that fails deletes what it made.
+
+## Layout
+
+| Folder | What |
+|---|---|
+| [cmd/cloudflare/](cmd/cloudflare/) | the command, `go tool cloudflare` |
+| [config/](config/) | `cloudflare.toml` |
+| [mise/](mise/) | its tasks, written into a repo by `go tool cloudflare tasks` |
+| [skills/](skills/) | its agent skill, installed by `go tool cloudflare skill` |
+| [internal/](internal/) | the login (`wrangler`), the Worker's config as wrangler reads it (`wconfig`), the rules (`rules`) |
+| [example/](example/) | a Worker repo that uses it, exactly as any other repo would |
+| [e2e/](e2e/) | the proofs |
