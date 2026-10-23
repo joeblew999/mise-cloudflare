@@ -37,7 +37,7 @@ fi
 [ -f "$(profile_file)" ] || exit 0
 [ -f node_modules/wrangler/bin/wrangler.js ] || { echo "run cloudflare:setup to see the account, the Worker and its resources"; exit 0; }
 refuse_stray_tokens
-wrangler auth activate "$CF_PROFILE" "$PWD" > /dev/null 2>&1
+cloud_session || wrangler auth activate "$CF_PROFILE" "$PWD" > /dev/null 2>&1
 who=$(wrangler whoami --json 2>/dev/null </dev/null)
 echo "account              $(jq -r '[.accounts[] | "\(.name) https://dash.cloudflare.com/\(.id)"] | join(", ")' <<<"$who")"
 echo "scopes               $(jq -r '.tokenPermissions | join(" ")' <<<"$who")"

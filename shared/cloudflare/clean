@@ -4,6 +4,10 @@
 #MISE timeout="2m"
 set -euo pipefail
 . "$(dirname "$0")/.helpers.sh"
-if [ -f "$(profile_file)" ]; then refuse_stray_tokens; wrangler auth delete "$CF_PROFILE" </dev/null; fi
+if [ -f "$(profile_file)" ]; then
+  refuse_stray_tokens
+  # In a cloud session the login is wrangler's plain one inside .wrangler/home: logout revokes it on Cloudflare.
+  if cloud_session; then wrangler logout </dev/null; else wrangler auth delete "$CF_PROFILE" </dev/null; fi
+fi
 rm -rf node_modules .wrangler
 echo "removed node_modules, .wrangler and the $CF_PROFILE login"
