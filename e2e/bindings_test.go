@@ -53,7 +53,7 @@ func TestBindings(t *testing.T) {
 
 	r.step("Its queue and Vectorize index, made on that login")
 	r.cf(nil, "wrangler", "queues", "create", queue)
-	r.cf(nil, "wrangler", "vectorize", "create", index, "--dimensions", "3", "--metric", "cosine")
+	r.cf(nil, "wrangler", "vectorize", "create", index, "--dimensions", "32", "--metric", "cosine")
 	r.pass("%s and %s", queue, index)
 
 	r.step("Deploy on that login: the Durable Object, Workflow, Workers AI, Browser, Images, Analytics Engine and rate limit with it")
