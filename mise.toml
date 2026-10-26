@@ -24,8 +24,8 @@ dir = "example"
 run = "go tool cloudflare init"
 
 [tasks.test]
-description = "The Go tests: no Cloudflare account, nothing deployed"
-run = "go vet ./... && go test ./..."
+description = "The Go tests: no Cloudflare account, nothing deployed (installs example/'s pinned wrangler first, which they read)"
+run = "cd example && mise run setup && cd .. && go vet ./... && go test ./..."
 
 [tasks.prove]
 description = "The end-to-end tests, on a real Cloudflare account, before a release (about 40 minutes): example/ as a developer uses it, following the guide (secret, deploy, live D1, KV, R2 and secret, stray tokens refused); a new repo set up from GitHub by init alone; Cloudflare deploying every push (production from a throwaway branch, a pull request's preview, gone with its branch); GitHub Actions deploying (a push, a pull request's preview, gone when it closes). Everything deleted after. The first time, an Allow"
