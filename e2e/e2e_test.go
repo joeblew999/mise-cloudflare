@@ -1,4 +1,4 @@
-// Package e2e is mise run smoke (a new repo as a user sets it up, no account: MISE_CLOUDFLARE_SMOKE=1) and mise run
+// Package e2e is mise run smoke (a new repo as a user sets it up, no account: SMOKE=1) and mise run
 // prove (real deploys on a Cloudflare account: CLOUDFLARE_E2E=1). Without those, the tests skip, so go test ./...
 // never touches Cloudflare. Every step runs the tool, so the repo's own login and wrangler do it.
 package e2e
@@ -160,7 +160,8 @@ func get(url string) (int, []byte) {
 	return code, body
 }
 
-// localWorker runs the Worker with wrangler dev, with no Cloudflare login anywhere it could see, and returns its answer.
+// localWorker runs the Worker as a developer does, mise-cloudflare dev (which makes .dev.vars from .dev.vars.example),
+// with no Cloudflare login anywhere it could see, and returns its answer.
 func (r repo) localWorker() []byte {
 	r.t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -169,7 +170,8 @@ func (r repo) localWorker() []byte {
 	}
 	port := fmt.Sprint(l.Addr().(*net.TCPAddr).Port)
 	l.Close()
-	cmd := exec.Command("node", "node_modules/wrangler/bin/wrangler.js", "dev", "--ip", "127.0.0.1", "--port", port)
+	name, args := r.toolArgs("dev", "--ip", "127.0.0.1", "--port", port)
+	cmd := exec.Command(name, args...)
 	cmd.Dir = r.dir
 	home := r.t.TempDir()
 	cmd.Env = append(os.Environ(), "HOME="+home, "XDG_CONFIG_HOME="+home, "CLOUDFLARE_API_TOKEN=", "CI=1")
@@ -418,10 +420,10 @@ func TestProve(t *testing.T) {
 }
 
 // TestNewRepo is what a user does in a new repo, with no Cloudflare account: mise-cloudflare from mise (this
-// checkout's build, or the release MISE_CLOUDFLARE_VERSION as mise use installs it), init, then status, check and a
+// checkout's build, or the release SMOKE_RELEASE as mise use installs it), init, then status, check and a
 // local Worker. Every step goes through mise, as in the README.
 func TestNewRepo(t *testing.T) {
-	if os.Getenv("MISE_CLOUDFLARE_SMOKE") != "1" {
+	if os.Getenv("SMOKE") != "1" {
 		t.Skip("mise run smoke")
 	}
 	src, _ := filepath.Abs("../example")
@@ -439,7 +441,7 @@ func TestNewRepo(t *testing.T) {
 	// A range, as most repos have it: init pins it.
 	os.WriteFile(filepath.Join(r.dir, "package.json"), []byte(`{ "name": "new-repo", "private": true, "devDependencies": { "wrangler": "^4.151.3" } }`+"\n"), 0o644)
 	r.must(nil, "git", "init", "-q")
-	if v := os.Getenv("MISE_CLOUDFLARE_VERSION"); v != "" {
+	if v := os.Getenv("SMOKE_RELEASE"); v != "" {
 		r.step("mise-cloudflare %s from GitHub, as mise use installs it", v)
 		r.must(nil, "mise", "use", "-q", "node@26.12.1", "github:joeblew999/mise-cloudflare@"+strings.TrimPrefix(v, "v"))
 	} else {
@@ -462,8 +464,8 @@ func TestNewRepo(t *testing.T) {
 	}
 	r.pass("init fixed what check asks for, and the guide says to set the Worker's secret next")
 
-	r.step("A local Worker, with no Cloudflare login")
-	os.WriteFile(filepath.Join(r.dir, ".dev.vars"), []byte("GREETING=hello\n"), 0o600) // the secret's local value
+	r.step("A local Worker with mise-cloudflare dev, with no Cloudflare login")
+	r.tool = []string{strings.TrimSpace(r.must(nil, "mise", "exec", "--", "which", "mise-cloudflare"))} // dev runs with a bare HOME
 	if body := r.localWorker(); !allWork(body) {
 		t.Fatalf("the local Worker: %s", body)
 	}
