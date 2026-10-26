@@ -105,6 +105,7 @@ func initRepo(ctx context.Context, dir string) {
 		writeFile(path, w)
 	}
 	claude(ctx, dir)
+	fixRepo(ctx, dir)
 }
 
 // writeSkill installs the agent skill into dir (a repo's .claude/skills).

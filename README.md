@@ -18,7 +18,8 @@ mise use github:joeblew999/mise-cloudflare   # or, in a Go repo: go get -tool gi
 cloudflare init                              # or: go tool cloudflare init
 ```
 
-Commit what `init` wrote. There's nothing to edit, then or ever.
+Commit what `init` wrote. There's nothing to edit, then or ever. `init` also fixes what it can for `check`: it
+git-ignores `.dev.vars`, `.env` and `.cloudflare/`, and pins wrangler to the version installed.
 
 ## Use it
 

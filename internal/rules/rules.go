@@ -32,7 +32,7 @@ func Check(dir string, w wconfig.Config, previews bool) ([]string, error) {
 	problems := Previews(w, previews)
 	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
 	for _, p := range IDs(w.Raw) {
-		bad("%s holds %s: the login picks the account, and deploy finds or creates resources by name", filepath.Base(w.Path), p)
+		bad("%s holds %s: remove it, and deploy finds or creates the resource by its name, on the login's account", filepath.Base(w.Path), p)
 	}
 
 	files, err := gitFiles(dir)

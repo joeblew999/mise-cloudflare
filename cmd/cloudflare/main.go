@@ -94,7 +94,9 @@ func main() {
 	case "":
 		r.guide(ctx, *jsonOut)
 	case "dev":
-		// Local development needs no login: the repo's own wrangler, on local D1, KV and R2.
+		// Local development needs no login: the repo's own wrangler, on local D1, KV and R2, and the secrets' local
+		// values from .dev.vars.
+		devVars(r.dir, r.wc.Secrets)
 		r.run(ctx, false, append([]string{"dev"}, args...))
 	case "deploy":
 		if os.Getenv("WRANGLER_OUTPUT_FILE_PATH") == "" {
