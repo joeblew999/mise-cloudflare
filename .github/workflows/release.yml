@@ -7,7 +7,7 @@ name: release
 on:
   push:
     branches: [main]
-    paths: ["cmd/**", "internal/**", "mise/**", "skills/**", "go.mod", "go.sum", ".goreleaser.yaml"]
+    paths: ["cmd/**", "internal/**", "mise/**", "skills/**", "go.mod", "go.sum", ".goreleaser.yaml", ".github/workflows/release.yml"]
     tags: ["v*"]
 
 concurrency:
@@ -33,7 +33,18 @@ jobs:
           git checkout -q --detach "$GITHUB_SHA"
           git log --oneline -1
 
-      - name: On main, tag the next patch version (none if this commit has one)
+      - name: mise, Go and goreleaser
+        run: |
+          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_QUIET=1 sh
+          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          mise install
+
+      - name: The tests, as on any machine
+        run: mise run test
+
+      - name: On main, tag the next patch version once the tests pass (none if this commit has one)
         if: github.ref_type == 'branch'
         run: |
           if tag=$(git describe --tags --exact-match --match 'v*' 2>/dev/null); then echo "already $tag"; else
@@ -46,17 +57,8 @@ jobs:
           fi
           echo "TAG=$tag" >> "$GITHUB_ENV"
 
-      - name: mise, Go and goreleaser
+      - name: The release
         run: |
-          echo "MISE_TRUSTED_CONFIG_PATHS=$PWD" >> "$GITHUB_ENV"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://mise.run | MISE_QUIET=1 sh
-          export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
-          mise install go goreleaser
-
-      - name: The tests, then the release
-        run: |
-          mise run test
           GORELEASER_CURRENT_TAG="${TAG:-$GITHUB_REF_NAME}" mise exec -- goreleaser release --clean
 
       - name: proxy.golang.org fetches the version, so go get and pkg.go.dev have it at once

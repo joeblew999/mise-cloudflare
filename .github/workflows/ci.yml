@@ -39,9 +39,6 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           mise install
 
-      - name: example/'s pinned wrangler, which the tests read the binding types and login scopes from
-        run: cd example && mise run setup
-
       - name: The Go tests (no Cloudflare account)
         run: mise run test
 
