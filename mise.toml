@@ -35,7 +35,7 @@ run = "cd example && mise run setup && cd .. && go vet ./... && go test ./..."
 description = "A new repo as a user sets it up, no Cloudflare account: mise-cloudflare from mise, init, then status, check and dev. This checkout's build, or a release with --version"
 usage = 'flag "--version <version>" help="test this release from GitHub instead, as mise use installs it"'
 depends = ["build"]
-run = "MISE_CLOUDFLARE_SMOKE=1 MISE_CLOUDFLARE_VERSION=${usage_version:-} go test ./e2e -run '^TestNewRepo$' -count=1 -v -timeout 10m"
+run = "SMOKE=1 SMOKE_RELEASE=${usage_version:-} go test ./e2e -run '^TestNewRepo$' -count=1 -v -timeout 10m"
 
 [tasks.prove]
 description = "Real deploys on a Cloudflare account (about 30 minutes): example/ as a developer uses it (secret, deploy, live D1, KV, R2 and secret, stray tokens refused), then Cloudflare deploying every push (production, a pull request's preview, gone with its branch). Everything deleted after. The first time, an Allow"
