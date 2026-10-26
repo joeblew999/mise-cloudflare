@@ -9,7 +9,9 @@ are. README.md is the whole picture; read it first.
 - `mise run test`: the Go tests, no Cloudflare account. Run them after every change.
 - `mise run example`: runs `go tool cloudflare init` in `example/`, as any repo is set up. The tests fail while it's
   stale.
-- `mise run prove`: one real deploy of example/, before a release, a few minutes. It refuses to start while its Worker,
+- Releases are automatic: a merge to main that changes the tool (cmd/, internal/, mise/, skills/, go.mod) tags the
+  next patch version and releases it (release.yml), so the release is always main.
+- `mise run prove`: one real deploy of example/, before merging a change to how it deploys, a few minutes. It refuses to start while its Worker,
   D1, KV or R2 exists and deletes what it made, even when it fails. Previews, staging and production are shown working
   by Cloudflare's own checks on the pull requests, and GitHub Actions by its runs: never build a harness for those.
 - A login needs a person to click Allow: never try to do it for them. With `CLOUDFLARE_LOGIN=device`, or in a Claude

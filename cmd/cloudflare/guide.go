@@ -28,6 +28,7 @@ type guideReport struct {
 	URL         string             `json:"url,omitempty"`
 	GitHub      string             `json:"github"` // who deploys every push: "Workers Builds", "GitHub Actions", or ""
 	StrayTokens []string           `json:"strayTokens"`
+	Problems    []string           `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
 	Next        string             `json:"next"`
 }
 
@@ -35,9 +36,13 @@ type guideReport struct {
 // next one. It never logs in.
 func (r repo) guide(ctx context.Context, jsonOut bool) {
 	rep := guideReport{Worker: r.wc.Name, Profile: r.w.Profile, Accounts: []wrangler.Account{}, Scopes: []string{},
-		Needs: r.wanted(ctx), StrayTokens: tokenEnvFiles(r.dir)}
+		Needs: r.wanted(ctx), StrayTokens: tokenEnvFiles(r.dir), Problems: []string{}}
 	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" {
 		rep.StrayTokens = append([]string{"this shell"}, rep.StrayTokens...)
+	}
+	// cloudflare check's problems come before deploying: it fails on them, or leaks the login or a secret.
+	if problems, err := rules.Check(r.dir, r.wc, r.viaActions); err == nil {
+		rep.Problems = append(append([]string{}, problems...), r.stale(ctx)...)
 	}
 	rep.LoggedIn = r.w.LoggedIn(ctx)
 	if rep.LoggedIn && len(rep.StrayTokens) == 0 {
@@ -87,6 +92,8 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	switch {
 	case len(rep.StrayTokens) > 0:
 		rep.Next = "remove the CLOUDFLARE_API_TOKEN in " + strings.Join(rep.StrayTokens, " and ") + ": it would override the repo's login"
+	case len(rep.Problems) > 0:
+		rep.Next = "fix what mise run cloudflare check lists, first: " + rep.Problems[0]
 	case len(rep.Secrets) > 0:
 		rep.Next = "mise run cloudflare wrangler secret put " + rep.Secrets[0] + " (it asks for the value)"
 	case !rep.Deployed:
@@ -108,6 +115,9 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	}
 	mark := map[bool]string{true: "✓", false: "·"}
 	fmt.Printf("%s\n", rep.Worker)
+	if len(rep.Problems) > 0 {
+		fmt.Printf("  ✗ the repo has %d problem(s) to fix first (mise run cloudflare check lists them)\n", len(rep.Problems))
+	}
 	fmt.Printf("  ✓ 1. Run it locally     mise run cloudflare:dev\n")
 	fmt.Printf("  %s 2. Deploy it          mise run cloudflare:deploy   %s\n", mark[rep.Deployed], cmp.Or(rep.URL, map[bool]string{true: "deployed", false: "not deployed yet"}[rep.Deployed]))
 	if len(rep.Secrets) > 0 {

@@ -1,10 +1,18 @@
-# A v* tag's release: goreleaser builds the cloudflare binary for every machine (.goreleaser.yaml) and puts them on the
-# tag's GitHub release, where mise's github backend finds them. Shell steps only, as ci.yml.
+# A release on every change to what the tool is (its code, the files it writes, its skill) merged to main, so
+# `mise use github:joeblew999/mise-cloudflare` always gets what main is: the next patch version is tagged here, and
+# goreleaser builds the cloudflare binary for every machine (.goreleaser.yaml) onto the tag's GitHub release, where mise's
+# github backend finds it. A v* tag pushed by hand releases that version instead. Shell steps only, as ci.yml.
 name: release
 
 on:
   push:
+    branches: [main]
+    paths: ["cmd/**", "internal/**", "mise/**", "skills/**", "go.mod", "go.sum", ".goreleaser.yaml"]
     tags: ["v*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write # the release and its files
@@ -17,13 +25,26 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MISE_YES: "1"
     steps:
-      - name: Check out the tag with git (no actions/checkout)
+      - name: Check out with git, with the tags (no actions/checkout)
         run: |
           git init -q .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "+${GITHUB_REF}:${GITHUB_REF}"
-          git checkout -q --detach "${GITHUB_REF}"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --tags origin "$GITHUB_SHA"
+          git checkout -q --detach "$GITHUB_SHA"
           git log --oneline -1
+
+      - name: On main, tag the next patch version (none if this commit has one)
+        if: github.ref_type == 'branch'
+        run: |
+          if tag=$(git describe --tags --exact-match --match 'v*' 2>/dev/null); then echo "already $tag"; else
+            last=$(git tag -l 'v*' --sort=-v:refname | head -1)
+            IFS=. read -r maj min pat <<<"${last#v}"
+            tag="v${maj:-0}.${min:-0}.$(( ${pat:-0} + 1 ))"
+            git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com tag -a "$tag" -m "$tag"
+            git push -q origin "$tag"
+            echo "tagged $tag"
+          fi
+          echo "TAG=$tag" >> "$GITHUB_ENV"
 
       - name: mise, Go and goreleaser
         run: |
@@ -36,8 +57,8 @@ jobs:
       - name: The tests, then the release
         run: |
           mise run test
-          mise exec -- goreleaser release --clean
+          GORELEASER_CURRENT_TAG="${TAG:-$GITHUB_REF_NAME}" mise exec -- goreleaser release --clean
 
       - name: proxy.golang.org fetches the version, so go get and pkg.go.dev have it at once
         run: |
-          GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod mise exec -- go list -m "github.com/${GITHUB_REPOSITORY}@${GITHUB_REF_NAME}"
+          GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod mise exec -- go list -m "github.com/${GITHUB_REPOSITORY}@${TAG:-$GITHUB_REF_NAME}"

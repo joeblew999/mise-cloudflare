@@ -12,5 +12,5 @@ node = "26.12.1"   # runs wrangler
 aube = "2.8.1"     # installs wrangler from package.json
 
 [tasks.setup]
-description = "Install the pinned wrangler, and make .dev.vars from .dev.vars.example for wrangler dev (no account)"
-run = ["aube install", "cp -n .dev.vars.example .dev.vars || true"]
+description = "Install the pinned wrangler (cloudflare:dev makes .dev.vars from .dev.vars.example)"
+run = "aube install"
