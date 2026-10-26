@@ -9,7 +9,7 @@ import (
 )
 
 func (r repo) check(ctx context.Context, jsonOut bool) {
-	problems, err := rules.Check(r.dir, r.wc, r.viaActions) // the deploy workflow runs Worker Previews
+	problems, err := rules.Check(r.dir, r.wc)
 	if err != nil {
 		fail(err)
 	}

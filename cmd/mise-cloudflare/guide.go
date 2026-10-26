@@ -26,7 +26,7 @@ type guideReport struct {
 	Deployed    bool               `json:"deployed"`
 	Secrets     []string           `json:"secretsToSet"` // the config's secrets.required not yet on Cloudflare
 	URL         string             `json:"url,omitempty"`
-	GitHub      string             `json:"github"` // who deploys every push: "Workers Builds", "GitHub Actions", or ""
+	GitHub      string             `json:"github"` // "Workers Builds" when it deploys every push, else ""
 	StrayTokens []string           `json:"strayTokens"`
 	Problems    []string           `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
 	Next        string             `json:"next"`
@@ -41,7 +41,7 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 		rep.StrayTokens = append([]string{"this shell"}, rep.StrayTokens...)
 	}
 	// cloudflare check's problems come before deploying: it fails on them, or leaks the login or a secret.
-	if problems, err := rules.Check(r.dir, r.wc, r.viaActions); err == nil {
+	if problems, err := rules.Check(r.dir, r.wc); err == nil {
 		rep.Problems = append(append([]string{}, problems...), r.stale(ctx)...)
 	}
 	rep.LoggedIn = r.w.LoggedIn(ctx)
@@ -69,10 +69,7 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 			}
 		}
 	}
-	switch {
-	case r.viaActions:
-		rep.GitHub = "GitHub Actions"
-	case rep.Deployed && r.buildsConnected(ctx):
+	if rep.Deployed && r.buildsConnected(ctx) {
 		rep.GitHub = "Workers Builds"
 	}
 	// What GitHub deploying needs from the wrangler config first (a previews block with the Worker's bindings), and,
@@ -84,9 +81,6 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	if rep.GitHub != "" && len(rep.Accounts) == 1 {
 		if token, err := r.w.Token(ctx); err == nil {
 			previewsMissing, previewSecrets = r.previewsMissing(ctx, token, rep.Accounts[0].ID)
-		}
-		if rep.GitHub == "GitHub Actions" {
-			previewsMissing = nil // its preview job makes them, every time
 		}
 	}
 	switch {

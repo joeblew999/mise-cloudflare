@@ -1,28 +1,27 @@
 # mise-cloudflare
 
-A repo's own Cloudflare login, and the repo's own wrangler on it, as a Go command (`go tool cloudflare`, or the released
-`cloudflare` binary for repos without Go) with its mise tasks and agent skill, built the way go-htmx4's `seo` and `intl`
-are. README.md is the whole picture; read it first.
+A repo's own Cloudflare login, and the repo's own wrangler on it: the `mise-cloudflare` binary, which a repo pins with
+mise, with its mise tasks and agent skill. README.md is the whole picture; read it first.
 
 ## Working on it
 
 - `mise run test`: the Go tests, no Cloudflare account. Run them after every change.
-- `mise run example`: runs `go tool cloudflare init` in `example/`, as any repo is set up. The tests fail while it's
-  stale.
+- `mise run smoke`: a new repo as a user sets it up, on this checkout's build, no account. Run it after every change.
+- `mise run example`: writes init's files into `example/` with this checkout's build. The tests fail while it's stale.
 - Releases are automatic: a merge to main that changes the tool (cmd/, internal/, mise/, skills/, go.mod) tags the
   next patch version and releases it (release.yml), so the release is always main.
-- `mise run prove`: one real deploy of example/, before merging a change to how it deploys, a few minutes. It refuses to start while its Worker,
+- `mise run prove`: real deploys of example/, before merging a change to how it deploys. It refuses to start while its Worker,
   D1, KV or R2 exists and deletes what it made, even when it fails. Previews, staging and production are shown working
-  by Cloudflare's own checks on the pull requests, and GitHub Actions by its runs: never build a harness for those.
+  by Cloudflare's own checks on the pull requests: never build a harness for those.
 - A login needs a person to click Allow: never try to do it for them. With `CLOUDFLARE_LOGIN=device`, or in a Claude
   Code cloud session, the tool prints a link with the code already in it; send it to the person.
 
 ## Rules
 
 - Never create, ask for or store a Cloudflare API token for a person: the repo's login is a wrangler auth profile, and
-  Workers Builds deploys with Cloudflare's own build token. The one token is CI's, as a GitHub secret.
+  Workers Builds deploys with Cloudflare's own build token. CI only checks.
 - Never parse a wrangler config here: wrangler reads it (`internal/wconfig`).
 - The repo's login asks for wrangler's own login's scopes, read from the repo's wrangler (`wrangler login
   --scopes-list`): never a list of binding kinds or a binding-to-scope table here. There's no settings file: every choice is a
-  task's flag, kept where it lives (Cloudflare's Workers Builds setup, the repo's workflow file).
+  task's flag, kept by Cloudflare's Workers Builds setup.
 - Work with the cloud session through pull request comments, never through the owner copying text between devices.

@@ -1,6 +1,5 @@
-// Package wconfig asks a repo's own pinned wrangler for its config. wrangler reads it (wrangler.json, wrangler.jsonc or
-// wrangler.toml, every setting, environments, CLOUDFLARE_ENV), so nothing here parses a wrangler config: it takes
-// wrangler's resolved config for what deploy will use, and the file as written, every environment in it, for the rules.
+// Package wconfig asks the repo's own wrangler for its config, so nothing here parses one: what deploy will use, and the
+// file as written.
 package wconfig
 
 import (
@@ -26,9 +25,7 @@ type Config struct {
 	Raw             map[string]any    `json:"raw"` // the file as written, every environment in it
 }
 
-// Created is how wrangler deploy finds or creates a binding's resource by name when the config names none: KV, D1 and
-// R2, by wrangler's types for them. Wrangler preview creates none, so previews get their own another way (go tool
-// cloudflare deploy, preview and github), and IDs in the config for them are never needed.
+// Created is the binding kinds wrangler deploy finds or creates by name (KV, D1, R2), so the config needs no IDs for them.
 var Created = map[string]struct {
 	What    string   // KV
 	Key     string   // its list in a wrangler config: kv_namespaces
@@ -41,9 +38,7 @@ var Created = map[string]struct {
 	"r2_bucket":    {"R2", "r2_buckets", "bucket_name", nil, "bucket_name"},
 }
 
-// script reads the config with the repo's own wrangler: unstable_readConfig is what wrangler deploy resolves,
-// experimental_readRawConfig the file as written, unstable_convertConfigBindingsToStartWorkerBindings its bindings, as
-// wrangler sends them. One marked line, so nothing else wrangler prints gets in the way.
+// script reads the config with the repo's own wrangler and prints it as one marked line.
 const script = `const w = await import('wrangler');
 const c = w.unstable_readConfig({ env: process.env.CLOUDFLARE_ENV || undefined });
 const r = await w.experimental_readRawConfig({});

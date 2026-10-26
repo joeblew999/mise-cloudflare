@@ -1,10 +1,12 @@
-# A Worker repo set up with mise-cloudflare exactly as any other repo is: go.mod's tool line, then go tool cloudflare
-# init, which wrote the mise tasks in .mise/tasks/ (mise finds them there by itself): mise run cloudflare shows the way.
+# A Worker repo set up with mise-cloudflare as any repo is (mise run cloudflare shows the way), but on the tool built
+# from this checkout, ../bin/mise-cloudflare, so it tests what's here. Any other repo pins the release instead:
+# mise use github:joeblew999/mise-cloudflare@<version>
+
+[env]
+_.path = ["{{config_root}}/../bin"]
 
 [settings]
-# go.mod's toolchain line is the Go pin; this makes mise install honour it.
-idiomatic_version_file_enable_tools = ["go"]
-# mise 2026.10 fails to install aube and usage while it fetches their agent skills (a 404); they aren't needed.
+# mise 2026.10 fails to install aube while it fetches its agent skill (a 404); it isn't needed.
 skills.fetch = false
 
 [tools]
@@ -12,5 +14,5 @@ node = "26.12.1"   # runs wrangler
 aube = "2.8.1"     # installs wrangler from package.json
 
 [tasks.setup]
-description = "Install the pinned wrangler (cloudflare:dev makes .dev.vars from .dev.vars.example)"
-run = "aube install"
+description = "Install the pinned wrangler, and build ../bin/mise-cloudflare from this checkout"
+run = ["aube install", "cd .. && go build -o bin/mise-cloudflare ./cmd/mise-cloudflare"]

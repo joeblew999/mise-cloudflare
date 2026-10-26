@@ -49,7 +49,7 @@ func cfg() wconfig.Config {
 }
 
 func TestCheckPasses(t *testing.T) {
-	if p, err := Check(repo(t, good()), cfg(), false); err != nil || len(p) != 0 {
+	if p, err := Check(repo(t, good()), cfg()); err != nil || len(p) != 0 {
 		t.Errorf("problems %q, %v", p, err)
 	}
 }
@@ -66,12 +66,12 @@ func TestCheckFinds(t *testing.T) {
 	delete(c.Raw, "previews")
 	c.Raw["d1_databases"] = []any{map[string]any{"binding": "DB", "database_id": "x"}}
 	c.Raw["env"] = map[string]any{"production": map[string]any{"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "y"}}}}
-	p, err := Check(repo(t, files), c, true)
+	p, err := Check(repo(t, files), c)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := strings.Join(p, "\n")
-	for _, want := range []string{"add \"previews\": {}", "an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
+	for _, want := range []string{"an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
 		"notes.txt holds a Cloudflare token", ".dev.vars isn't", ".env isn't", ".cloudflare/ isn't", "secrets.required lists [GREETING KEY]", "isn't pinned"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -82,14 +82,13 @@ func TestCheckFinds(t *testing.T) {
 	}
 }
 
-
 // TestPreviewBindings: a binding the previews block doesn't have is named, but for KV, D1 and R2, which the Previews Base
 // gives (cloudflare deploy, preview and github).
 func TestPreviewBindings(t *testing.T) {
 	c := cfg()
 	c.PreviewBindings = map[string]string{"AI": "ai"}
 	c.Bindings = map[string]string{"DB": "d1", "KV": "kv_namespace", "BUCKET": "r2_bucket", "INDEX": "vectorize", "JOBS": "queue", "AI": "ai", "ASSETS": "assets"}
-	p, err := Check(repo(t, good()), c, false)
+	p, err := Check(repo(t, good()), c)
 	if err != nil || len(p) != 1 || !strings.Contains(p[0], "lacks the bindings INDEX, JOBS") {
 		t.Errorf("problems %q, %v", p, err)
 	}

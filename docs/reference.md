@@ -4,15 +4,14 @@ The details behind the [README](../README.md).
 
 ## The commands
 
-Each is `mise run cloudflare <command>` (it runs `cloudflare <command>`, or `go tool cloudflare <command>` in a Go repo).
+Each is `mise run cloudflare <command>`, which runs `mise-cloudflare <command>`.
 
 | Command | Does | Asks you |
 |---|---|---|
 | (none) | Where the Worker is, step by step, and what to run next; `--json` for a program | Nothing |
 | `dev` | `wrangler dev`: the Worker locally, with local D1, KV and R2 and `.dev.vars` | Nothing |
-| `deploy` | `wrangler deploy` on the repo's login (wrangler's flags follow: `--env staging`); previews get their own KV, D1 and R2 | Allow, the first time |
+| `deploy` | `wrangler deploy` on the repo's login (wrangler's flags follow: `--env staging`) | Allow, the first time |
 | `github` | Cloudflare deploys every push (Workers Builds): production from the repository's default branch, a preview for every other; `--staging main` for staging; `--branch`, `--build` to change those; `--off` to stop. Run again with no flags, it keeps what's set | Allow for cf, the first time |
-| `actions` | Instead of `github`: the repo's workflow deploys, with a Cloudflare token you make once from the link it gives, kept as GitHub secrets; `--branch` for production's branch; `--off` to stop | Making the token, once |
 | `preview` | A preview of what's here now (`wrangler preview`: `--name my-test`), with its own KV, D1 and R2 | Allow, the first time |
 | `wrangler <...>` | Any wrangler command on the repo's login: `wrangler d1 list`, `secret put`, `delete`, `tail`, … | Allow, the first time |
 | `check` | The repo's rules (below), and whether init's files are current | Nothing |
@@ -25,13 +24,14 @@ Each is `mise run cloudflare <command>` (it runs `cloudflare <command>`, or `go 
 | File | What |
 |---|---|
 | `.mise/tasks/mise-cloudflare.toml` | The one task, `mise run cloudflare` (mise finds it there by itself) |
-| `.github/workflows/cloudflare.yml` (`cloudflare-<folder>.yml` for a Worker in a subfolder) | Checks the repo on every push and pull request; after `cloudflare actions` it deploys too |
+| `.github/workflows/cloudflare.yml` (`cloudflare-<folder>.yml` for a Worker in a subfolder) | Checks the repo on every push and pull request |
 | `.claude/skills/cloudflare/SKILL.md` | The agent skill: how Claude works on the Worker |
 | `.claude/hooks/mise-cloudflare-session-start.sh`, and its entry in `.claude/settings.json` | Sets a Claude Code cloud session up when it starts |
 
-None is for editing. They come from inside mise-cloudflare, at its version: after upgrading, `update` writes them
-again, and `check` fails until it has. There's no settings file: each choice is a command's flag, kept where it lives
-(Cloudflare's Workers Builds setup, the workflow file).
+None is for editing. They come from inside mise-cloudflare: after upgrading, `update` writes them again, and `check`
+fails until it has. The repo's `mise.toml` pins the version. There's no settings file: each choice is a command's flag,
+kept by Cloudflare's Workers Builds setup. init also git-ignores the secrets files and `node_modules/`, pins wrangler,
+and writes `.dev.vars.example` when there's none.
 
 ## The rules (`check`)
 
@@ -39,24 +39,22 @@ again, and `check` fails until it has. There's no settings file: each choice is 
 |---|---|
 | No account or resource IDs in its wrangler config, in any environment | The login picks the account; wrangler finds or creates KV, D1 and R2 by name |
 | No Cloudflare token in its files, and nothing calling `wrangler login` | A token in the repo leaks; `wrangler login` is the machine's, not the repo's |
-| `.dev.vars`, `.env` and `.cloudflare/` git-ignored | Secrets, and Cloudflare's `cf` caches the account it logged into in `.cloudflare/` |
+| `.dev.vars`, `.env` and `.cloudflare/` git-ignored (init does it) | Secrets, and Cloudflare's `cf` caches the account it logged into in `.cloudflare/` |
 | `.dev.vars.example` listing exactly the config's `secrets.required` | So `wrangler dev` has every secret |
-| wrangler pinned to an exact version in `package.json` | So everyone, CI and Cloudflare's builds run the same wrangler |
-| Where previews run (`github`, `actions`): a `previews` block with every binding a preview uses but KV, D1 and R2 | A preview inherits nothing from production; KV, D1 and R2 it gets its own (below) |
+| wrangler pinned to an exact version in `package.json` (init does it) | So everyone, CI and Cloudflare's builds run the same wrangler |
+| A `previews` block, if there is one, with every binding a preview uses but KV, D1 and R2 | A preview inherits nothing from production; KV, D1 and R2 it gets its own (below) |
 
-## Cloudflare's three kinds of credential
+## Cloudflare's kinds of credential
 
 - **A login (OAuth).** wrangler opens Cloudflare's page, you click Allow and pick your account, and wrangler gets a
   token that can do what the page listed, its scopes. It lasts about an hour, and wrangler renews it by itself. It lives
   in wrangler's folder on your machine, never in the repo. Each repo has its own: the repo's login, below.
-- **An API token.** A secret string made by hand in Cloudflare's dashboard, its permissions picked there. Using one
-  needs no click, so it's for GitHub Actions, where no one is there to click; it's kept as a GitHub secret. Used here
-  only if GitHub Actions deploys.
+- **An API token.** A secret string made by hand in Cloudflare's dashboard. Never used here.
 - **Cloudflare's build token.** Workers Builds deploys with a token Cloudflare made and keeps, so GitHub holds no
   Cloudflare credential at all.
 
 A running Worker uses none of them: Cloudflare connects its bindings itself. A `CLOUDFLARE_API_TOKEN` in a shell or a
-`.env` would beat every login (wrangler uses it, silently, instead), so outside CI the commands refuse one.
+`.env` would beat every login (wrangler uses it, silently, instead), so the commands refuse one.
 Cloudflare's Global API Key is never used.
 
 ## The repo's login
@@ -98,24 +96,17 @@ login; the task brings cf.
 ### The previews' own KV, D1 and R2
 
 Cloudflare makes previews no KV, D1 or R2 (only Durable Objects and Containers), and `wrangler preview` creates none.
-So `deploy`, `preview` and `github` make `<worker>-previews-<binding>` for each KV, D1 and R2 binding, once, and put
+So `github` and `preview` make `<worker>-previews-<binding>` for each KV, D1 and R2 binding, once, and put
 them in the Worker's Previews Base on Cloudflare, the settings every new preview starts from. Nothing goes into the
 repo. All previews share them; production's and staging's stay theirs. After adding a KV, D1 or R2 binding, the guide
 says to run `github` again, which gives previews the new one. `github --off` deletes them (an R2 bucket only once it's
 empty).
 
-## GitHub Actions (`actions`)
+## CI
 
 init's workflow runs on every push and pull request: mise and its pinned tools, the repo's own `setup` and `test`
-tasks, then `check`. It needs no Cloudflare account.
-
-`actions` turns deploying on in it, instead of Workers Builds: production from the repository's default branch (or
-`--branch`), a preview `pr-<number>` for each pull request, its URL commented, deleted when the pull request closes. It
-deploys with an API token, since GitHub has no one to click Allow, and Cloudflare lets no login make one, so you make
-it once in the dashboard: `actions` prints the link, with Workers Scripts, KV, R2, D1, Queues, Workers Routes and Zone
-Read already picked (a Worker using more needs that added there), takes the token hidden, checks it, and stores it and
-the account's ID as the repository's GitHub secrets. It's never shown or written into the repo. Commit the workflow it
-rewrote. `actions --off` takes the deploy jobs out again and deletes the secrets.
+tasks, then `check`. It needs no Cloudflare account. In CI the commands that need a login stop at once: no one is
+there to click Allow, and Cloudflare's Workers Builds deploys.
 
 ## Claude Code cloud sessions
 
@@ -127,7 +118,7 @@ name.
 
 ## Releases
 
-Before a release, `mise run prove` deploys example/ for real (see [testing](testing.md)). A `v*` tag runs
-[release.yml](../.github/workflows/release.yml): the tests, then [goreleaser](../.goreleaser.yaml) puts the
-`cloudflare` binary for macOS, Linux and Windows on the release with the commits since the last tag as its notes, and
-proxy.golang.org fetches the module so `go get` and pkg.go.dev have it at once.
+Every change to the tool merged to main is released: [release.yml](../.github/workflows/release.yml) runs the tests,
+tags the next patch version, [goreleaser](../.goreleaser.yaml) puts the `mise-cloudflare` binary for macOS, Linux and
+Windows on the release, and `mise run smoke` then sets a new repo up on that release as a user does. Before merging a
+change to how it deploys, `mise run prove` deploys example/ for real (see [testing](testing.md)).

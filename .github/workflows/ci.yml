@@ -42,6 +42,9 @@ jobs:
       - name: The Go tests (no Cloudflare account)
         run: mise run test
 
+      - name: A new repo as a user sets it up, on this build (mise run smoke)
+        run: mise run smoke
+
       - name: The release config is valid
         run: mise exec -- goreleaser check
 

@@ -1,11 +1,11 @@
-# The mise-cloudflare binary for every machine, on each v* tag (.github/workflows/release.yml), so a repo without Go gets it
-# with mise: "github:joeblew999/mise-cloudflare" = "<version>". A repo with Go uses go tool cloudflare instead.
+# The mise-cloudflare binary for every machine, on each release (.github/workflows/release.yml); a repo pins it with
+# mise use github:joeblew999/mise-cloudflare@<version>.
 version: 2
 project_name: mise-cloudflare
 builds:
   - id: cloudflare
-    main: ./cmd/cloudflare
-    binary: mise-cloudflare # not cloudflare: Cloudflare's own cf CLI installs a cloudflare command too
+    main: ./cmd/mise-cloudflare
+    binary: mise-cloudflare
     env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]

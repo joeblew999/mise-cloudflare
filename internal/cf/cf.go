@@ -1,7 +1,5 @@
-// Package cf runs Cloudflare's own CLI, cf (npm: cf), on a repo's cf login: a cf auth profile, kept in cf's folder in
-// the person's home directory. go tool cloudflare uses it for what wrangler's login can't do: Workers Builds, whose
-// OAuth scope (workers_builds:write) wrangler's login doesn't offer and cf's does. cf logs in with the OAuth device flow
-// by default, so it works the same in a browser and in a Claude Code cloud session.
+// Package cf runs Cloudflare's own CLI, cf, on the repo's cf login, for Workers Builds: wrangler's login can't hold
+// its scope (workers_builds:write).
 package cf
 
 import (

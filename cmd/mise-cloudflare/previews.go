@@ -9,8 +9,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
@@ -30,12 +28,8 @@ type previewResource struct {
 	Done    string `json:"done"`         // made, there already, deleted
 }
 
-// previews gives the Worker's previews their own KV, D1 and R2. Cloudflare makes previews none (only Durable Objects
-// and Containers), and wrangler preview creates none, as wrangler deploy does for production. So for each KV, D1 and R2
-// binding its previews block leaves out, it makes <worker>-previews-<binding> once, with the repo's own wrangler, and
-// puts it in the Worker's Previews Base on Cloudflare, which every new preview starts from: nothing goes into the repo,
-// and production's and staging's stay theirs. Run again, it makes only what's new. With off, it takes them out of the
-// Previews Base and deletes them. The Worker must be on Cloudflare already: deployed once, or by Workers Builds.
+// previews gives previews their own KV, D1 and R2 (<worker>-previews-<binding>), which Cloudflare doesn't, and puts them
+// in the Worker's Previews Base. Nothing goes into the repo. --off deletes them. The Worker must be deployed first.
 func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource {
 	out := r.previewNeeds()
 	if len(out) == 0 {
@@ -96,9 +90,8 @@ func (r repo) previewNeeds() []previewResource {
 	return out
 }
 
-// previewsMissing is what the Worker's Previews Base on Cloudflare, which every new preview starts from, doesn't have
-// yet: the previews' own KV, D1 and R2 (a binding added since they were made), and the secrets the Worker requires,
-// which previews don't inherit either. Nil if it can't tell.
+// previewsMissing is what the Previews Base lacks: KV, D1 or R2 added since, and the Worker's required secrets. Nil if
+// it can't tell.
 func (r repo) previewsMissing(ctx context.Context, token, account string) (resources, secrets []string) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://api.cloudflare.com/client/v4/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil)
@@ -163,7 +156,7 @@ func (r repo) findPreview(ctx context.Context, p previewResource) (bool, string,
 			}
 		}
 	case "r2_bucket":
-		_, err := wrangler.Output(r.wranglerCmd(ctx, "r2", "bucket", "info", p.Name))
+		_, err := wrangler.Output(r.w.Cmd(ctx, "r2", "bucket", "info", p.Name))
 		return err == nil, "", nil
 	}
 	return false, "", nil
@@ -175,7 +168,7 @@ func (r repo) previewResource(ctx context.Context, p previewResource) (string, s
 		return id, "there already", err
 	}
 	create := map[string][]string{"kv_namespace": {"kv", "namespace", "create", p.Name}, "d1": {"d1", "create", p.Name}, "r2_bucket": {"r2", "bucket", "create", p.Name}}
-	if _, err := wrangler.Output(r.wranglerCmd(ctx, create[p.Type]...)); err != nil {
+	if _, err := wrangler.Output(r.w.Cmd(ctx, create[p.Type]...)); err != nil {
 		return "", "", fmt.Errorf("making the previews' %s %s: %w", p.Kind, p.Name, err)
 	}
 	there, id, err := r.findPreview(ctx, p)
@@ -196,7 +189,7 @@ func (r repo) deletePreviewResource(ctx context.Context, p previewResource) stri
 		"d1":           {"d1", "delete", p.Name, "--skip-confirmation"},
 		"r2_bucket":    {"r2", "bucket", "delete", p.Name},
 	}[p.Type]
-	if _, err := wrangler.Output(r.wranglerCmd(ctx, args...)); err != nil {
+	if _, err := wrangler.Output(r.w.Cmd(ctx, args...)); err != nil {
 		if p.Type == "r2_bucket" && strings.Contains(err.Error(), "not empty") {
 			return "not deleted: it still holds objects; delete them, then this again"
 		}
@@ -205,17 +198,9 @@ func (r repo) deletePreviewResource(ctx context.Context, p previewResource) stri
 	return "deleted"
 }
 
-// wranglerCmd is a wrangler command on the repo's login, or in CI on CLOUDFLARE_API_TOKEN.
-func (r repo) wranglerCmd(ctx context.Context, args ...string) *exec.Cmd {
-	if ci() {
-		return r.w.Plain(ctx, args...)
-	}
-	return r.w.Cmd(ctx, args...)
-}
-
 // wranglerJSON runs a wrangler command and decodes its JSON, past anything it prints first (a warning, say).
 func (r repo) wranglerJSON(ctx context.Context, v any, args ...string) error {
-	out, err := wrangler.Output(r.wranglerCmd(ctx, args...))
+	out, err := wrangler.Output(r.w.Cmd(ctx, args...))
 	if err != nil {
 		return err
 	}
@@ -228,16 +213,8 @@ func (r repo) wranglerJSON(ctx context.Context, v any, args ...string) error {
 	return nil
 }
 
-// cloudflareAPI is the token and account a call to Cloudflare's API goes with: CI's secrets in CI, else the repo's own
-// login's (its OAuth token, which wrangler renews).
+// cloudflareAPI is the repo's login's OAuth token (wrangler renews it) and its account, for Cloudflare's API.
 func (r repo) cloudflareAPI(ctx context.Context) (token, account string) {
-	if ci() {
-		token, account = os.Getenv("CLOUDFLARE_API_TOKEN"), os.Getenv("CLOUDFLARE_ACCOUNT_ID")
-		if token == "" || account == "" {
-			fail(errors.New("in CI this needs the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets (mise run cloudflare actions stores them)"))
-		}
-		return token, account
-	}
 	who := r.login(ctx)
 	if len(who.Accounts) != 1 {
 		fail(fmt.Errorf("the login %s can use %d accounts; log it in again and pick one", r.w.Profile, len(who.Accounts)))

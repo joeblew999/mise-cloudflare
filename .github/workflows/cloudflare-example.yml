@@ -1,21 +1,15 @@
-# Written by mise-cloudflare (0.0.0): don't edit it. After upgrading, mise run cloudflare update writes it again;
-# cloudflare check fails while it's out of date.
-#
-# What GitHub Actions runs for the Worker in example on every push and pull request: its setup and test tasks if it has
-# them, then cloudflare check (no account or resource IDs, no tokens, secrets listed, wrangler pinned). No Cloudflare
-# credentials: Cloudflare's Workers Builds deploys (mise run cloudflare github), or GitHub Actions (cloudflare actions). Shell steps only: no JavaScript actions.
+# Written by mise-cloudflare: don't edit it. mise run cloudflare update writes it again after upgrading.
+# Checks the Worker in example on every push and pull request: its setup and test tasks if it has them, then
+# mise run cloudflare check. No Cloudflare credentials: Cloudflare's Workers Builds deploys (mise run cloudflare:github).
 name: cloudflare-example
 
 on:
   push:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
 
 permissions:
   contents: read
 
-# A pull request's runs by its number: once it closes, github.ref is the base branch, and a group by ref would cancel
-# that branch's own push run.
 concurrency:
   group: cloudflare-example-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -23,7 +17,7 @@ concurrency:
 jobs:
   check:
     # A pull request from this repository already ran as a push; one from a fork runs here, read-only.
-    if: github.event_name == 'push' || (github.event.action != 'closed' && github.event.pull_request.head.repo.full_name != github.repository)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

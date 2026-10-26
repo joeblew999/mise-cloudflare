@@ -61,6 +61,9 @@ jobs:
         run: |
           GORELEASER_CURRENT_TAG="${TAG:-$GITHUB_REF_NAME}" mise exec -- goreleaser release --clean
 
+      - name: A new repo on the release, as a user sets it up with mise (mise run smoke)
+        run: mise run smoke --version "${TAG:-$GITHUB_REF_NAME}"
+
       - name: proxy.golang.org fetches the version, so go get and pkg.go.dev have it at once
         run: |
           GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod mise exec -- go list -m "github.com/${GITHUB_REPOSITORY}@${TAG:-$GITHUB_REF_NAME}"
