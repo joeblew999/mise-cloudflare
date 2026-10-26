@@ -8,9 +8,11 @@
 [settings]
 # go.mod's toolchain line is the Go pin; this makes mise install honour it.
 idiomatic_version_file_enable_tools = ["go"]
+# mise 2026.10 fails to install aube and usage while it fetches their agent skills (a 404); they aren't needed.
+skills.fetch = false
 
 [tools]
-node = "26.11.1"   # example/'s wrangler
+node = "26.12.1"   # example/'s wrangler
 aube = "2.8.1"     # installs it
 usage = "7.0.1"    # --help and tab-completion for the tasks' flags
 goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
