@@ -174,7 +174,7 @@ var (
 )
 
 // tasksFor is the tasks file for the repo at dir. A repo with go.mod's tool line runs go tool cloudflare, at go.mod's
-// version, as the file is embedded. Any other repo needs no Go: its tasks run the cloudflare binary, each pinning this
+// version, as the file is embedded. Any other repo needs no Go: its tasks run the mise-cloudflare binary (not cloudflare, which Cloudflare's cf CLI installs too), each pinning this
 // release (mise's github backend downloads it from the repository's releases), as a task pins any tool it runs.
 func tasksFor(dir string) ([]byte, error) {
 	if goTool(dir) {
@@ -182,10 +182,10 @@ func tasksFor(dir string) ([]byte, error) {
 	}
 	v := buildVersion()
 	if v == "(devel)" || strings.Contains(v, "-0.") {
-		return nil, errors.New("this is a development build, which no release matches: in a repo without go.mod's tool line, use a released cloudflare (mise use github:joeblew999/mise-cloudflare)")
+		return nil, errors.New("this is a development build, which no release matches: in a repo without go.mod's tool line, use a released mise-cloudflare (mise use github:joeblew999/mise-cloudflare)")
 	}
 	pin := `"github:joeblew999/mise-cloudflare" = "` + v + `"`
-	b := bytes.ReplaceAll(mise.Tasks, []byte("go tool cloudflare"), []byte("cloudflare"))
+	b := bytes.ReplaceAll(mise.Tasks, []byte("go tool cloudflare"), []byte("mise-cloudflare"))
 	// Each task pins the release: in its tools table if it has one, else in a new one after its name.
 	heads := taskStart.FindAllIndex(b, -1)
 	var out []byte

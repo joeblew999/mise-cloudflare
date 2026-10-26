@@ -1,6 +1,6 @@
 # A release on every change to what the tool is (its code, the files it writes, its skill) merged to main, so
 # `mise use github:joeblew999/mise-cloudflare` always gets what main is: the next patch version is tagged here, and
-# goreleaser builds the cloudflare binary for every machine (.goreleaser.yaml) onto the tag's GitHub release, where mise's
+# goreleaser builds the mise-cloudflare binary for every machine (.goreleaser.yaml) onto the tag's GitHub release, where mise's
 # github backend finds it. A v* tag pushed by hand releases that version instead. Shell steps only, as ci.yml.
 name: release
 

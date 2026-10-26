@@ -180,7 +180,13 @@ func gitFiles(dir string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files in %s: %w (the rules need a git repo)", dir, err)
 	}
-	return strings.Fields(string(out)), nil
+	var files []string
+	for _, f := range strings.Fields(string(out)) {
+		if !strings.HasPrefix(f, "node_modules/") && !strings.Contains(f, "/node_modules/") {
+			files = append(files, f) // installed packages are not the repo's, git-ignored or not
+		}
+	}
+	return files, nil
 }
 
 func cmpOr(s ...string) string {
