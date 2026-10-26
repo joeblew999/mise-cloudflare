@@ -13,5 +13,6 @@ require (
 	golang.org/x/term v0.47.0 // indirect
 )
 
-// A repo elsewhere drops this line and gets mise-cloudflare from GitHub: go get -tool github.com/joeblew999/mise-cloudflare/cmd/cloudflare@<version>
+// A repo elsewhere drops this line and the v0.0.0 require above, then gets mise-cloudflare from GitHub:
+// go mod edit -dropreplace github.com/joeblew999/mise-cloudflare -droprequire github.com/joeblew999/mise-cloudflare && go get -tool github.com/joeblew999/mise-cloudflare/cmd/cloudflare@latest
 replace github.com/joeblew999/mise-cloudflare => ../
