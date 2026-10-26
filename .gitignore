@@ -6,3 +6,4 @@ node_modules/
 dist/
 # Cloudflare's cf CLI caches the account it logs into here: never commit it.
 .cloudflare/
+bin/

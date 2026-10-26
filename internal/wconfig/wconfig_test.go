@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// TestRead reads example/'s config with its own wrangler, which go tool cloudflare setup installs there.
+// TestRead reads example/'s config with its own wrangler, which example's setup task installs.
 func TestRead(t *testing.T) {
 	dir, _ := filepath.Abs("../../example")
 	if _, err := os.Stat(filepath.Join(dir, "node_modules", "wrangler")); err != nil {

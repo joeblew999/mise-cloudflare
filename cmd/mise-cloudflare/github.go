@@ -47,15 +47,10 @@ type githubWorker struct {
 // builds is how Workers Builds builds the repo: github's flags, else what Cloudflare has now.
 type builds struct{ Branch, Staging, Build string }
 
-// github sets Cloudflare's Workers Builds up for the repo's Workers: a push to the branch deploys production, and every
-// other branch gets a preview with its URL on the pull request; with a staging branch, a push to it deploys staging
-// (the wrangler environment env.staging, its own Worker). Run again with no flags, it keeps what Cloudflare has. Cloudflare does all of it with its own build
-// token, so GitHub never holds a Cloudflare credential. It runs on the repo's cf login (Workers Builds' scope, which
-// wrangler's login can't have), made the first time with the device flow. With off it removes the setup again.
+// github sets up Cloudflare's Workers Builds: pushes to the branch deploy production, other branches get a preview,
+// and --staging adds a staging branch. It uses cf's login, since wrangler's can't hold Workers Builds' scope. --off
+// removes it all.
 func (r repo) github(ctx context.Context, b builds, off, jsonOut bool) {
-	if ci() {
-		fail(errors.New("Workers Builds is set up once, from a machine or a Claude Code session, not in CI"))
-	}
 	if !cf.Installed() {
 		fail(errors.New("cf isn't installed: run mise run cloudflare:github, which brings it"))
 	}
@@ -276,9 +271,7 @@ func (r repo) currentBuilds(ctx context.Context, c cf.CF) builds {
 	return b
 }
 
-// installCommand installs the Worker's dependencies on Workers Builds, by the lockfile committed in dir: Workers Builds
-// checks the repository out, so a lockfile only on this machine doesn't count. npm when there's none, or one for a
-// package manager Workers Builds doesn't have (aube): package.json pins wrangler exactly either way.
+// installCommand is how Workers Builds installs dependencies: from the lockfile committed in dir, else npm.
 func installCommand(dir string) string {
 	tracked := func(f string) bool {
 		return exec.Command("git", "-C", dir, "ls-files", "--error-unmatch", f).Run() == nil
@@ -384,9 +377,8 @@ func buildTokens(ctx context.Context, c cf.CF) ([]buildToken, error) {
 	return tokens, err
 }
 
-// deleteMergedBranches switches on the repository's "Automatically delete head branches" setting, with GITHUB_TOKEN or
-// the gh CLI's login (the cloudflare github task brings gh), and reports whether it's on. Without a GitHub login that
-// may change it, it's left to the person.
+// deleteMergedBranches turns on GitHub's "Automatically delete head branches", so a merged preview goes with its
+// branch. It reports whether it's on; without a GitHub login it leaves it to the person.
 func deleteMergedBranches(ctx context.Context, g ghRepo) bool {
 	token := cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN")
 	if token == "" {

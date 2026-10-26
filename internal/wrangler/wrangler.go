@@ -22,7 +22,7 @@ type W struct {
 	Profile string
 }
 
-// Installed reports whether the repo's pinned wrangler is installed (go tool cloudflare setup).
+// Installed reports whether the repo's pinned wrangler is installed (the repo's setup task).
 func (w W) Installed() bool {
 	_, err := os.Stat(w.bin())
 	return err == nil
@@ -171,10 +171,8 @@ func Device() bool {
 	return os.Getenv("CLAUDE_CODE_REMOTE") == "true" || os.Getenv("CLOUDFLARE_LOGIN") == "device"
 }
 
-// Login makes or remakes the profile's login with exactly scopes, then binds the profile to the repo folder for anyone
-// running wrangler there by hand: in a browser with wrangler auth create, or with the device flow (a link to open on
-// any device), which only wrangler login has (not auth create, as of wrangler 4.152.0), so deviceLogin gets the profile
-// from it.
+// Login makes the profile's login with exactly scopes (in a browser, or with a link for any device), then binds
+// the profile to the repo folder.
 func (w W) Login(ctx context.Context, scopes []string, device bool) error {
 	if device {
 		if err := w.deviceLogin(ctx, scopes); err != nil {
@@ -189,9 +187,8 @@ func (w W) Login(ctx context.Context, scopes []string, device bool) error {
 	return w.Activate(ctx)
 }
 
-// deviceLogin logs in with wrangler login --device inside a temporary wrangler folder (XDG_CONFIG_HOME), and makes the
-// login file it leaves the profile's: wrangler writes a profile's file and its default login's the same way
-// (getAuthConfigFilePath in wrangler 4.151.3), in its folder's config/, differing only in the name.
+// deviceLogin runs wrangler login --device in a temporary wrangler folder, then keeps the login file it leaves as the
+// profile's: wrangler auth create has no device flow (as of wrangler 4.152.0).
 func (w W) deviceLogin(ctx context.Context, scopes []string) error {
 	home, _ := os.UserHomeDir()
 	if st, err := os.Stat(filepath.Join(home, ".wrangler")); err == nil && st.IsDir() {

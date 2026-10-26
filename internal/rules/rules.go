@@ -1,4 +1,4 @@
-// Package rules is go tool cloudflare check: what a repo must be so that its Cloudflare login and its secrets stay out
+// Package rules is mise-cloudflare check: what a repo must be so that its Cloudflare login and its secrets stay out
 // of it. Each problem is one line naming the file.
 package rules
 
@@ -24,12 +24,9 @@ var (
 	exactPin = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 )
 
-// Check returns the repo at dir's problems: IDs in its wrangler config (any environment), its previews block's (see
-// Previews; previews says the repo runs Worker Previews, so it needs one), tokens or the machine-wide wrangler login in
-// its files, .dev.vars or .env not git-ignored, .dev.vars.example not matching secrets.required, wrangler not pinned to
-// an exact version.
-func Check(dir string, w wconfig.Config, previews bool) ([]string, error) {
-	problems := Previews(w, previews)
+// Check returns the repo's problems, one line each.
+func Check(dir string, w wconfig.Config) ([]string, error) {
+	problems := Previews(w, false)
 	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
 	for _, p := range IDs(w.Raw) {
 		bad("%s holds %s: remove it, and deploy finds or creates the resource by its name, on the login's account", filepath.Base(w.Path), p)
@@ -82,9 +79,7 @@ func Check(dir string, w wconfig.Config, previews bool) ([]string, error) {
 	return problems, nil
 }
 
-// IDs names every account or resource ID written into a raw wrangler config, at its top level and in each of its
-// environments (env.<name>): account_id, and the resource IDs of the kinds wrangler deploy creates by name
-// (wconfig.Created: a KV namespace's id or preview_id, a D1's database_id or preview_database_id).
+// IDs names every account or resource ID in a raw wrangler config, at the top level and in each environment.
 func IDs(raw map[string]any) []string {
 	var out []string
 	section := func(where string, s map[string]any) {
@@ -110,11 +105,8 @@ func IDs(raw map[string]any) []string {
 	return out
 }
 
-// Previews returns the problems with the Worker's previews block, which Worker Previews (wrangler preview) run on; with
-// no block, none unless need. Previews inherit nothing from production, and Cloudflare makes them no KV, D1 or R2 of
-// their own (only Durable Objects and Containers). A KV, D1 or R2 binding left out of the block comes from the Worker's
-// Previews Base, where cloudflare deploy, preview and github put the previews' own; one in it names an existing resource, since
-// wrangler preview sends it as it is. Every other binding (vars, Queues, Workers AI, …) is declared there again.
+// Previews returns the problems with the previews block (none without one, unless need): every binding but KV, D1 and
+// R2 must be in it, and a KV, D1 or R2 in it must name an existing resource.
 func Previews(w wconfig.Config, need bool) []string {
 	previews, ok := w.Raw["previews"].(map[string]any)
 	if !ok {
@@ -148,9 +140,7 @@ func unnamedResources(previews map[string]any) []string {
 	return out
 }
 
-// previewBindings names the Worker's bindings, as its wrangler converts them, that its previews block doesn't have: a
-// preview inherits none (Cloudflare's docs: vars, storage and API bindings alike go in the block), but for the kinds its
-// Previews Base gives it (wconfig.Created) and the static assets, which stay at the top level.
+// previewBindings names the bindings the previews block lacks, but for KV, D1, R2 and static assets.
 func previewBindings(w wconfig.Config) []string {
 	var missing []string
 	for name, typ := range w.Bindings {

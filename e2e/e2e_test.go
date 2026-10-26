@@ -1,9 +1,6 @@
-// Package e2e is mise run prove: one real deploy of example/ on a Cloudflare account, and a brand-new repo set up from
-// GitHub by init alone (CLOUDFLARE_E2E=1). Without CLOUDFLARE_E2E these tests skip, so go test ./... never touches
-// Cloudflare.
-//
-// Every Cloudflare step goes through go tool cloudflare, so the repo's own login and wrangler do it. Logging in, the
-// first time only, opens a browser, or with CLOUDFLARE_LOGIN=device prints a link to open on any device.
+// Package e2e is mise run smoke (a new repo as a user sets it up, no account: MISE_CLOUDFLARE_SMOKE=1) and mise run
+// prove (real deploys on a Cloudflare account: CLOUDFLARE_E2E=1). Without those, the tests skip, so go test ./...
+// never touches Cloudflare. Every step runs the tool, so the repo's own login and wrangler do it.
 package e2e
 
 import (
@@ -30,8 +27,8 @@ func needAccount(t *testing.T) {
 	}
 }
 
-// repo is a Worker repo that uses mise-cloudflare, its Worker's name, and how it runs the tool (go tool cloudflare
-// unless tool says otherwise).
+// repo is a Worker repo that uses mise-cloudflare, its Worker's name, and how it runs the tool (this checkout's
+// bin/mise-cloudflare unless tool says otherwise).
 type repo struct {
 	t      *testing.T
 	dir    string
@@ -43,7 +40,8 @@ type repo struct {
 func (r repo) toolArgs(args ...string) (string, []string) {
 	tool := r.tool
 	if tool == nil {
-		tool = []string{"go", "tool", "cloudflare"}
+		bin, _ := filepath.Abs("../bin/mise-cloudflare")
+		tool = []string{bin}
 	}
 	return tool[0], append(append([]string{}, tool[1:]...), args...)
 }
@@ -75,7 +73,7 @@ func (r repo) must(env []string, name string, args ...string) string {
 	return out
 }
 
-// cf is go tool cloudflare; wrangler is the repo's wrangler on its own login.
+// cf runs the tool; wrangler is the repo's wrangler on its own login.
 func (r repo) cf(env []string, args ...string) string {
 	r.t.Helper()
 	name, a := r.toolArgs(args...)
@@ -419,20 +417,17 @@ func TestProve(t *testing.T) {
 	prove(t, repo{t: t, dir: dir, worker: "cloudflare-zero-example"}, os.Getenv("PROVE_CLEAN") == "true")
 }
 
-// TestOtherRepo proves a brand-new repo gets everything from config alone: mise-cloudflare from GitHub with go get -tool
-// and go tool cloudflare init, then its rules pass and its Worker runs locally, with no Cloudflare login. Deploying is
-// TestProve's: the same tool, the same steps.
-func TestOtherRepo(t *testing.T) {
-	needAccount(t)
-	ref := os.Getenv("MISE_CLOUDFLARE_REF")
-	if ref == "" {
-		ref = "main"
+// TestNewRepo is what a user does in a new repo, with no Cloudflare account: mise-cloudflare from mise (this
+// checkout's build, or the release MISE_CLOUDFLARE_VERSION as mise use installs it), init, then status, check and a
+// local Worker. Every step goes through mise, as in the README.
+func TestNewRepo(t *testing.T) {
+	if os.Getenv("MISE_CLOUDFLARE_SMOKE") != "1" {
+		t.Skip("mise run smoke")
 	}
 	src, _ := filepath.Abs("../example")
-	r := repo{t: t, dir: filepath.Join(t.TempDir(), "other-repo"), worker: "cloudflare-zero-other"}
-	r.step("A new repo at %s: a Worker, and mise-cloudflare from GitHub at %s", r.dir, ref)
+	r := repo{t: t, dir: filepath.Join(t.TempDir(), "new-repo"), worker: "cloudflare-zero-new", tool: []string{"mise", "exec", "--", "mise-cloudflare"}}
 	os.MkdirAll(filepath.Join(r.dir, "src"), 0o755)
-	for _, f := range []string{"src/worker.js", "package.json", "aube-lock.yaml", ".dev.vars.example", ".gitignore", "mise.toml"} {
+	for _, f := range []string{"src/worker.js", ".dev.vars.example"} {
 		b, err := os.ReadFile(filepath.Join(src, f))
 		if err != nil {
 			t.Fatal(err)
@@ -441,28 +436,38 @@ func TestOtherRepo(t *testing.T) {
 	}
 	b, _ := os.ReadFile(filepath.Join(src, "wrangler.jsonc"))
 	os.WriteFile(filepath.Join(r.dir, "wrangler.jsonc"), bytes.ReplaceAll(b, []byte(`"cloudflare-zero-example"`), []byte(`"`+r.worker+`"`)), 0o644)
+	// A range, as most repos have it: init pins it.
+	os.WriteFile(filepath.Join(r.dir, "package.json"), []byte(`{ "name": "new-repo", "private": true, "devDependencies": { "wrangler": "^4.151.3" } }`+"\n"), 0o644)
 	r.must(nil, "git", "init", "-q")
-	r.must(nil, "go", "mod", "init", "example.com/other-repo")
-	// Straight from GitHub, whatever the ref: not from the module proxy, which may not have a new commit yet.
-	r.must([]string{"GOPRIVATE=github.com/joeblew999/mise-cloudflare"}, "go", "get", "-tool", "github.com/joeblew999/mise-cloudflare/cmd/cloudflare@"+ref)
-	r.cf(nil, "init")
-	r.must(nil, "mise", "trust", "-q", "mise.toml")
-	r.must(nil, "git", "add", "-A")
-	r.must(nil, "wc", "-l", "go.mod", "mise.toml", "wrangler.jsonc", "package.json", ".dev.vars.example", ".gitignore", "src/worker.js")
-	r.must(nil, "mise", "run", "setup")
-	// The login's binding to this folder goes with the folder: wrangler would keep it, for a folder that's gone.
-	t.Cleanup(func() { r.run(nil, "npx", "wrangler", "auth", "deactivate", r.realDir()) })
-	if s := r.status(); s.Profile != r.worker {
-		t.Fatalf("its login is %q, not the Worker's name", s.Profile)
+	if v := os.Getenv("MISE_CLOUDFLARE_VERSION"); v != "" {
+		r.step("mise-cloudflare %s from GitHub, as mise use installs it", v)
+		r.must(nil, "mise", "use", "-q", "node@26.12.1", "github:joeblew999/mise-cloudflare@"+strings.TrimPrefix(v, "v"))
+	} else {
+		bin, _ := filepath.Abs("../bin")
+		r.step("this checkout's mise-cloudflare, from %s", bin)
+		os.WriteFile(filepath.Join(r.dir, "mise.toml"), []byte("[env]\n_.path = [\""+bin+"\"]\n\n[tools]\nnode = \"26.12.1\"\n"), 0o644)
 	}
-	r.pass("its login is named after the Worker, %s", r.worker)
+	r.must(nil, "mise", "trust", "-q", "mise.toml")
+	r.must(nil, "mise", "exec", "--", "npm", "install", "--silent")
 
-	r.step("Its rules and a local Worker, with no Cloudflare login at all: init gave it everything")
-	r.cf(nil, "check")
+	r.step("init, then the repo passes check, and the status screen says what is next")
+	r.cf(nil, "init")
+	r.must(nil, "mise", "exec", "--", "npm", "install", "--silent") // init pinned wrangler: the lockfile follows
+	r.must(nil, "mise", "trust", "-q", "mise.toml")
+	if out := r.must(nil, "mise", "run", "cloudflare", "check"); !strings.Contains(out, "rules: pass") {
+		t.Fatalf("check: %s", out)
+	}
+	if out := r.must(nil, "mise", "run", "cloudflare"); !strings.Contains(out, "next: mise run cloudflare wrangler secret put GREETING") {
+		t.Fatalf("status: %s", out)
+	}
+	r.pass("init fixed what check asks for, and the guide says to set the Worker's secret next")
+
+	r.step("A local Worker, with no Cloudflare login")
+	os.WriteFile(filepath.Join(r.dir, ".dev.vars"), []byte("GREETING=hello\n"), 0o600) // the secret's local value
 	if body := r.localWorker(); !allWork(body) {
 		t.Fatalf("the local Worker: %s", body)
 	}
-	r.pass("cloudflare check passes, and the local Worker's D1, KV, R2 and secret work")
+	r.pass("the local Worker's D1, KV, R2 and secret work")
 	fmt.Println("\nALL PASSED")
 }
 
