@@ -15,7 +15,7 @@ In a repo that has a Worker (a `wrangler.jsonc`, and a `package.json` that pins 
 
 ```sh
 mise use github:joeblew999/mise-cloudflare   # or, in a Go repo: go get -tool github.com/joeblew999/mise-cloudflare/cmd/cloudflare
-cloudflare init                              # or: go tool cloudflare init
+mise-cloudflare init                         # or: go tool cloudflare init
 ```
 
 Commit what `init` wrote. There's nothing to edit, then or ever. `init` also fixes what it can for `check`: it

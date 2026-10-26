@@ -124,7 +124,7 @@ func TestTasksFor(t *testing.T) {
 	if !strings.Contains(string(b), `tools = { `+pin+`, "npm:cf" = "`) {
 		t.Errorf("cloudflare github pins both cloudflare and cf in one tools table:\n%s", b)
 	}
-	if !regexp.MustCompile(`(?m)^run = "cloudflare"$`).Match(b) || strings.Contains(string(b), `run = "go tool`) {
+	if !regexp.MustCompile(`(?m)^run = "mise-cloudflare"$`).Match(b) || strings.Contains(string(b), `run = "go tool`) {
 		t.Errorf("the tasks run the binary:\n%s", b)
 	}
 }

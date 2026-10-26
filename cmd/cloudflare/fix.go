@@ -15,12 +15,12 @@ import (
 )
 
 // fixRepo makes the changes cloudflare check asks for that need no decision, so init leaves the repo passing them:
-// .dev.vars, .env and .cloudflare/ git-ignored, wrangler pinned to the exact version installed, and a .dev.vars.example
+// .dev.vars, .env, .cloudflare/ and node_modules/ git-ignored, wrangler pinned to the exact version installed, and a .dev.vars.example
 // listing secrets.required when there's none. What needs a person (an ID in the wrangler config) check still names.
 func fixRepo(ctx context.Context, dir string) {
 	if exec.Command("git", "-C", dir, "rev-parse", "--git-dir").Run() == nil {
 		var add []string
-		for _, f := range []string{".dev.vars", ".env", ".cloudflare/"} {
+		for _, f := range []string{".dev.vars", ".env", ".cloudflare/", "node_modules/"} {
 			if exec.Command("git", "-C", dir, "-c", "core.excludesFile=", "check-ignore", "-q", f).Run() != nil {
 				add = append(add, f)
 			}
@@ -32,7 +32,7 @@ func fixRepo(ctx context.Context, dir string) {
 			if s != "" && !strings.HasSuffix(s, "\n") {
 				s += "\n"
 			}
-			s += "# The repo's Cloudflare secrets and login cache (mise-cloudflare)\n" + strings.Join(add, "\n") + "\n"
+			s += "# The repo's Cloudflare secrets and login cache, and installed packages (mise-cloudflare)\n" + strings.Join(add, "\n") + "\n"
 			must(os.WriteFile(path, []byte(s), 0o644))
 			fmt.Println("git-ignored", strings.Join(add, ", "), "in .gitignore")
 		}
