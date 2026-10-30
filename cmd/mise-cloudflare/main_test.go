@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -184,7 +185,7 @@ func TestInit(t *testing.T) {
 		}
 		return nil
 	})
-	if st, err := os.Stat(filepath.Join(dir, ".claude", "hooks", templates.HookFile)); err != nil || st.Mode()&0o100 == 0 {
+	if st, err := os.Stat(filepath.Join(dir, ".claude", "hooks", templates.HookFile)); err != nil || runtime.GOOS != "windows" && st.Mode()&0o100 == 0 { // Windows has no executable bit
 		t.Errorf("the hook isn't executable: %v %v", st, err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); string(b) != "dist/\n" {
