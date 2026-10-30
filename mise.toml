@@ -39,11 +39,11 @@ goreleaser = "2.19.0"   # the release's binaries (.goreleaser.yaml)
 description = "A copy stamped out from the template, examples/new: only what a user brings, from templates (the Worker's code, package.json, lockfile and mise.toml, the Worker named mise-cloudflare-new), pinning this checkout's build (local), or a release with --version; then its own git and mise-cloudflare init in it, as a person adding mise-cloudflare does. Then: mise run example:e2e-serve"
 usage = 'flag "--version <version>" help="pin this release from GitHub, as mise use does, instead of the build of this checkout"'
 depends = ["tool:install", "example:delete"]
-run = "go run ./root/example/create -version=${usage_version:-}"
+run = "MISE_CLOUDFLARE_VERSION=${usage_version:-} go test . -run '^TestExampleCreate$' -count=1 -v"
 
 [tasks."example:delete"]
 description = "Deletes the copy example:create stamped out, examples/new, with its own git and what its setup installed; mise run example:create makes it again. Only the folder: the walk deletes its Worker on Cloudflare itself (13-delete), and its login stays on this machine"
-run = "go run ./root/example/delete"
+run = "go test . -run '^TestExampleDelete$' -count=1 -v"
 
 [tasks."template:check-mise"]
 description = "TestMise on the template's mise file against Go, and only Go (a task that runs anything else is reported as not checked), both ways: against the tool's Go it runs (each task's command is its file, each command file is a task's), and against the end-to-end that runs it (each task the Go names is one), by the base rule (mise_test.go)"
@@ -99,8 +99,8 @@ description = "The tool's own checks, run for real (no cached results): go vet, 
 run = "go vet ./... && go test -count=1 ./... && goreleaser check"
 
 [tasks."tool:release"]
-description = "A release of mise-cloudflare from the commit checked out, as release.yml runs it on GitHub: the commit's v* tag, or the next patch version tagged and pushed; goreleaser's binaries on that tag's release; a new repo made on it and tried (example:create --version, then example:e2e); the version on proxy.golang.org. --dry-run tags and publishes nothing (a goreleaser snapshot into dist/). After tool:test"
+description = "A release of mise-cloudflare from the commit checked out, as release.yml runs it on GitHub: the commit's v* tag, or the next patch version tagged and pushed; goreleaser's binaries on that tag's release; a new repo made on it and tried (example:create --version, then example:e2e-serve); the version on proxy.golang.org. --dry-run tags and publishes nothing (a goreleaser snapshot into dist/). After tool:test"
 usage = 'flag "--dry-run" help="tag and publish nothing: goreleaser builds a snapshot into dist/"'
 depends = ["tool:test"]
-run = "go run ./root/tool/release -dry-run=${usage_dry_run:-false}"
+run = "DRY_RUN=${usage_dry_run:-false} go test . -run '^TestToolRelease$' -count=1 -v -timeout 30m"
 
