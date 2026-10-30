@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   check:
-    # A pull request from this repository already ran as a push; one from a fork runs here, read-only.
+    # A pull request from this repository already ran as a push; one from a fork runs here, read-only. Its name says
+    # so, since GitHub shows the pull request's copy as skipped.
+    name: "${{ github.event_name == 'pull_request' && 'check (runs for pull requests from forks; the push checked this one)' || 'check' }}"
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20

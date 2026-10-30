@@ -209,7 +209,9 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	}
 	fmt.Printf("  previews   any other branch: %s, its URL on the pull request\n", workers[0].Preview)
 	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", tokenName)
-	fmt.Printf("  · Cloudflare's build token covers Workers Scripts, KV, R2 and Workers Routes: a Worker using more (D1, say) needs that permission added to it in the dashboard\n")
+	if more := beyondBuildToken(r.wc.Bindings); len(more) > 0 {
+		fmt.Printf("  · if a build fails to deploy %s: give the build token %q that permission (Cloudflare's dashboard: Manage account, Account API tokens, %s, Edit)\n", strings.Join(more, ", "), tokenName, tokenName)
+	}
 	if rep.DeleteMergedBranches {
 		fmt.Printf("  GitHub deletes a pull request's branch when it merges, and Workers Builds its preview with it\n")
 	} else {
@@ -348,7 +350,7 @@ func githubRepo(ctx context.Context, dir string) (ghRepo, error) {
 	if rel != "." {
 		g.root = "/" + filepath.ToSlash(rel)
 	}
-	for _, token := range []string{cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN"), ""} {
+	for _, token := range []string{githubToken(ctx), ""} {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+m[1]+"/"+m[2], nil)
 		req.Header.Set("Accept", "application/vnd.github+json")
 		if token != "" {
@@ -364,7 +366,36 @@ func githubRepo(ctx context.Context, dir string) (ghRepo, error) {
 			return g, nil
 		}
 	}
-	return g, fmt.Errorf("GitHub doesn't show the repository %s/%s: for a private one, set GITHUB_TOKEN", m[1], m[2])
+	return g, fmt.Errorf("GitHub doesn't show the repository %s/%s: a private one needs a GitHub login that can read it: gh auth login, then run this again (or set GITHUB_TOKEN to such a token)", m[1], m[2])
+}
+
+// githubToken is the GitHub login to use: GITHUB_TOKEN or GH_TOKEN, else gh's own (gh auth token), else none.
+func githubToken(ctx context.Context) string {
+	if token := cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN"); token != "" {
+		return token
+	}
+	if out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output(); err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	return ""
+}
+
+// buildTokenCovers is the binding kinds a Workers Builds build token can deploy as Cloudflare makes it (Workers Scripts,
+// KV, R2, Workers Routes): a Worker's own code, its secrets and vars, and what lives in its script.
+var buildTokenCovers = map[string]bool{"kv_namespace": true, "r2_bucket": true, "durable_object_namespace": true, "service": true,
+	"plain_text": true, "secret_text": true, "json": true, "assets": true, "version_metadata": true}
+
+// beyondBuildToken is the Worker's bindings of a kind the build token may not cover (d1, queue, …), sorted: a build
+// that deploys one fails until the token has its permission.
+func beyondBuildToken(bindings map[string]string) []string {
+	var out []string
+	for name, kind := range bindings {
+		if !buildTokenCovers[kind] {
+			out = append(out, kind+" "+name)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func cmpOrEnv(names ...string) string {
@@ -391,12 +422,7 @@ func buildTokens(ctx context.Context, c cf.CF) ([]buildToken, error) {
 // deleteMergedBranches turns on GitHub's "Automatically delete head branches", so a merged preview goes with its
 // branch. It reports whether it's on; without a GitHub login it leaves it to the person.
 func deleteMergedBranches(ctx context.Context, g ghRepo) bool {
-	token := cmpOrEnv("GITHUB_TOKEN", "GH_TOKEN")
-	if token == "" {
-		if out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output(); err == nil {
-			token = strings.TrimSpace(string(out))
-		}
-	}
+	token := githubToken(ctx)
 	if token == "" {
 		return false
 	}

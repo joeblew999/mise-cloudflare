@@ -170,6 +170,17 @@ func TestTemplate(t *testing.T) {
 	}
 }
 
+// TestBeyondBuildToken: the warning names only bindings a build token may not cover, as wrangler names their kinds.
+func TestBeyondBuildToken(t *testing.T) {
+	got := beyondBuildToken(map[string]string{"KV": "kv_namespace", "BUCKET": "r2_bucket", "DB": "d1", "GREETING": "secret_text", "Q": "queue"})
+	if want := []string{"d1 DB", "queue Q"}; !slices.Equal(got, want) {
+		t.Errorf("beyondBuildToken: %q, want %q", got, want)
+	}
+	if got := beyondBuildToken(map[string]string{"KV": "kv_namespace"}); got != nil {
+		t.Errorf("a Worker with only KV: %q, want no warning", got)
+	}
+}
+
 // TestInit: init writes the template's tool half into a repo exactly as the template has it, at the same paths, the
 // hook executable; a .gitignore of the repo's own it leaves as it is. Then nothing is stale. mise-cloudflare's pin it
 // writes once, for the build that ran it.
