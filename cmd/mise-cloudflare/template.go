@@ -23,7 +23,8 @@ var workerConfigs = []string{"wrangler.jsonc", "wrangler.json", "wrangler.toml",
 // installs its wrangler (node, aube, mise run setup). It never writes over a file. The Worker's files go in all
 // together or not at all, so a repo with a Worker of its own (any of them, or a wrangler config or lockfile of
 // another kind) gets none of the template's, and a mise.toml of the repo's own is left as it is, with what to add.
-// It reports whether it wrote the Worker.
+// README.md, the repo's front page, goes in whenever the repo has none, Worker or not. It reports whether it wrote
+// the Worker.
 func templateRepo(dir string) bool {
 	name, err := workerName(filepath.Base(dir))
 	if err != nil {
@@ -31,11 +32,18 @@ func templateRepo(dir string) bool {
 	}
 	var files []string
 	must(fs.WalkDir(templates.Worker, ".", func(p string, d fs.DirEntry, err error) error {
-		if err == nil && !d.IsDir() && p != "mise.toml" {
+		if err == nil && !d.IsDir() && p != "mise.toml" && p != "README.md" {
 			files = append(files, p)
 		}
 		return err
 	}))
+	readme := filepath.Join(dir, "README.md")
+	if _, err := os.Stat(readme); err == nil {
+		fmt.Println("✓ README.md is the repo's own: left as it is")
+	} else {
+		b, _ := fs.ReadFile(templates.Worker, "README.md")
+		writeFile(readme, bytes.ReplaceAll(b, []byte(templates.WorkerName), []byte(name)))
+	}
 	var own []string
 	for _, f := range union(files, workerConfigs) {
 		if _, err := os.Stat(filepath.Join(dir, f)); err == nil {

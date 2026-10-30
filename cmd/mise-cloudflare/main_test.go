@@ -117,15 +117,19 @@ func TestOwnMise(t *testing.T) {
 }
 
 // TestTemplate: template writes the template's Worker, named for the folder, into a repo with none, and never writes
-// over a file: a repo with a Worker of its own gets none of it, and a mise.toml of its own is left as it is.
+// over a file: a repo with a Worker of its own gets none of it (a README, if it has none), and a mise.toml or
+// README.md of its own is left as it is.
 func TestTemplate(t *testing.T) {
 	empty := filepath.Join(t.TempDir(), "My_New Repo")
 	os.Mkdir(empty, 0o755)
 	templateRepo(empty)
-	for _, f := range []string{"src/worker.js", "wrangler.jsonc", "package.json", "pnpm-lock.yaml", ".dev.vars.example", "mise.toml"} {
+	for _, f := range []string{"src/worker.js", "wrangler.jsonc", "package.json", "pnpm-lock.yaml", ".dev.vars.example", "mise.toml", "README.md"} {
 		if _, err := os.Stat(filepath.Join(empty, f)); err != nil {
 			t.Errorf("%s not written into an empty repo: %v", f, err)
 		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(empty, "README.md")); !bytes.HasPrefix(b, []byte("# my-new-repo\n")) {
+		t.Errorf("README.md isn't named for its folder, my-new-repo:\n%s", b)
 	}
 	for _, f := range []string{"wrangler.jsonc", "package.json"} {
 		if b, _ := os.ReadFile(filepath.Join(empty, f)); !bytes.Contains(b, []byte(`"my-new-repo"`)) || bytes.Contains(b, []byte(templates.WorkerName)) {
@@ -135,8 +139,16 @@ func TestTemplate(t *testing.T) {
 	own := t.TempDir()
 	os.WriteFile(filepath.Join(own, "package.json"), []byte(`{"name":"mine"}`), 0o644)
 	templateRepo(own)
-	if entries, _ := os.ReadDir(own); len(entries) != 1 {
-		t.Errorf("a repo with a package.json of its own got the template's: %v", entries)
+	if entries, _ := os.ReadDir(own); len(entries) != 2 {
+		t.Errorf("a repo with a package.json of its own got more than a README: %v", entries)
+	}
+	if b, _ := os.ReadFile(filepath.Join(own, "package.json")); string(b) != `{"name":"mine"}` {
+		t.Errorf("the repo's own package.json was written over: %q", b)
+	}
+	os.WriteFile(filepath.Join(own, "README.md"), []byte("mine\n"), 0o644)
+	templateRepo(own)
+	if b, _ := os.ReadFile(filepath.Join(own, "README.md")); string(b) != "mine\n" {
+		t.Errorf("the repo's own README.md was written over: %q", b)
 	}
 	tools := t.TempDir()
 	mine := "[tools]\njq = \"1.8.2\"\n"

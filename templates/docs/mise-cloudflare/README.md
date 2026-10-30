@@ -29,8 +29,8 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
    mise run cloudflare:template
    ```
 
-   It writes the template's Worker, named for the repo's folder, with the `mise.toml` that installs its wrangler, and
-   installs it. It never writes over a file: a repo with a Worker of its own gets none of it, and installs its wrangler
+   It writes the template's Worker, named for the repo's folder, with the `mise.toml` that installs its wrangler and a
+   README, and installs it. It never writes over a file: a repo with a Worker of its own gets none of it, and installs its wrangler
    its own way.
 4. **Then:**
 
