@@ -28,15 +28,16 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
 
 1. **Install mise**, once on each machine: [mise's getting started](https://mise.jdx.dev/getting-started.html)
    (`curl https://mise.run | sh`, or `brew install mise`).
-2. **mise-cloudflare's files, always**, at a release (the newest is on
-   [its releases](https://github.com/joeblew999/mise-cloudflare/releases)):
+2. **mise-cloudflare's files, always:**
 
    ```sh
-   mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
+   mise exec github:joeblew999/mise-cloudflare@latest -- mise-cloudflare init
    ```
 
-   It writes the repo's `.mise/` folder (its tasks, and mise-cloudflare pinned at that release, which mise gets from
-   GitHub), its GitHub workflow, its Claude Code hook and skill, its docs and its `.gitignore`.
+   It runs the newest release, or the one you name instead of `latest` (`@0.1.15`: they're all on
+   [its releases](https://github.com/joeblew999/mise-cloudflare/releases)). It writes the repo's `.mise/` folder (its
+   tasks, and mise-cloudflare pinned at exactly that release, which mise gets from GitHub), its GitHub workflow, its
+   Claude Code hook and skill, its docs and its `.gitignore`.
 3. **The template's Worker, only in a repo with none yet:**
 
    ```sh

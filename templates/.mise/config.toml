@@ -1,7 +1,7 @@
 # mise-cloudflare for this repo, from its GitHub releases: mise install gets it. mise-cloudflare init writes this file
-# when the repo has none, pinning the release that ran it; from then on the pin is the repo's (mise run
-# cloudflare:update moves it). A .mise/config.local.toml beside it, never committed, overrides it on one machine:
-# mise-cloudflare's own checkout pins its build there (local).
+# when the repo has none, pinning exactly the release that ran it (here in the template it's latest); from then on the
+# pin is the repo's (mise run cloudflare:update moves it). A .mise/config.local.toml beside it, never committed,
+# overrides it on one machine: mise-cloudflare's own checkout pins its build there (local).
 
 [tools]
-"github:joeblew999/mise-cloudflare" = "0.1.8"
+"github:joeblew999/mise-cloudflare" = "latest"

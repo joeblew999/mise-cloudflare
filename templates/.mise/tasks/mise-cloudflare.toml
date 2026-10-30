@@ -10,7 +10,7 @@ usage = 'flag "--json" help="one JSON document on stdout, instead of text"'
 run = "mise-cloudflare ${usage_json:+--json}"
 
 ["cloudflare:03-init"]
-description = "03. mise-cloudflare's files written into the repo again, after upgrading it (the first time, before these tasks: mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init)"
+description = "03. mise-cloudflare's files written into the repo again, after upgrading it (the first time, before these tasks: mise exec github:joeblew999/mise-cloudflare@latest -- mise-cloudflare init)"
 run = "mise-cloudflare init"
 
 ["cloudflare:04-check"]

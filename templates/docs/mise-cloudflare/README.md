@@ -14,15 +14,16 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
 
 1. **Install mise**, once on each machine: [mise's getting started](https://mise.jdx.dev/getting-started.html)
    (`curl https://mise.run | sh`, or `brew install mise`).
-2. **mise-cloudflare's files, always**, at a release (the newest is on
-   [its releases](https://github.com/joeblew999/mise-cloudflare/releases)):
+2. **mise-cloudflare's files, always:**
 
    ```sh
-   mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
+   mise exec github:joeblew999/mise-cloudflare@latest -- mise-cloudflare init
    ```
 
-   It writes the repo's `.mise/` folder (its tasks, and mise-cloudflare pinned at that release, which mise gets from
-   GitHub), its GitHub workflow, its Claude Code hook and skill, its docs and its `.gitignore`.
+   It runs the newest release, or the one you name instead of `latest` (`@0.1.15`: they're all on
+   [its releases](https://github.com/joeblew999/mise-cloudflare/releases)). It writes the repo's `.mise/` folder (its
+   tasks, and mise-cloudflare pinned at exactly that release, which mise gets from GitHub), its GitHub workflow, its
+   Claude Code hook and skill, its docs and its `.gitignore`.
 3. **The template's Worker, only in a repo with none yet:**
 
    ```sh
@@ -101,7 +102,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:15-clean` | The local state undone, as `13-delete` undoes Cloudflare's: `.wrangler/` (the local D1, KV and R2, and what deploys wrote) and `.dev.vars`, so the next `06-serve` starts from nothing. It asks first; `--yes` doesn't | y, to be sure |
 | `cloudflare:template` | The template's own Worker, in a repo with none yet, named for the repo's folder, with the `mise.toml` that installs its wrangler. It never writes over a file | Nothing |
 | `cloudflare:update` | The repo's own pins at their newest releases, nothing outside it: its mise tools (`mise upgrade --bump`), its packages (aube, which writes whichever lockfile the repo has) and Go modules (`go get -u`, `go mod tidy`), then `03-init` if mise-cloudflare moved (at `local` it stays). mise and aube skip a release younger than their minimum age. What changed is in git: the steps prove it | Nothing |
-| `cloudflare:03-init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init` | Nothing |
+| `cloudflare:03-init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec github:joeblew999/mise-cloudflare@latest -- mise-cloudflare init` | Nothing |
 | `cloudflare:show-version` | This build's version | Nothing |
 | `cloudflare:show-help` | Every command | Nothing |
 
