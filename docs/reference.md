@@ -4,20 +4,24 @@ The details behind the [README](../README.md).
 
 ## The commands
 
-Each is `mise run cloudflare <command>`, which runs `mise-cloudflare <command>`.
+One name all the way through: each command is a task, `mise run cloudflare:<command>`, which runs
+`mise-cloudflare <command>`. `mise run cloudflare` alone is `status`.
 
-| Command | Does | Asks you |
+| Task | Does | Asks you |
 |---|---|---|
-| (none) | Where the Worker is, step by step, and what to run next; `--json` for a program | Nothing |
-| `dev` | `wrangler dev`: the Worker locally, with local D1, KV and R2 and `.dev.vars` | Nothing |
-| `deploy` | `wrangler deploy` on the repo's login (wrangler's flags follow: `--env staging`) | Allow, the first time |
-| `github` | Cloudflare deploys every push (Workers Builds): production from the repository's default branch, a preview for every other; `--staging main` for staging; `--branch`, `--build` to change those; `--off` to stop. Run again with no flags, it keeps what's set | Allow for cf, the first time |
-| `preview` | A preview of what's here now (`wrangler preview`: `--name my-test`), with its own KV, D1 and R2 | Allow, the first time |
-| `wrangler <...>` | Any wrangler command on the repo's login: `wrangler d1 list`, `secret put`, `delete`, `tail`, … | Allow, the first time |
-| `check` | The repo's rules (below), and whether init's files are current | Nothing |
-| `login` / `logout` | The repo's login (the others make it when they need it); logout deletes it | Allow, to log in |
-| `update` | After upgrading mise-cloudflare: init's files written again | Nothing |
-| `help` / `version` | Every command; this build's version | Nothing |
+| `cloudflare:status` | Where the Worker is, step by step, and what to run next; `--json` for a program | Nothing |
+| `cloudflare:check` | The repo's rules (below), and whether init's files are current | Nothing |
+| `cloudflare:secret` | The secrets the Worker requires (`secrets.required`) that Cloudflare doesn't have yet: it asks for each, unseen; `--previews` sets the ones the Worker's Previews Base lacks, which previews don't inherit | Each value |
+| `cloudflare:dev` | `wrangler dev`: the Worker locally, with local D1, KV and R2 and `.dev.vars` | Nothing |
+| `cloudflare:deploy` | `wrangler deploy` on the repo's login (wrangler's flags follow: `--env staging`) | Allow, the first time |
+| `cloudflare:github` | Cloudflare deploys every push (Workers Builds): production from the repository's default branch, a preview for every other; `--staging main` for staging; `--branch`, `--build` to change those; `--off` to stop. Run again with no flags, it keeps what's set | Allow for cf, the first time |
+| `cloudflare:preview` | A preview of what's here now (`wrangler preview`: `--name my-test`), with its own KV, D1 and R2 | Allow, the first time |
+| `cloudflare:wrangler <...>` | Any wrangler command on the repo's login: `wrangler d1 list`, `secret put`, `tail`, … | Allow, the first time |
+| `cloudflare:delete` | Deploy undone: the Worker deleted, then its own KV, D1 and R2 and its previews' own. An R2 bucket that still holds objects stays: it never deletes what's in one. It asks first; `--yes` doesn't | The Worker's name, to be sure |
+| `cloudflare:login` / `cloudflare:logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
+| `cloudflare:init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec -- mise-cloudflare init` | Nothing |
+| `cloudflare:version` | This build's version | Nothing |
+| `cloudflare:help` | Every command | Nothing |
 
 ## What init adds
 
@@ -98,7 +102,7 @@ login; the task brings cf.
 Cloudflare makes previews no KV, D1 or R2 (only Durable Objects and Containers), and `wrangler preview` creates none.
 So `github` and `preview` make `<worker>-previews-<binding>` for each KV, D1 and R2 binding, once, and put
 them in the Worker's Previews Base on Cloudflare, the settings every new preview starts from. Nothing goes into the
-repo. All previews share them; production's and staging's stay theirs. After adding a KV, D1 or R2 binding, the guide
+repo. All previews share them; production's and staging's stay theirs. After adding a KV, D1 or R2 binding, status
 says to run `github` again, which gives previews the new one. `github --off` deletes them (an R2 bucket only once it's
 empty).
 

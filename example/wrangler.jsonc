@@ -1,13 +1,13 @@
 // No account ID and no resource IDs: the first deploy creates D1, KV and R2, named after the Worker, and later deploys find them.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cloudflare-zero-example",
+  "name": "mise-cloudflare-example",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
   "d1_databases": [{ "binding": "DB" }],
   "kv_namespaces": [{ "binding": "KV" }],
   "r2_buckets": [{ "binding": "BUCKET" }],
   "secrets": { "required": ["GREETING"] },
-  // Previews (mise run cloudflare github) need this block; their KV, D1 and R2 they get of their own.
+  // Previews (mise run cloudflare:github, cloudflare:preview) need this block; their KV, D1 and R2 they get of their own.
   "previews": {}
 }

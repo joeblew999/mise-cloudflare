@@ -52,8 +52,9 @@ its link on the pull request; merge it, and Cloudflare deploys production. For s
 `mise run cloudflare:github --staging main`: then merging into `main` deploys staging, and merging `main` into
 `production` deploys production.
 
-`mise run cloudflare help` lists every command: a preview by hand, any wrangler command on the repo's login, checking
-the repo, and updating after an upgrade.
+Every command is a task of its own, `mise run cloudflare:<command>`, and `mise run cloudflare:help` lists them: a
+preview by hand, any wrangler command on the repo's login, checking the repo, deleting the Worker, and updating after
+an upgrade.
 
 ## What init adds
 
@@ -64,7 +65,7 @@ the repo, and updating after an upgrade.
 | `.claude/skills/cloudflare/SKILL.md` | How Claude works on the Worker |
 | `.claude/hooks/mise-cloudflare-session-start.sh` | Sets a Claude Code cloud session up when it starts |
 
-None is for editing: after upgrading (`mise use github:joeblew999/mise-cloudflare@<version>`), `mise run cloudflare update`
+None is for editing: after upgrading (`mise use github:joeblew999/mise-cloudflare@<version>`), `mise run cloudflare:init`
 writes them again. [example/](example/) is a repo set up this way.
 
 ## Logins and tokens

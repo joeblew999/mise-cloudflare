@@ -15,8 +15,8 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-// guideReport is cloudflare -json: where the repo is, and what to run next.
-type guideReport struct {
+// statusReport is mise-cloudflare -json: where the repo is, and what to run next.
+type statusReport struct {
 	Worker      string             `json:"worker"`
 	Profile     string             `json:"profile"`
 	LoggedIn    bool               `json:"loggedIn"`
@@ -32,10 +32,10 @@ type guideReport struct {
 	Next        string             `json:"next"`
 }
 
-// guide is cloudflare with no command (mise run cloudflare): the steps in order, which are done for this repo, and the
+// status is mise-cloudflare with no command (mise run cloudflare): the steps in order, which are done for this repo, and the
 // next one. It never logs in.
-func (r repo) guide(ctx context.Context, jsonOut bool) {
-	rep := guideReport{Worker: r.wc.Name, Profile: r.w.Profile, Accounts: []wrangler.Account{}, Scopes: []string{},
+func (r repo) status(ctx context.Context, jsonOut bool) {
+	rep := statusReport{Worker: r.wc.Name, Profile: r.w.Profile, Accounts: []wrangler.Account{}, Scopes: []string{},
 		Needs: r.wanted(ctx), StrayTokens: tokenEnvFiles(r.dir), Problems: []string{}}
 	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" {
 		rep.StrayTokens = append([]string{"this shell"}, rep.StrayTokens...)
@@ -50,8 +50,7 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 		if who, err := r.w.Whoami(ctx); err == nil {
 			rep.Accounts, rep.Scopes = who.Accounts, who.Scopes
 		}
-		_, err := wrangler.Output(r.w.Cmd(ctx, "deployments", "list", "--json"))
-		rep.Deployed = err == nil
+		rep.Deployed = r.deployed(ctx)
 		if rep.Deployed {
 			rep.URL = lastDeployURL(r.dir)
 		}
@@ -87,9 +86,9 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	case len(rep.StrayTokens) > 0:
 		rep.Next = "remove the CLOUDFLARE_API_TOKEN in " + strings.Join(rep.StrayTokens, " and ") + ": it would override the repo's login"
 	case len(rep.Problems) > 0:
-		rep.Next = "fix what mise run cloudflare check lists, first: " + rep.Problems[0]
+		rep.Next = "fix what mise run cloudflare:check lists, first: " + rep.Problems[0]
 	case len(rep.Secrets) > 0:
-		rep.Next = "mise run cloudflare wrangler secret put " + rep.Secrets[0] + " (it asks for the value)"
+		rep.Next = "mise run cloudflare:secret (it asks for " + strings.Join(rep.Secrets, ", ") + ")"
 	case !rep.Deployed:
 		rep.Next = "mise run cloudflare:deploy"
 	case len(previewProblems) > 0:
@@ -97,7 +96,7 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	case rep.GitHub == "":
 		rep.Next = "mise run cloudflare:github"
 	case len(previewSecrets) > 0:
-		rep.Next = "mise run cloudflare wrangler preview base-config secret put " + previewSecrets[0] + " (previews don't get the Worker's secrets: it asks for the value they use)"
+		rep.Next = "mise run cloudflare:secret --previews (it asks for " + strings.Join(previewSecrets, ", ") + ": previews don't get the Worker's secrets)"
 	case len(previewsMissing) > 0:
 		rep.Next = "mise run cloudflare:github: previews don't have their own " + strings.Join(previewsMissing, ", ") + " yet"
 	default:
@@ -110,12 +109,12 @@ func (r repo) guide(ctx context.Context, jsonOut bool) {
 	mark := map[bool]string{true: "✓", false: "·"}
 	fmt.Printf("%s\n", rep.Worker)
 	if len(rep.Problems) > 0 {
-		fmt.Printf("  ✗ the repo has %d problem(s) to fix first (mise run cloudflare check lists them)\n", len(rep.Problems))
+		fmt.Printf("  ✗ the repo has %d problem(s) to fix first (mise run cloudflare:check lists them)\n", len(rep.Problems))
 	}
 	fmt.Printf("  ✓ 1. Run it locally     mise run cloudflare:dev\n")
 	fmt.Printf("  %s 2. Deploy it          mise run cloudflare:deploy   %s\n", mark[rep.Deployed], cmp.Or(rep.URL, map[bool]string{true: "deployed", false: "not deployed yet"}[rep.Deployed]))
 	if len(rep.Secrets) > 0 {
-		fmt.Printf("    first, its secrets: %s (mise run cloudflare wrangler secret put <name>)\n", strings.Join(rep.Secrets, ", "))
+		fmt.Printf("    first, its secrets: %s (mise run cloudflare:secret)\n", strings.Join(rep.Secrets, ", "))
 	}
 	if rep.GitHub != "" {
 		fmt.Printf("  ✓ 3. Deploy every push  %s deploys it: a preview for every pull request\n", rep.GitHub)
@@ -144,6 +143,28 @@ func lastDeployURL(dir string) string {
 		return ""
 	}
 	return string(urls[len(urls)-1])
+}
+
+// deployed reports whether the Worker's code is on Cloudflare: its current version has a compatibility date, as every
+// deploy's has. wrangler secret put on a Worker that isn't there yet makes a placeholder with none (createDraftWorker
+// in wrangler 4.151.3), which isn't the Worker deployed.
+func (r repo) deployed(ctx context.Context) bool {
+	var d struct {
+		Versions []struct {
+			ID string `json:"version_id"`
+		} `json:"versions"`
+	}
+	if r.wranglerJSON(ctx, &d, "deployments", "status", "--json") != nil || len(d.Versions) == 0 {
+		return false
+	}
+	var v struct {
+		Resources struct {
+			Runtime struct {
+				Date string `json:"compatibility_date"`
+			} `json:"script_runtime"`
+		} `json:"resources"`
+	}
+	return r.wranglerJSON(ctx, &v, "versions", "view", d.Versions[0].ID, "--json") == nil && v.Resources.Runtime.Date != ""
 }
 
 // buildsConnected reports whether Workers Builds builds the Worker, if this machine has cf logged in for the repo.

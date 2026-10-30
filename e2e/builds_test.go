@@ -12,20 +12,28 @@ import (
 	"time"
 )
 
-// TestGitHub proves mise run cloudflare:github, as a developer comes to it: the guide's steps (the secret, a deploy),
+// TestBuilds proves mise run cloudflare:github, as a developer comes to it: the steps status gives (the secret, a deploy),
 // then Cloudflare deploying every push. A push to a throwaway branch is built and deployed as production by Cloudflare;
 // a pull request's branch gets a preview, with its own D1, KV, R2 and secret; deleting the branch deletes the preview.
 // Then --off, and everything deleted. main is never touched.
-func TestGitHub(t *testing.T) {
+// It runs in a checkout of this repo at HEAD, what Cloudflare builds: example/ is a subfolder of it there, not the repo
+// of its own mise run 00-git-init makes it here.
+func TestBuilds(t *testing.T) {
 	needAccount(t)
-	dir, _ := filepath.Abs("../example")
-	r := repo{t: t, dir: dir, worker: "cloudflare-zero-example"}
+	top, _ := filepath.Abs("..")
+	checkout := filepath.Join(t.TempDir(), "checkout")
+	if out, err := exec.Command("git", "-C", top, "worktree", "add", "-q", "--detach", checkout, "HEAD").CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { exec.Command("git", "-C", top, "worktree", "remove", "--force", checkout).Run() })
+	r := repo{t: t, dir: filepath.Join(checkout, "example"), worker: "mise-cloudflare-example"}
+	r.must(nil, "mise", "trust", "-q", "mise.toml")
 	stamp := time.Now().Unix()
-	prod, prev := fmt.Sprintf("cfz-prod-%d", stamp), fmt.Sprintf("cfz-preview-%d", stamp)
+	prod, prev := fmt.Sprintf("e2e-prod-%d", stamp), fmt.Sprintf("e2e-preview-%d", stamp)
 
-	r.step("The Worker deployed as a developer does: what the guide says, each time")
+	r.step("The Worker deployed as a developer does: what status says, each time")
 	r.must(nil, "mise", "run", "setup")
-	r.cf(nil, "login")
+	r.tool(nil, "login")
 	r.notDeployed()
 	t.Cleanup(func() {
 		r.step("Removing everything: Cloudflare's setup, the branches, the Worker, its D1, KV and R2, the previews'")
@@ -35,7 +43,7 @@ func TestGitHub(t *testing.T) {
 		}
 		r.deleteAll()
 	})
-	r.next("wrangler secret put GREETING")
+	r.next("mise run cloudflare:secret")
 	r.putSecret("secret", "put", "GREETING")
 	r.next("mise run cloudflare:deploy")
 	r.must(nil, "mise", "run", "cloudflare:deploy")
@@ -46,7 +54,7 @@ func TestGitHub(t *testing.T) {
 
 	r.step("mise run cloudflare:github --branch %s: Cloudflare deploys every push, production from %s", prod, prod)
 	r.must(nil, "mise", "run", "cloudflare:github", "--branch", prod)
-	r.next("preview base-config secret put GREETING")
+	r.next("mise run cloudflare:secret --previews")
 	r.putSecret("preview", "base-config", "secret", "put", "GREETING")
 	r.next("push a branch")
 
@@ -92,12 +100,12 @@ func TestGitHub(t *testing.T) {
 func (r repo) notDeployed() {
 	r.t.Helper()
 	if out, err := r.try(nil, "wrangler", "deployments", "list", "--json"); err == nil {
-		r.t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it", r.worker)
+		r.t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it (mise run clean)", r.worker)
 	} else if !strings.Contains(out, "10007") {
 		r.t.Fatalf("couldn't tell whether %s is deployed", r.worker)
 	}
 	if left := r.leftovers(); len(left) > 0 {
-		r.t.Fatalf("%s is left over from another run: delete it first", strings.Join(left, ", "))
+		r.t.Fatalf("%s is left over from another run: delete it first (mise run clean)", strings.Join(left, ", "))
 	}
 	r.pass("nothing of %s is on the account yet", r.worker)
 }

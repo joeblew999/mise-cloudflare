@@ -13,13 +13,13 @@ import (
 func TestRead(t *testing.T) {
 	dir, _ := filepath.Abs("../../example")
 	if _, err := os.Stat(filepath.Join(dir, "node_modules", "wrangler")); err != nil {
-		t.Skip("example/ has no wrangler installed: run mise run cloudflare setup there")
+		t.Skip("example/ has no wrangler installed: run mise run 02-setup")
 	}
 	c, err := Read(context.Background(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Name != "cloudflare-zero-example" || !slices.Equal(c.Secrets, []string{"GREETING"}) || filepath.Base(c.Path) != "wrangler.jsonc" {
+	if c.Name != "mise-cloudflare-example" || !slices.Equal(c.Secrets, []string{"GREETING"}) || filepath.Base(c.Path) != "wrangler.jsonc" {
 		t.Errorf("got %+v", c)
 	}
 	if want := map[string]string{"DB": "d1", "KV": "kv_namespace", "BUCKET": "r2_bucket"}; !maps.Equal(c.Bindings, want) {

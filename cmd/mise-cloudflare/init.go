@@ -14,8 +14,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joeblew999/mise-cloudflare/mise"
-	"github.com/joeblew999/mise-cloudflare/skills"
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
+	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
+	"github.com/joeblew999/mise-cloudflare/templates"
 )
 
 const (
@@ -31,7 +32,7 @@ func initRepo(ctx context.Context, dir string) {
 	if _, err := os.Stat("cloudflare.toml"); err == nil {
 		fmt.Println("· cloudflare.toml isn't read any more (its settings are task flags now): delete it")
 	}
-	writeFile(tasksFile, mise.Tasks)
+	writeFile(tasksFile, templates.Tasks)
 	old := filepath.Join(".mise", "tasks", "cloudflare.toml") // the name before 0.1.3
 	if b, err := os.ReadFile(old); err == nil && bytes.HasPrefix(b, []byte("# mise-cloudflare's mise tasks")) {
 		must(os.Remove(old))
@@ -73,15 +74,15 @@ func (r repo) stale(ctx context.Context) []string {
 	var out []string
 	check := func(path, name string, want []byte) {
 		if b, err := os.ReadFile(path); err == nil && !bytes.Equal(b, want) {
-			out = append(out, name+" is out of date: run mise run cloudflare update")
+			out = append(out, name+" is out of date: run mise exec -- mise-cloudflare init")
 		}
 	}
-	check(filepath.Join(r.dir, tasksFile), tasksFile, mise.Tasks)
-	if want, err := skills.FS.ReadFile("cloudflare/SKILL.md"); err == nil {
+	check(filepath.Join(r.dir, tasksFile), tasksFile, templates.Tasks)
+	if want, err := fs.ReadFile(templates.Skills, "cloudflare/SKILL.md"); err == nil {
 		check(filepath.Join(r.dir, ".claude", "skills", "cloudflare", "SKILL.md"), ".claude/skills/cloudflare/SKILL.md", want)
 	}
 	if top, _, err := gitTop(ctx, r.dir); err == nil {
-		check(filepath.Join(top, ".claude", "hooks", hookFile), ".claude/hooks/"+hookFile, mise.SessionStart)
+		check(filepath.Join(top, ".claude", "hooks", hookFile), ".claude/hooks/"+hookFile, templates.SessionStart)
 	}
 	if path, want, err := workflowFor(ctx, r.dir); err == nil {
 		rel, _ := filepath.Rel(r.dir, path)
@@ -99,9 +100,9 @@ func workflowFor(ctx context.Context, dir string) (string, []byte, error) {
 	}
 	name := "cloudflare"
 	if rel != "." {
-		name += "-" + strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(rel), "-"), "-")
+		name += "-" + slug(rel)
 	}
-	b := strings.NewReplacer("NAME", name, "DIR", rel).Replace(string(mise.Workflow))
+	b := strings.NewReplacer("NAME", name, "DIR", rel).Replace(string(templates.Workflow))
 	return filepath.Join(top, ".github", "workflows", name+".yml"), []byte(b), nil
 }
 
@@ -125,7 +126,7 @@ func claude(ctx context.Context, dir string) {
 		fail(err)
 	}
 	script := filepath.Join(top, ".claude", "hooks", hookFile)
-	writeFile(script, mise.SessionStart)
+	writeFile(script, templates.SessionStart)
 	must(os.Chmod(script, 0o755))
 
 	path := filepath.Join(top, ".claude", "settings.json")
@@ -159,11 +160,11 @@ func claude(ctx context.Context, dir string) {
 }
 
 func writeSkill(dir string) {
-	must(fs.WalkDir(skills.FS, ".", func(path string, d fs.DirEntry, err error) error {
+	must(fs.WalkDir(templates.Skills, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		b, err := skills.FS.ReadFile(path)
+		b, err := fs.ReadFile(templates.Skills, path)
 		if err == nil {
 			writeFile(filepath.Join(dir, path), b)
 		}
@@ -179,4 +180,65 @@ func writeFile(path string, b []byte) {
 	must(os.MkdirAll(filepath.Dir(path), 0o755))
 	must(os.WriteFile(path, b, 0o644))
 	fmt.Println("wrote", path)
+}
+
+var wranglerDep = regexp.MustCompile(`("wrangler"\s*:\s*")([^"]+)(")`)
+
+// pinWrangler pins package.json's wrangler to the exact version installed (node_modules/wrangler), when it's a range.
+func pinWrangler(dir string) {
+	path := filepath.Join(dir, "package.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	m := wranglerDep.FindSubmatch(b)
+	if m == nil || regexp.MustCompile(`^\d+\.\d+\.\d+$`).Match(m[2]) {
+		return
+	}
+	var installed struct{ Version string }
+	ib, err := os.ReadFile(filepath.Join(dir, "node_modules", "wrangler", "package.json"))
+	if err != nil || json.Unmarshal(ib, &installed) != nil || installed.Version == "" {
+		fmt.Printf("· package.json's wrangler is %s, not an exact version: install the dependencies, then run init again to pin the installed one\n", m[2])
+		return
+	}
+	loc := wranglerDep.FindSubmatchIndex(b)
+	out := append(append(append([]byte{}, b[:loc[4]]...), installed.Version...), b[loc[5]:]...)
+	must(os.WriteFile(path, out, 0o644))
+	fmt.Printf("pinned wrangler %s (was %s) in package.json: install the dependencies again to update the lockfile\n", installed.Version, m[2])
+}
+
+// fixRepo makes the changes cloudflare check asks for that need no decision, so init leaves the repo passing them:
+// .dev.vars, .env, .cloudflare/ and node_modules/ git-ignored, wrangler pinned to the exact version installed, and a .dev.vars.example
+// listing secrets.required when there's none. What needs a person (an ID in the wrangler config) check still names.
+func fixRepo(ctx context.Context, dir string) {
+	if exec.Command("git", "-C", dir, "rev-parse", "--git-dir").Run() == nil {
+		var add []string
+		for _, f := range []string{".dev.vars", ".env", ".cloudflare/", "node_modules/"} {
+			if exec.Command("git", "-C", dir, "-c", "core.excludesFile=", "check-ignore", "-q", f).Run() != nil {
+				add = append(add, f)
+			}
+		}
+		if len(add) > 0 {
+			path := filepath.Join(dir, ".gitignore")
+			old, _ := os.ReadFile(path)
+			s := string(old)
+			if s != "" && !strings.HasSuffix(s, "\n") {
+				s += "\n"
+			}
+			s += "# The repo's Cloudflare secrets and login cache, and installed packages (mise-cloudflare)\n" + strings.Join(add, "\n") + "\n"
+			must(os.WriteFile(path, []byte(s), 0o644))
+			fmt.Println("git-ignored", strings.Join(add, ", "), "in .gitignore")
+		}
+	}
+	pinWrangler(dir)
+	if _, err := os.Stat(filepath.Join(dir, ".dev.vars.example")); os.IsNotExist(err) && (wrangler.W{Dir: dir}).Installed() {
+		if wc, err := wconfig.Read(ctx, dir); err == nil && len(wc.Secrets) > 0 {
+			var b strings.Builder
+			b.WriteString("# The Worker's secrets.required, for wrangler dev: cloudflare dev copies this to .dev.vars (git-ignored), where you fill them in.\n")
+			for _, s := range wc.Secrets {
+				b.WriteString(s + "=\n")
+			}
+			writeFile(filepath.Join(dir, ".dev.vars.example"), []byte(b.String()))
+		}
+	}
 }

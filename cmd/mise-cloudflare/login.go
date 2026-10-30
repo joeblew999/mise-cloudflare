@@ -11,6 +11,16 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
+// login is the login command: the repo's login made if it isn't yet, and its account shown.
+func (r repo) login(ctx context.Context, jsonOut bool) {
+	who := r.ensureLogin(ctx)
+	if jsonOut {
+		emit(who)
+		return
+	}
+	fmt.Printf("✓ %s: %s\n", r.w.Profile, accountNames(who))
+}
+
 // wanted is the scopes the repo's login holds: wrangler's own login's, which wrangler keeps for everything it does.
 func (r repo) wanted(ctx context.Context) []string {
 	scopes, err := r.w.Scopes(ctx)
@@ -20,9 +30,9 @@ func (r repo) wanted(ctx context.Context) []string {
 	return scopes
 }
 
-// login logs the repo in if it isn't yet, and again whenever the login's scopes differ from the repo's (a scope added
+// ensureLogin logs the repo in if it isn't yet, and again whenever the login's scopes differ from the repo's (a scope added
 // or removed), then checks they match. It refuses a stray token first: one would override every login.
-func (r repo) login(ctx context.Context) wrangler.Who {
+func (r repo) ensureLogin(ctx context.Context) wrangler.Who {
 	r.refuseStrayTokens()
 	want := r.wanted(ctx)
 	device := wrangler.Device()

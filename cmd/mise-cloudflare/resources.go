@@ -18,8 +18,8 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-// previewResource is one of the previews' own KV namespaces, D1s or R2 buckets.
-type previewResource struct {
+// resource is one of a Worker's own KV namespaces, D1s or R2 buckets, or one of its previews' own.
+type resource struct {
 	Binding string `json:"binding"`
 	Type    string `json:"type"` // wrangler's: kv_namespace, d1 or r2_bucket
 	Kind    string `json:"kind"` // KV, D1 or R2
@@ -28,15 +28,15 @@ type previewResource struct {
 	Done    string `json:"done"`         // made, there already, deleted
 }
 
-// previews gives previews their own KV, D1 and R2 (<worker>-previews-<binding>), which Cloudflare doesn't, and puts them
+// previewResources gives previews their own KV, D1 and R2 (<worker>-previews-<binding>), which Cloudflare doesn't, and puts them
 // in the Worker's Previews Base. Nothing goes into the repo. --off deletes them. The Worker must be deployed first.
-func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource {
+func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resource {
 	out := r.previewNeeds()
 	if len(out) == 0 {
 		if !jsonOut {
 			fmt.Printf("✓ %s has no KV, D1 or R2 binding for its previews to get their own of\n", r.wc.Name)
 		}
-		return []previewResource{}
+		return []resource{}
 	}
 	token, account := r.cloudflareAPI(ctx)
 	env := map[string]any{}
@@ -46,7 +46,7 @@ func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource
 			env[p.Binding] = nil // a JSON merge patch's null takes the key out
 			continue
 		}
-		if out[i].ID, out[i].Done, err = r.previewResource(ctx, p); err != nil {
+		if out[i].ID, out[i].Done, err = r.makeResource(ctx, p); err != nil {
 			fail(err)
 		}
 		// In a preview's bindings, as wrangler sends them: R2 by its bucket's name, KV and D1 by id.
@@ -62,7 +62,7 @@ func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource
 	}
 	if off {
 		for i, p := range out {
-			out[i].Done = r.deletePreviewResource(ctx, p)
+			out[i].Done = r.deleteResource(ctx, p)
 		}
 	}
 	if !jsonOut {
@@ -78,13 +78,13 @@ func (r repo) previews(ctx context.Context, off, jsonOut bool) []previewResource
 
 // previewNeeds is the previews' own KV, D1 and R2 the Worker needs: one for each of its bindings of the kinds wrangler
 // deploy creates (wconfig.Created) that its previews block leaves out, by wrangler's own types for them.
-func (r repo) previewNeeds() []previewResource {
-	var out []previewResource
+func (r repo) previewNeeds() []resource {
+	var out []resource
 	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
 		typ := r.wc.Bindings[n]
 		c, created := wconfig.Created[typ]
 		if _, declared := r.wc.PreviewBindings[n]; created && !declared {
-			out = append(out, previewResource{Binding: n, Type: typ, Kind: c.What, Name: previewName(r.wc.Name, n)})
+			out = append(out, resource{Binding: n, Type: typ, Kind: c.What, Name: previewName(r.wc.Name, n)})
 		}
 	}
 	return out
@@ -127,13 +127,16 @@ func (r repo) previewsMissing(ctx context.Context, token, account string) (resou
 
 // previewName is the name of the previews' own resource for a binding: <worker>-previews-<binding>, lowercase, with
 // dashes (R2 allows no other), as wrangler names production's <worker>-<binding>.
-func previewName(worker, binding string) string {
-	return worker + "-previews-" + strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(binding), "-"), "-")
+func previewName(worker, binding string) string { return worker + "-previews-" + slug(binding) }
+
+// slug is s lowercase, with dashes for anything but letters and digits: what a resource's or a file's name allows.
+func slug(s string) string {
+	return strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
-// findPreview finds the previews' own KV namespace, D1 or R2 bucket with the repo's wrangler: whether it's there, and
+// findResource finds a KV namespace, D1 or R2 bucket by its name with the repo's wrangler: whether it's there, and
 // its id (a KV namespace's or a D1's; an R2 bucket has none but its name).
-func (r repo) findPreview(ctx context.Context, p previewResource) (bool, string, error) {
+func (r repo) findResource(ctx context.Context, p resource) (bool, string, error) {
 	switch p.Type {
 	case "kv_namespace":
 		var list []struct{ ID, Title string }
@@ -162,25 +165,25 @@ func (r repo) findPreview(ctx context.Context, p previewResource) (bool, string,
 	return false, "", nil
 }
 
-// previewResource finds or makes the previews' own KV namespace, D1 or R2 bucket, and returns its id and what it did.
-func (r repo) previewResource(ctx context.Context, p previewResource) (string, string, error) {
-	if there, id, err := r.findPreview(ctx, p); err != nil || there {
+// makeResource finds or makes the previews' own KV namespace, D1 or R2 bucket, and returns its id and what it did.
+func (r repo) makeResource(ctx context.Context, p resource) (string, string, error) {
+	if there, id, err := r.findResource(ctx, p); err != nil || there {
 		return id, "there already", err
 	}
 	create := map[string][]string{"kv_namespace": {"kv", "namespace", "create", p.Name}, "d1": {"d1", "create", p.Name}, "r2_bucket": {"r2", "bucket", "create", p.Name}}
 	if _, err := wrangler.Output(r.w.Cmd(ctx, create[p.Type]...)); err != nil {
 		return "", "", fmt.Errorf("making the previews' %s %s: %w", p.Kind, p.Name, err)
 	}
-	there, id, err := r.findPreview(ctx, p)
+	there, id, err := r.findResource(ctx, p)
 	if err == nil && !there {
 		err = fmt.Errorf("made the previews' %s %s, then couldn't find it", p.Kind, p.Name)
 	}
 	return id, "made", err
 }
 
-// deletePreviewResource deletes the previews' own KV namespace, D1 or R2 bucket, and says how it went.
-func (r repo) deletePreviewResource(ctx context.Context, p previewResource) string {
-	there, id, err := r.findPreview(ctx, p)
+// deleteResource deletes a KV namespace, D1 or R2 bucket, and says how it went.
+func (r repo) deleteResource(ctx context.Context, p resource) string {
+	there, id, err := r.findResource(ctx, p)
 	if err != nil || !there {
 		return "not there"
 	}
@@ -198,24 +201,9 @@ func (r repo) deletePreviewResource(ctx context.Context, p previewResource) stri
 	return "deleted"
 }
 
-// wranglerJSON runs a wrangler command and decodes its JSON, past anything it prints first (a warning, say).
-func (r repo) wranglerJSON(ctx context.Context, v any, args ...string) error {
-	out, err := wrangler.Output(r.w.Cmd(ctx, args...))
-	if err != nil {
-		return err
-	}
-	if i := regexp.MustCompile(`(?m)^[\[{]`).FindIndex(out); i != nil {
-		out = out[i[0]:]
-	}
-	if err := json.Unmarshal(out, v); err != nil {
-		return fmt.Errorf("wrangler %s: %w", strings.Join(args, " "), err)
-	}
-	return nil
-}
-
 // cloudflareAPI is the repo's login's OAuth token (wrangler renews it) and its account, for Cloudflare's API.
 func (r repo) cloudflareAPI(ctx context.Context) (token, account string) {
-	who := r.login(ctx)
+	who := r.ensureLogin(ctx)
 	if len(who.Accounts) != 1 {
 		fail(fmt.Errorf("the login %s can use %d accounts; log it in again and pick one", r.w.Profile, len(who.Accounts)))
 	}
@@ -258,4 +246,31 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 	default:
 		return fmt.Errorf("Cloudflare refused %s's Previews Base (HTTP %d): %v", worker, resp.StatusCode, res.Errors)
 	}
+}
+
+// ownResources is the Worker's own KV, D1 and R2: one for each of its bindings of the kinds wrangler deploy creates,
+// by the name its config gives it (a D1's database_name, an R2 bucket's bucket_name), else the one deploy gives it,
+// <worker>-<binding>.
+func (r repo) ownResources() []resource {
+	var out []resource
+	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
+		typ := r.wc.Bindings[n]
+		c, created := wconfig.Created[typ]
+		if !created {
+			continue
+		}
+		name := r.wc.Name + "-" + slug(n)
+		if typ != "kv_namespace" { // a KV namespace's binding names it by its id, never by a name
+			items, _ := r.wc.Raw[c.Key].([]any)
+			for _, it := range items {
+				if b, _ := it.(map[string]any); b["binding"] == n {
+					if v, _ := b[c.Names].(string); v != "" {
+						name = v
+					}
+				}
+			}
+		}
+		out = append(out, resource{Binding: n, Type: typ, Kind: c.What, Name: name})
+	}
+	return out
 }

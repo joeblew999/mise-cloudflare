@@ -1,5 +1,5 @@
 {
-  "name": "cloudflare-zero-example",
+  "name": "mise-cloudflare-example",
   "private": true,
   "type": "module",
   "devDependencies": {

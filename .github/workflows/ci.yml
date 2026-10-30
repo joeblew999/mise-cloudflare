@@ -1,6 +1,5 @@
-# mise-cloudflare's CI: the Go tests and the release config, which need no Cloudflare account (example/ has its own
-# workflow, cloudflare-example.yml, stamped by the tool as any repo's is). Cloudflare credentials
-# never come here. Shell steps only, as go-htmx4's: no JavaScript actions.
+# mise-cloudflare's CI: mise run smoke, which needs no Cloudflare account. Cloudflare credentials never come here.
+# Shell steps only, as go-htmx4's: no JavaScript actions.
 name: ci
 
 on:
@@ -39,17 +38,5 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           mise install
 
-      - name: The Go tests (no Cloudflare account)
-        run: mise run test
-
-      - name: A new repo as a user sets it up, on this build (mise run smoke)
+      - name: example/ bootstrapped (00-git-init to 04-check), every check that needs no account, a new repo as a user sets it up (mise run smoke)
         run: mise run smoke
-
-      - name: The release config is valid
-        run: mise exec -- goreleaser check
-
-      - name: "In CI with no token, a login stops at once instead of waiting for a browser"
-        working-directory: example
-        run: |
-          if out=$(mise run cloudflare login 2>&1); then echo "$out"; echo "logged in with no one to log in"; exit 1; fi
-          grep -q "in CI there's no one to log in" <<<"$out" && echo "stopped, as it should"

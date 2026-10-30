@@ -1,7 +1,7 @@
-# Written by mise-cloudflare: don't edit it. mise run cloudflare update writes it again after upgrading.
-# Checks the Worker in DIR on every push and pull request: its setup and test tasks if it has them, then
-# mise run cloudflare check. No Cloudflare credentials: Cloudflare's Workers Builds deploys (mise run cloudflare:github).
-name: NAME
+# Written by mise-cloudflare: don't edit it. mise run cloudflare:init writes it again after upgrading.
+# Checks the Worker in . on every push and pull request: its setup and test tasks if it has them, then
+# mise run cloudflare:check. No Cloudflare credentials: Cloudflare's Workers Builds deploys (mise run cloudflare:github).
+name: cloudflare
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: NAME-${{ github.event.pull_request.number || github.ref }}
+  group: cloudflare-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,11 +37,11 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           curl -fsSL https://mise.run | MISE_QUIET=1 sh
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
-          cd "DIR" && mise install
+          cd "." && mise install
 
-      - name: setup, test and cloudflare check, in DIR
-        working-directory: DIR
+      - name: setup, test and cloudflare check, in .
+        working-directory: .
         run: |
           if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
           if mise tasks info test > /dev/null 2>&1; then mise run test; fi
-          mise run cloudflare check
+          mise run cloudflare:check

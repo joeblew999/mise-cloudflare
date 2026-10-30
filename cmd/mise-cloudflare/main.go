@@ -11,30 +11,34 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 
-	"github.com/joeblew999/mise-cloudflare/internal/cf"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-const help = `This repo's Cloudflare Worker, with mise-cloudflare.
+const help = `This repo's Cloudflare Worker, with mise-cloudflare. Each command is a task:
+mise run cloudflare:<command> runs mise-cloudflare <command>.
 
-The steps, in order (mise run cloudflare says which is next):
+The steps, in order (mise run cloudflare:status says which is next):
   mise run cloudflare:dev      1. run it locally, with local D1, KV and R2: no account needed
   mise run cloudflare:deploy   2. deploy it yourself: the first time, you click Allow
   mise run cloudflare:github   3. have Cloudflare deploy every push: a preview for every pull request,
                                   then production (--staging main for staging; --off to stop)
 
-Now and then, as mise run cloudflare <command>:
-  preview          a preview of what's here now, at its own URL (--name my-test)
-  wrangler <...>   any other wrangler command on the repo's login: wrangler secret put NAME
-  check            check the repo: no tokens or account IDs in it, secrets git-ignored, files current
-  login, logout    the repo's Cloudflare login (the others make it when they need it)
-  update           after upgrading mise-cloudflare: write its files into the repo again
-  version          this build's version
+Now and then:
+  mise run cloudflare:status     what's done, and what to run next (mise run cloudflare, too)
+  mise run cloudflare:check      the repo's rules: no tokens or account IDs in it, secrets git-ignored, files current
+  mise run cloudflare:secret     the secrets the Worker requires that Cloudflare doesn't have yet (--previews: its previews')
+  mise run cloudflare:preview    a preview of what's here now, at its own URL (--name my-test)
+  mise run cloudflare:wrangler   any other wrangler command on the repo's login: wrangler d1 list
+  mise run cloudflare:login      the repo's Cloudflare login (the others make it when they need it)
+  mise run cloudflare:delete     deploy undone: the Worker, its KV, D1 and R2, its previews' own (--yes: don't ask)
+  mise run cloudflare:logout     the repo's logins logged out and deleted
+  mise run cloudflare:init       after upgrading mise-cloudflare: its files written into the repo again
+  mise run cloudflare:version    this build's version
+  mise run cloudflare:help       this
 `
 
 func main() {
@@ -51,6 +55,8 @@ func main() {
 	branch := flags.String("branch", "", "github: the branch whose pushes deploy production (default the repository's default branch, or production with --staging)")
 	staging := flags.String("staging", "", "github: a staging branch, whose pushes deploy the wrangler environment env.staging")
 	build := flags.String("build", "", "github: the build command (default installing from the lockfile: npm ci, …)")
+	yes := flags.Bool("yes", false, "delete: don't ask first")
+	previews := flags.Bool("previews", false, "secret: the previews' secrets, in the Worker's Previews Base")
 	flags.Usage = func() { fmt.Fprint(os.Stderr, help) }
 	if !passes[command] {
 		flags.Parse(args)
@@ -70,45 +76,36 @@ func main() {
 	case "help":
 		fmt.Print(help)
 		return
-	case "init", "update":
+	case "init", "update": // update: what the tasks of repos set up before init was its one name still run
 		initRepo(ctx, dir)
 		return
 	}
 	// CI only checks the repo; Cloudflare's Workers Builds deploys. No one is there to click Allow.
-	if ci() && command != "" && command != "check" && command != "dev" {
-		fail(errors.New("in CI there's no one to log in: CI runs mise run cloudflare check, and Cloudflare's Workers Builds deploys (mise run cloudflare:github)"))
+	if ci() && command != "" && command != "status" && command != "check" && command != "dev" {
+		fail(errors.New("in CI there's no one to log in: CI runs mise run cloudflare:check, and Cloudflare's Workers Builds deploys (mise run cloudflare:github)"))
 	}
 	r := openRepo(ctx, dir)
 	switch command {
-	case "":
-		r.guide(ctx, *jsonOut)
-	case "dev":
-		devVars(r.dir, r.wc.Secrets)
-		r.wranglerHere(ctx, false, append([]string{"dev"}, args...))
-	case "deploy":
-		if os.Getenv("WRANGLER_OUTPUT_FILE_PATH") == "" {
-			os.Setenv("WRANGLER_OUTPUT_FILE_PATH", filepath.Join(".wrangler", "output.json")) // the guide reads its URL there
-		}
-		r.wranglerHere(ctx, true, append([]string{"deploy"}, args...))
-	case "preview":
-		if _, ok := r.wc.Raw["previews"]; ok {
-			r.login(ctx)
-			r.previews(ctx, false, false)
-		}
-		r.wranglerHere(ctx, true, append([]string{"preview"}, args...))
-	case "wrangler":
-		r.wranglerHere(ctx, true, args)
-	case "login":
-		who := r.login(ctx)
-		if *jsonOut {
-			emit(who)
-		} else {
-			fmt.Printf("✓ %s: %s\n", r.w.Profile, accountNames(who))
-		}
-	case "github":
-		r.github(ctx, builds{Branch: *branch, Staging: *staging, Build: *build}, *off, *jsonOut)
+	case "", "status":
+		r.status(ctx, *jsonOut)
 	case "check":
 		r.check(ctx, *jsonOut)
+	case "dev":
+		r.dev(ctx, args)
+	case "secret":
+		r.secret(ctx, *previews)
+	case "deploy":
+		r.deploy(ctx, args)
+	case "github":
+		r.github(ctx, builds{Branch: *branch, Staging: *staging, Build: *build}, *off, *jsonOut)
+	case "preview":
+		r.preview(ctx, args)
+	case "wrangler":
+		r.wrangler(ctx, args)
+	case "login":
+		r.login(ctx, *jsonOut)
+	case "delete":
+		r.delete(ctx, *yes)
 	case "logout":
 		r.logout(ctx)
 	default:
@@ -133,34 +130,6 @@ func openRepo(ctx context.Context, dir string) repo {
 	must(err)
 	w.Profile = wc.Name // the login is named after the Worker
 	return repo{dir: dir, wc: wc, w: w}
-}
-
-// wranglerHere runs wrangler on this terminal, on the repo's login when onLogin (made first if needed); its exit code
-// is the command's.
-func (r repo) wranglerHere(ctx context.Context, onLogin bool, args []string) {
-	cmd := r.w.Plain(ctx, args...)
-	if onLogin {
-		r.login(ctx)
-		cmd = r.w.Cmd(ctx, args...)
-	}
-	if err := wrangler.Interactive(cmd); err != nil {
-		os.Exit(exitCode(err))
-	}
-}
-
-// logout logs the repo's login out on Cloudflare and deletes it, and cf's login for Workers Builds if there is one.
-func (r repo) logout(ctx context.Context) {
-	if r.w.LoggedIn(ctx) {
-		r.refuseStrayTokens()
-		must(r.w.Delete(ctx))
-	}
-	if cf.Installed() {
-		c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
-		if who, err := c.Whoami(ctx); err == nil && who.Authenticated {
-			must(c.Delete(ctx))
-		}
-	}
-	fmt.Printf("✓ %s is logged out and deleted\n", r.w.Profile)
 }
 
 // ci reports whether this runs in CI (CI=true, as GitHub Actions and every other CI set it).

@@ -3,7 +3,7 @@
 version: 2
 project_name: mise-cloudflare
 builds:
-  - id: cloudflare
+  - id: mise-cloudflare
     main: ./cmd/mise-cloudflare
     binary: mise-cloudflare
     env: [CGO_ENABLED=0]

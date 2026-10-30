@@ -7,7 +7,7 @@ name: release
 on:
   push:
     branches: [main]
-    paths: ["cmd/**", "internal/**", "mise/**", "skills/**", "go.mod", "go.sum", ".goreleaser.yaml", ".github/workflows/release.yml"]
+    paths: ["cmd/**", "internal/**", "templates/**", "go.mod", "go.sum", ".goreleaser.yaml", ".github/workflows/release.yml"]
     tags: ["v*"]
 
 concurrency:

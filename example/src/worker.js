@@ -1,4 +1,5 @@
-// One request touches every binding, so a test can see D1, KV, R2 and the secret all working.
+// One request touches every binding, so a test can see D1, KV, R2 and the secret all working. It deletes the R2
+// object it wrote, so nothing is left in a bucket and mise run cloudflare:delete deletes the buckets too.
 export default {
   async fetch(_request, env) {
     const stamp = new Date().toISOString();
@@ -9,6 +10,7 @@ export default {
     const kv = await env.KV.get("stamp");
     await env.BUCKET.put("stamp.txt", stamp);
     const r2 = await (await env.BUCKET.get("stamp.txt"))?.text();
+    await env.BUCKET.delete("stamp.txt");
     return Response.json({ d1: d1 === stamp, kv: kv === stamp, r2: r2 === stamp, secret: Boolean(env.GREETING) });
   },
 };

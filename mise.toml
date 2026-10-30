@@ -1,8 +1,15 @@
-# mise-cloudflare: a repo's own Cloudflare login, and wrangler on it, with its mise tasks and agent skill.
+# mise-cloudflare's own tasks, for working on it. Run every task here, at the top.
 #
-#   cmd/mise-cloudflare/  the command;  mise/  what init writes into a repo;  skills/  its agent skill
-#   example/              a Worker repo that uses it, on the tool built from this checkout
-#   e2e/                  a new repo as a user sets it up (mise run smoke), and real deploys (mise run prove)
+# example.mise.toml, included below, is the steps on example/, as on any repo: 00-git-init to 09-github.
+# This file is only what this repo does itself:
+#   mise run build     its build, bin/mise-cloudflare
+#   mise run install   that build as the mise version local, which example/ pins (and any repo can)
+#   mise run test      every check that needs no Cloudflare account, after example/'s 04-check
+#   mise run smoke     a new repo as a user sets it up, after test
+#   mise run prove     a real deploy of example/ from this machine, after smoke
+#   mise run builds    Workers Builds deploying every push, through GitHub, after prove
+#   mise run clean     delete what a stopped prove or builds left
+# Each runs what it needs first: run the furthest you need.
 
 [settings]
 # go.mod's toolchain line is the Go pin; this makes mise install honour it.
@@ -11,34 +18,46 @@ idiomatic_version_file_enable_tools = ["go"]
 skills.fetch = false
 
 [tools]
-node = "26.12.1"   # example/'s wrangler
-aube = "2.8.1"     # installs it
+node = "26.12.1"   # the Go tests run example/'s wrangler with it
 usage = "7.0.1"    # --help and tab-completion for the tasks' flags
 goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
-"npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI, for mise run cloudflare:github
+"npm:cf" = "1.0.0-beta.20"   # Cloudflare's own CLI: builds and clean run it themselves
+
+[task_config]
+includes = ["example.mise.toml"]
 
 [tasks.build]
-description = "Build bin/mise-cloudflare from this checkout"
+description = "This repo's build, bin/mise-cloudflare"
 run = "go build -o bin/mise-cloudflare ./cmd/mise-cloudflare"
 
-[tasks.example]
-description = "Write init's files into example/ again with this checkout's tool (the tests fail while they're stale)"
+[tasks.install]
+description = "This repo's build as the mise version local, for any repo on this machine, no release: mise use github:joeblew999/mise-cloudflare@local there. example/ pins it so"
 depends = ["build"]
-dir = "example"
-run = "../bin/mise-cloudflare init"
+run = "mise link -f github:joeblew999/mise-cloudflare@local {{config_root}}/bin"
 
 [tasks.test]
-description = "The Go tests: no Cloudflare account, nothing deployed (sets example/ up first: the tests read its wrangler)"
-run = "cd example && mise run setup && cd .. && go vet ./... && go test ./..."
+description = "Every check that needs no Cloudflare account, run for real (no cached results): go vet, the Go tests, the release config. After example/'s 04-check. After every change"
+depends = ["04-check"]
+run = "go vet ./... && go test -count=1 ./... && goreleaser check"
 
 [tasks.smoke]
-description = "A new repo as a user sets it up, no Cloudflare account: mise-cloudflare from mise, init, then status, check and dev. This checkout's build, or a release with --version"
+description = "TestSmoke: a new repo as a user sets it up, no Cloudflare account: mise-cloudflare from mise, init, check, status, a login in CI stopping at once, the Worker locally. After test. After every change. This checkout's build, or a release with --version"
 usage = 'flag "--version <version>" help="test this release from GitHub instead, as mise use installs it"'
-depends = ["build"]
-run = "SMOKE=1 SMOKE_RELEASE=${usage_version:-} go test ./e2e -run '^TestNewRepo$' -count=1 -v -timeout 10m"
+depends = ["test"]
+run = "SMOKE=1 SMOKE_RELEASE=${usage_version:-} go test ./e2e -run '^TestSmoke$' -count=1 -v -timeout 10m"
 
 [tasks.prove]
-description = "Real deploys on a Cloudflare account (about 30 minutes): example/ as a developer uses it (secret, deploy, live D1, KV, R2 and secret, stray tokens refused), then Cloudflare deploying every push (production, a pull request's preview, gone with its branch). Everything deleted after. The first time, an Allow"
+description = "TestProve: one real deploy of example/ from this machine, no GitHub, a few minutes: secret, deploy, live D1, KV, R2 and secret, stray tokens refused, everything deleted after. After smoke. After a change to how it deploys. The first time, an Allow"
 usage = 'flag "--clean" help="also log the example login out and delete it; the next run logs in again"'
-depends = ["build"]
-run = "CLOUDFLARE_E2E=1 PROVE_CLEAN=${usage_clean:-false} go test ./e2e -run '^(TestProve|TestGitHub)$' -count=1 -v -timeout 120m"
+depends = ["smoke"]
+run = "CLOUDFLARE_E2E=1 PROVE_CLEAN=${usage_clean:-false} go test ./e2e -run '^TestProve$' -count=1 -v -timeout 30m"
+
+[tasks.builds]
+description = "TestBuilds: Cloudflare's Workers Builds deploying every push, through GitHub (about 25 minutes): production from a throwaway branch, a branch's preview, gone with its branch. Everything deleted after. After prove. After a change to github"
+depends = ["prove"]
+run = "CLOUDFLARE_E2E=1 go test ./e2e -run '^TestBuilds$' -count=1 -v -timeout 90m"
+
+[tasks.clean]
+description = "TestClean: delete whatever a stopped prove or builds left, so the next one can start: example's Worker, its D1, KV and R2 and its previews', its Workers Builds setup, and the e2e-* branches"
+depends = ["04-check"]
+run = "CLOUDFLARE_E2E=1 go test ./e2e -run '^TestClean$' -count=1 -v -timeout 15m"

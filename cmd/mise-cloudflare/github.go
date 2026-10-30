@@ -29,7 +29,7 @@ type githubReport struct {
 	Workers    []githubWorker `json:"workers"`
 	Removed    bool           `json:"removed,omitempty"`
 	// The previews' own KV, D1 and R2, in the Worker's Previews Base.
-	Previews []previewResource `json:"previews,omitempty"`
+	Previews []resource `json:"previews,omitempty"`
 	// GitHub deletes merged pull requests' branches, and Workers Builds their previews with them.
 	DeleteMergedBranches bool `json:"deleteMergedBranches"`
 }
@@ -55,6 +55,14 @@ func (r repo) github(ctx context.Context, b builds, off, jsonOut bool) {
 		fail(errors.New("cf isn't installed: run mise run cloudflare:github, which brings it"))
 	}
 	r.refuseStrayTokens()
+	// The GitHub repository first: without one there's nothing for Workers Builds to build, so no login is asked for.
+	var gh ghRepo
+	if !off {
+		var err error
+		if gh, err = githubRepo(ctx, r.dir); err != nil {
+			fail(err)
+		}
+	}
 	c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
 	who, err := c.Whoami(ctx)
 	if err != nil {
@@ -108,7 +116,7 @@ func (r repo) github(ctx context.Context, b builds, off, jsonOut bool) {
 			}
 		}
 		rep.Removed = true
-		rep.Previews = r.previews(ctx, true, jsonOut)
+		rep.Previews = r.previewResources(ctx, true, jsonOut)
 		if jsonOut {
 			emit(rep)
 		} else {
@@ -117,10 +125,6 @@ func (r repo) github(ctx context.Context, b builds, off, jsonOut bool) {
 		return
 	}
 
-	gh, err := githubRepo(ctx, r.dir)
-	if err != nil {
-		fail(err)
-	}
 	// The build token Workers Builds deploys with: the account's first, which Cloudflare made (connecting a repository
 	// in the dashboard makes one). It covers Workers Scripts, KV, R2 and Workers Routes; a Worker binding anything else
 	// (D1, Queues, …) needs that permission added to it in the dashboard.
@@ -181,7 +185,7 @@ func (r repo) github(ctx context.Context, b builds, off, jsonOut bool) {
 		}
 	}
 	// Previews get their own KV, D1 and R2, which wrangler preview doesn't make.
-	rep.Previews = r.previews(ctx, false, jsonOut)
+	rep.Previews = r.previewResources(ctx, false, jsonOut)
 	// A branch's preview goes when the branch does; GitHub deletes a pull request's branch when it merges, with this on.
 	rep.DeleteMergedBranches = deleteMergedBranches(ctx, gh)
 	if jsonOut {
