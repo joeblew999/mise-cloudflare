@@ -4,6 +4,7 @@
 package e2e
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,15 +17,15 @@ import (
 // same on GitHub): the commit's v* tag, or the next patch version, tagged and pushed, when it has none; goreleaser's
 // binaries for every machine on that tag's GitHub release (.goreleaser.yaml); a new repo pinning the release, tried as a
 // person tries it (mise run example:e2e-serve --version: the walk on a copy stamped out pinning it); and the version fetched by
-// proxy.golang.org, so go get and pkg.go.dev have it at once. With --dry-run (DRY_RUN=true) it tags and publishes
-// nothing: goreleaser builds a snapshot into dist/.
+// proxy.golang.org, so go get and pkg.go.dev have it at once. With --dry-run (the test's flag -dry-run) it tags and
+// publishes nothing: goreleaser builds a snapshot into dist/.
 func TestToolRelease(t *testing.T) {
 	onlyFrom(t, "tool:release")
 	tag, isNew, err := releaseTag()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if os.Getenv("DRY_RUN") == "true" {
+	if *dryRunFlag {
 		fmt.Printf("· would release %s%s\n", tag, map[bool]string{true: " (a new tag on this commit)", false: " (this commit's tag)"}[isNew])
 		runShown(t, nil, "goreleaser", "release", "--snapshot", "--clean")
 		fmt.Println("· dry run: nothing tagged, nothing published")
@@ -47,6 +48,9 @@ func TestToolRelease(t *testing.T) {
 	}
 	runShown(t, []string{"GOPROXY=https://proxy.golang.org", "GOFLAGS=-mod=mod"}, "go", "list", "-m", strings.TrimSpace(string(out))+"@"+tag)
 }
+
+// dryRunFlag is mise run tool:release --dry-run, passed as the test's flag (go test … -args -dry-run).
+var dryRunFlag = flag.Bool("dry-run", false, "tag nothing and publish nothing: goreleaser builds a snapshot into dist/")
 
 // releaseTag is the tag to release: the commit's own v* tag, or the next patch version after the newest v* tag (v0.0.1
 // for the first), which is new.

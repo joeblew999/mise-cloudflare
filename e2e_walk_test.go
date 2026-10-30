@@ -16,6 +16,7 @@ package e2e
 
 import (
 	"crypto/sha256"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -28,7 +29,7 @@ import (
 
 // TestWalk walks the repo REPO_PATH names (a folder of this repo: templates) as far as the stage E2E_STAGE names (serve,
 // deploy or connect-github); with E2E_STAMPED=true, a copy stamped out from it instead, in a folder of its own that
-// goes when the walk ends, pinning mise-cloudflare at the release E2E_PIN names, or this checkout's build. The root's
+// goes when the walk ends, pinning mise-cloudflare at the release -version names, or this checkout's build. The root's
 // tasks set them: mise run template:e2e-serve is REPO_PATH=templates E2E_STAGE=serve. Without E2E_STAGE it skips, so
 // go test ./... never touches Cloudflare.
 func TestWalk(t *testing.T) {
@@ -41,10 +42,10 @@ func TestWalk(t *testing.T) {
 		t.Fatalf("E2E_STAGE=%s: the stages are %s", name, strings.Join(stageNames, ", "))
 	}
 	r := repoAt(t, os.Getenv("REPO_PATH"))
-	stamped, pin := os.Getenv("E2E_STAMPED") == "true", os.Getenv("E2E_PIN")
+	stamped, pin := os.Getenv("E2E_STAMPED") == "true", *releaseFlag
 	switch {
 	case pin != "" && !stamped:
-		t.Fatalf("E2E_PIN=%s pins a stamped copy's mise-cloudflare: E2E_STAMPED=true too", pin)
+		t.Fatalf("-version %s pins a stamped copy's mise-cloudflare: E2E_STAMPED=true too", pin)
 	case stamped && stage(upTo) == connectGithub:
 		t.Fatal("a stamped copy has its own git, not on GitHub, where connect-github's steps push: walk it as far as deploy")
 	case stamped:
@@ -55,6 +56,10 @@ func TestWalk(t *testing.T) {
 	r.miseSetUp()
 	walkSteps(t, r, stage(upTo))
 }
+
+// releaseFlag is the release a stamped copy runs at, the test's flag -version: mise run example:e2e-serve --version
+// v0.1.17 passes it (go test … -args -version v0.1.17). Without it, this checkout's build (local).
+var releaseFlag = flag.String("version", "", "the release a stamped copy runs at (default this checkout's build)")
 
 // stage is how far a walk goes. Each runs the steps the stages before it run, and the steps that need it.
 type stage int
