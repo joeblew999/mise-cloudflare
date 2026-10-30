@@ -26,18 +26,6 @@ once per machine when you click **Allow**; GitHub never holds a Cloudflare crede
 task, `mise run cloudflare:update`, moves them all. CI checks it on macOS, Linux and Windows, and it sets itself up in a
 Claude Code cloud session.
 
-This repo is two things, kept apart:
-
-| | What | Where |
-|---|---|---|
-| **For other repos** | The `mise-cloudflare` binary, and the template: a whole repo you can drop anywhere and run, whose tool half `init` writes into a repo (its tasks, its check workflow, its Claude Code hook and skill, its docs, its `.gitignore`) | [templates/](templates/), [cmd/mise-cloudflare/](cmd/mise-cloudflare/), [internal/](internal/) |
-| **For this repo** | The tasks for working on it, the end-to-end walk, the release, its CI. This README | [mise.toml](mise.toml), the `*_test.go` at the top, [.github/workflows/](.github/workflows/) |
-
-Nothing for this repo is ever in `templates/`, and nothing in `templates/` is this repo's own. The Go says it too:
-`cmd/mise-cloudflare` is the one entry point that ships (the binary other repos run), with `internal/` and
-`templates/`; everything this repo runs for itself in Go is a test at the top (the `*_test.go`, package `e2e`), which
-the root's tasks run.
-
 ## Use it in your repo
 
 Step by step, at the repository's root (GitHub and Claude Code read `.github/` and `.claude/` only there), in a repo
@@ -52,9 +40,9 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
    ```
 
    It runs the newest release, or the one you name instead of `latest` (`@0.1.15`: they're all on
-   [its releases](https://github.com/joeblew999/mise-cloudflare/releases)). It writes the repo's `.mise/` folder (its
-   tasks, and mise-cloudflare pinned at exactly that release, which mise gets from GitHub), its GitHub workflow, its
-   Claude Code hook and skill, its docs and its `.gitignore`.
+   [its releases](https://github.com/joeblew999/mise-cloudflare/releases)); mise takes a new release as `latest` once
+   it's a day old. It writes the repo's `.mise/` folder (its tasks, and mise-cloudflare pinned at exactly that release,
+   which mise gets from GitHub), its GitHub workflow, its Claude Code hook and skill, its docs and its `.gitignore`.
 3. **The template's Worker, only in a repo with none yet:**
 
    ```sh
@@ -62,8 +50,8 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
    ```
 
    It writes the template's Worker, named for the repo's folder, with the `mise.toml` that installs its wrangler and a
-   README, and installs it. It never writes over a file: a repo with a Worker of its own gets none of it, and installs its wrangler
-   its own way.
+   README, and installs it. It never writes over a file: a repo with a Worker of its own gets none of it, and installs
+   its wrangler its own way.
 4. **Then:**
 
    ```sh
@@ -74,14 +62,26 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
 
 Commit what steps 2 and 3 wrote.
 
-In this checkout the template pins a release the same way, and `mise run tool:install` overrides it on this machine
-only, with this checkout's build (`templates/.mise/config.local.toml`, never committed).
-
 `init` writes everything your repo gets, its own docs among them: `docs/mise-cloudflare/README.md`, with every
 command, the logins, previews, staging and production. That page is [templates/docs/mise-cloudflare/README.md](templates/docs/mise-cloudflare/README.md)
 here, in the template, just as a repo has it.
 
 ## Working on mise-cloudflare
+
+This repo is two things, kept apart:
+
+| | What | Where |
+|---|---|---|
+| **For other repos** | The `mise-cloudflare` binary, and the template: a whole repo you can drop anywhere and run, whose tool half `init` writes into a repo (its tasks, its check workflow, its Claude Code hook and skill, its docs, its `.gitignore`) | [templates/](templates/), [cmd/mise-cloudflare/](cmd/mise-cloudflare/), [internal/](internal/) |
+| **For this repo** | The tasks for working on it, the end-to-end walk, the release, its CI. This README | [mise.toml](mise.toml), the `*_test.go` at the top, [.github/workflows/](.github/workflows/) |
+
+Nothing for this repo is ever in `templates/`, and nothing in `templates/` is this repo's own. The Go says it too:
+`cmd/mise-cloudflare` is the one entry point that ships (the binary other repos run), with `internal/` and
+`templates/`; everything this repo runs for itself in Go is a test at the top (the `*_test.go`, package `e2e`), which
+the root's tasks run.
+
+In this checkout the template's `.mise/config.toml` says `latest`, and `mise run tool:install` overrides it on this
+machine only, with this checkout's build (`templates/.mise/config.local.toml`, never committed).
 
 Everything is driven from this repo's [mise.toml](mise.toml), run at the top, and each task runs what it needs first:
 run the furthest you need, here, never waiting on GitHub. `mise tasks` lists each with what it does.
@@ -142,7 +142,8 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 [mise_test.go](mise_test.go), `TestMise`, checks a mise file against the Go it runs, both ways, for any repo (the
 caller says which: `template:check-mise` points it at the template's). Each task's command is a command's file in
 `cmd/mise-cloudflare`, and each command a task's; each task the walk names is one; every task declares its flags and
-arguments with mise's `usage` and passes them by name. The root's `mise.toml` is the control plane, and isn't checked.
+arguments with mise's `usage` and passes them by name. `root:check-mise` points it at this repo's own `mise.toml`, its
+mise side only: the root runs Go, it isn't a binary's tasks.
 
 ### Layout
 
@@ -161,7 +162,8 @@ arguments with mise's `usage` and passes them by name. The root's `mise.toml` is
 Shell steps only, no JavaScript actions, and no Cloudflare credentials. Each workflow checks out and installs mise,
 then only runs the root mise, as on any machine:
 
-- [ci.yml](.github/workflows/ci.yml), on every push and pull request (not the walk's throwaway `e2e-*` branches):
+- [ci.yml](.github/workflows/ci.yml), on every push and pull request (not the walk's throwaway `e2e-*` branches), on
+  Linux, macOS and Windows:
   `mise run tool:test`, `mise run template:check-mise`, `mise run root:check-mise`, then the walk as far as `serve` on the template
   (`mise run template:e2e-serve`) and on a stamped copy (`mise run example:e2e-serve`).
 - [release.yml](.github/workflows/release.yml), on every change to the tool merged to main: `mise run tool:release`. It
