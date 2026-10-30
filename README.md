@@ -6,8 +6,25 @@
 [![license](https://img.shields.io/github/license/joeblew999/mise-cloudflare)](LICENSE)
 [![Go Reference](https://pkg.go.dev/badge/github.com/joeblew999/mise-cloudflare.svg)](https://pkg.go.dev/github.com/joeblew999/mise-cloudflare)
 
-Cloudflare Workers for any repo, from mise: run it locally, deploy it, then a preview for every pull request, staging
-and production. The same on your machine and in Claude Code. No API tokens to make; the first time, you click **Allow**.
+**The problem.** Putting a repo's Cloudflare Worker on Cloudflare properly takes a dozen fiddly steps, and each repo
+ends up doing them a little differently, or not at all:
+
+- wrangler and Node at the same versions on every machine, in CI and in a Claude Code cloud session;
+- a Cloudflare login for the repo, without API tokens pasted into `.env` files or handed to CI;
+- the Worker's secrets set on Cloudflare and kept out of git, locally (`.dev.vars`) and again for previews, which don't
+  get the Worker's own;
+- D1, KV and R2 for production, for local development and for each pull request's preview, with no account IDs in
+  the repo;
+- Cloudflare building every push: production from `main`, a preview for every pull request, staging if you want it;
+- CI that checks the repo without any Cloudflare credential;
+- all of that kept up to date as wrangler, Cloudflare and the tools move on.
+
+**What mise-cloudflare does.** It does all of that through [mise](https://mise.jdx.dev). One command adds it to a repo,
+and from then on every step is a mise task, numbered in the order you need them. Each one says what it did and what to
+run next, and `mise run cloudflare` shows where the repo is at any time. The logins are wrangler's and cf's own, made
+once per machine when you click **Allow**; GitHub never holds a Cloudflare credential. Every version is pinned, and one
+task, `mise run cloudflare:update`, moves them all. CI checks it on macOS, Linux and Windows, and it sets itself up in a
+Claude Code cloud session.
 
 This repo is two things, kept apart:
 
