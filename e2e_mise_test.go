@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -328,13 +327,13 @@ func (r repo) miseServeLocally() []byte {
 	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(r.dir), "MISE_YES=1", "MISE_TRUSTED_CONFIG_PATHS="+r.dir,
 		"HOME="+home, "XDG_CONFIG_HOME="+home, "CLOUDFLARE_API_TOKEN=", "CI=1",
 		"MISE_DATA_DIR="+doctor.Dirs.Data, "MISE_CACHE_DIR="+doctor.Dirs.Cache, "MISE_STATE_DIR="+doctor.Dirs.State)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	ownGroup(cmd)
 	var logs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &logs, &logs
 	if err := cmd.Start(); err != nil {
 		r.t.Fatal(err)
 	}
-	defer syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	defer killGroup(cmd)
 	for i := 0; i < 90; i++ {
 		if resp, err := http.Get("http://127.0.0.1:" + port + "/"); err == nil {
 			body, _ := io.ReadAll(resp.Body)

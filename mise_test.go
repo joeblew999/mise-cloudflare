@@ -15,8 +15,10 @@ import (
 //  1. Each task's run and usage is written on one line, "…" or '…'. Longer logic belongs in Go, not in the mise file.
 //  2. A task runs Go in one of two forms: go run|test|build ./path (Go from its source), or <binary> <command> (a
 //     built binary, its Go in <GO_CMD>/<binary>/). Anything else it runs is reported, as not checked.
-//  3. A task declares its flags and arguments with mise's usage, and its run passes each by name: ${usage_yes:+--yes}.
-//     Nothing passes through undeclared, and nothing is read the deprecated way, {{flag(…)}}.
+//  3. A task declares its flags and arguments with mise's usage, and its run passes each by name with mise's own
+//     templates, which mise fills in before any shell runs: {% if usage.yes %} --yes{% endif %}. Nothing passes
+//     through undeclared, nothing is read the deprecated way, {{flag(…)}}, and no run line has POSIX shell syntax
+//     (${…}, $name, NAME=value in front of a command): Windows' cmd doesn't read it, so the task would break there.
 //  4. A binary's commands are laid out one way, which the caller says: a file each, <command>.go holding the function
 //     named for it, or a folder each.
 //  5. Go that runs tasks names each in full, "namespace:task", never glued together from pieces.
@@ -100,6 +102,7 @@ type ran struct {
 // Anything else is neither: go tool, go vet, shell, other programs.
 func (g goSide) runsOf(run, dir string) []ran {
 	var rans []ran
+	run = templateTag.ReplaceAllString(run, " ") // what mise fills in isn't a command's words
 	for _, command := range regexp.MustCompile(`&&|\|\||;`).Split(run, -1) {
 		words := strings.Fields(command)
 		for len(words) > 0 && regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`).MatchString(words[0]) {
@@ -203,9 +206,10 @@ func checkGoToMise(t *testing.T, file string, tasks []task, g goSide) {
 }
 
 // checkUsage checks the golden rule: a task declares the flags and arguments it takes in mise's usage spec, and its
-// run line passes each by name (usage_<name>), and nothing undeclared; then mise refuses anything else before the Go
-// runs. Within each task: every name its usage declares is in its run, every usage_<name> its run uses is declared,
-// and nothing is read mise's old way, {{flag(…)}}. And flags both ways, at each binary of GO_CMD: every flag a task
+// run line passes each by name with mise's templates (usage.<name>), and nothing undeclared; then mise refuses anything
+// else before the Go runs. Within each task: every name its usage declares is in its run, every usage.<name> its run
+// uses is declared, nothing is read mise's old way, {{flag(…)}}, and no run line, a task's with usage or not, has POSIX
+// shell syntax, which breaks under Windows' cmd. And flags both ways, at each binary of GO_CMD: every flag a task
 // running it declares is one its Go defines (flag.Bool("yes", …)), and every flag its Go defines is declared by such a
 // task. A task that takes nothing has no usage, and the Go refuses what it doesn't know.
 func checkUsage(t *testing.T, file string, tasks []task, g goSide) {
@@ -216,19 +220,22 @@ func checkUsage(t *testing.T, file string, tasks []task, g goSide) {
 		for _, m := range deprecated.FindAllStringSubmatch(task.run, -1) {
 			t.Errorf("usage: %s's task %s's run uses {{%s(…)}}, which mise has deprecated and removes in mise 2027.5.0: declare it in usage instead", file, task.name, m[1])
 		}
+		if m := posix.FindString(task.run); m != "" {
+			t.Errorf("usage: %s's task %s's run has POSIX shell syntax, %q, which Windows' cmd doesn't read: pass usage values with mise's templates ({{usage.<name>}}), and set variables in the task's env: %s", file, task.name, m, task.run)
+		}
 		if task.usage == "" {
 			continue
 		}
 		withUsage++
 		names := usageNames(task.usage)
 		for _, n := range names {
-			if !strings.Contains(task.run, "usage_"+n.env()) {
-				t.Errorf("usage: %s's task %s declares %s, and its run doesn't pass it (usage_%s): %s", file, task.name, n, n.env(), task.run)
+			if !regexp.MustCompile(`\busage\.` + n.env() + `\b`).MatchString(task.run) {
+				t.Errorf("usage: %s's task %s declares %s, and its run doesn't pass it (usage.%s): %s", file, task.name, n, n.env(), task.run)
 			}
 		}
-		for _, m := range regexp.MustCompile(`usage_([a-z0-9_]+)`).FindAllStringSubmatch(task.run, -1) {
+		for _, m := range regexp.MustCompile(`\busage\.([a-z0-9_]+)`).FindAllStringSubmatch(task.run, -1) {
 			if !slices.ContainsFunc(names, func(n usageName) bool { return n.env() == m[1] }) {
-				t.Errorf("usage: %s's task %s's run passes usage_%s, which its usage doesn't declare", file, task.name, m[1])
+				t.Errorf("usage: %s's task %s's run passes usage.%s, which its usage doesn't declare", file, task.name, m[1])
 			}
 		}
 		for _, r := range g.runsOf(task.run, taskDir(file)) {
@@ -388,6 +395,12 @@ func taskDir(file string) string {
 
 // deprecated is mise's old way of reading flags and arguments in a run line, {{arg(…)}}, {{option(…)}} and
 // {{flag(…)}}, which mise has deprecated for usage, and removes in mise 2027.5.0.
+// posix is shell syntax that only a POSIX shell reads: ${…}, $name, and NAME=value in front of a command.
+var posix = regexp.MustCompile(`\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|(?:^|&&|\|\||;)\s*[A-Za-z_][A-Za-z0-9_]*=\S*\s`)
+
+// templateTag is a mise template tag in a run line, {% … %} or {{ … }}, which mise fills in before the shell runs.
+var templateTag = regexp.MustCompile(`\{%.*?%\}|\{\{.*?\}\}`)
+
 var deprecated = regexp.MustCompile(`\{\{-?\s*(arg|option|flag)\(`)
 
 // usageName is a flag or an argument a usage spec declares, by its long name.
@@ -403,7 +416,7 @@ func (n usageName) String() string {
 	return "the argument " + n.name
 }
 
-// env is the name's usage_<env>, as mise gives it to the run line: dashes as underscores.
+// env is the name as mise's templates have it, usage.<env> (and its environment, usage_<env>): dashes as underscores.
 func (n usageName) env() string { return strings.ReplaceAll(n.name, "-", "_") }
 
 // usageNames are the flags (flag "-y --yes", flag "--branch <branch>") and arguments (arg "<name>", arg "[args]...") a
@@ -542,7 +555,7 @@ run = "mise-cloudflare b"
 
 [tasks.setup]
 usage = 'flag "--yes" help="do not ask"'
-run = 'aube install ${usage_yes:+--yes}'
+run = 'aube install{% if usage.yes %} --yes{% endif %}'
 
 [tasks.list]
 run = ["a", "b"]
@@ -551,7 +564,7 @@ run = ["a", "b"]
 run = """
 a
 """
-`, []task{{"a:b", "mise-cloudflare b", ""}, {"setup", "aube install ${usage_yes:+--yes}", `flag "--yes" help="do not ask"`}, {"list", "", ""}, {"lines", "", ""}}, 2},
+`, []task{{"a:b", "mise-cloudflare b", ""}, {"setup", "aube install{% if usage.yes %} --yes{% endif %}", `flag "--yes" help="do not ask"`}, {"list", "", ""}, {"lines", "", ""}}, 2},
 		{"tasks.toml", `["a:b"]
 run = "x"
 
@@ -578,7 +591,9 @@ func TestRunForms(t *testing.T) {
 	g := goSide{cmd: filepath.Join(dir, "cmd"), layout: "file", binaries: []string{"tool"}}
 	in := func(p ...string) string { return abs(filepath.Join(append([]string{dir}, p...)...)) }
 	for run, want := range map[string][]ran{
-		"tool set-secrets":                {{place: in("cmd", "tool", "set_secrets.go"), binary: "tool"}},
+		"tool set-secrets":                                         {{place: in("cmd", "tool", "set_secrets.go"), binary: "tool"}},
+		"tool{% if usage.json %} --json{% endif %}":                {{place: in("cmd", "tool"), binary: "tool"}},
+		`tool deploy{% for a in usage.args %} "{{a}}"{% endfor %}`: {{place: in("cmd", "tool", "deploy.go"), binary: "tool"}},
 		"tool":                            {{place: in("cmd", "tool"), binary: "tool"}},
 		"CI=1 tool check --json":          {{place: in("cmd", "tool", "check.go"), binary: "tool"}},
 		"go run ./cmd/tool -x":            {{place: in("cmd", "tool"), binary: "tool"}},

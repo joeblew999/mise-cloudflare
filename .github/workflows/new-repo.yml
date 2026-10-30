@@ -33,9 +33,6 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # mise's GitHub downloads
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh, which fetches mise itself on Windows
       MISE_YES: "1"
-      # The tasks are POSIX shell lines: on Windows Git Bash runs them, where mise would use cmd. Windows with mise's own
-      # default shell isn't covered here.
-      MISE_WINDOWS_DEFAULT_INLINE_SHELL_ARGS: bash -c
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       INPUT_VERSION: ${{ inputs.version }}
     steps:
@@ -68,5 +65,7 @@ jobs:
           mise --version
           mise install
 
+      # The new repo's tasks run in each OS's own shell (cmd on Windows): they have no shell syntax. --skip-deps: the
+      # release is what's tried, not a build of this checkout (tool:install).
       - name: A new repo, made the README's way at the release, walked as far as serve (mise run example:e2e-serve --version)
-        run: mise run example:e2e-serve --version "$VERSION"
+        run: mise run --skip-deps example:e2e-serve --version "$VERSION"
