@@ -41,16 +41,15 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           mise install
 
-      - name: The tool's own tests, and the mise files and the Go lined up (mise run tool:test, which runs TestMise)
-        run: mise run tool:test
-
-      - name: The template, templates - the steps that need no account (mise run template:e2e, after tool:test), then what its own workflow runs (mise run example:verify)
+      - name: The tool's own tests (mise run tool:test), and the template's mise file and the Go lined up (mise run template:check-mise)
         run: |
-          mise run template:e2e
-          mise run example:verify
+          mise run tool:test
+          mise run template:check-mise
 
-      - name: A copy stamped out from it, examples/new (mise run example:create) - the same, in it (REPO_PATH=examples/new)
+      - name: The template, templates - the walk as far as the stage serve, which needs no account, what its own workflow runs included (mise run template:e2e-serve)
+        run: mise run template:e2e-serve
+
+      - name: A copy stamped out from it, examples/new (mise run example:create) - the same walk, on it (mise run example:e2e-serve)
         run: |
           mise run example:create
-          mise run example:e2e
-          REPO_PATH=examples/new mise run example:verify
+          mise run example:e2e-serve

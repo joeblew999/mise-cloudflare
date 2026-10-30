@@ -2,7 +2,7 @@
 // brings to a repo of theirs, copied from the template, templates (the Worker's code, its package.json and lockfile, and the
 // repo's mise.toml), under a Worker name of its own, pinning this checkout's build (local), or with -version a release
 // from GitHub, as mise use does. Then it gives it its own git and runs init in it, as a person
-// adding mise-cloudflare does: mise run example:e2e is the end-to-end on it. It is the root's (mise run example:create), never part of the tool.
+// adding mise-cloudflare does: mise run example:e2e-serve is the end-to-end on it. It is the root's (mise run example:create), never part of the tool.
 package main
 
 import (
@@ -23,7 +23,7 @@ const (
 )
 
 // brought is what a user's repo has before mise-cloudflare. newRepo then gives it its own git and runs init, as a person
-// adding mise-cloudflare does; what setup installs is the end-to-end's (mise run example:e2e).
+// adding mise-cloudflare does; what setup installs is the end-to-end's (mise run example:e2e-serve).
 var brought = []string{"mise.toml", "package.json", "pnpm-lock.yaml", "wrangler.jsonc", ".dev.vars.example", "src"}
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 		pin = *version + ", from GitHub"
 	}
 	fmt.Printf("made %s from %s: %s, the Worker %s, mise-cloudflare at %s, its own git, and what init writes\n", to, from, strings.Join(brought, ", "), itsOwn, pin)
-	fmt.Println("next: mise run example:e2e")
+	fmt.Println("next: mise run example:e2e-serve")
 }
 
 // newRepo makes it, pinning version (or this checkout's build, local, when it is ""). It never deletes one that's there:

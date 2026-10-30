@@ -38,6 +38,8 @@ var steps = []step{
 			w.t.Fatalf("cloudflare:04-check: %s", out)
 		}
 		w.pass("cloudflare:04-check: the rules pass")
+		w.mustRunMiseTask(nil, "cloudflare:verify")
+		w.pass("cloudflare:verify: what the repo's GitHub workflow runs passes (its setup and test tasks, then 04-check's)")
 	}},
 	{task: "05-show", stage: serve, check: func(w *walk) { w.miseShowSaysNext("mise run cloudflare:07-set-secrets") }},
 	{task: "06-serve", stage: serve, check: func(w *walk) {
