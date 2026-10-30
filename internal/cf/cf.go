@@ -49,7 +49,15 @@ type Error struct {
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("cf %s: %s", strings.Join(e.Args, " "), e.Output)
+	out := e.Output
+	// A call cf can't take prints its whole help first, then the error in a box: only the box says what went wrong.
+	if i := strings.Index(out, "┌ Error"); i >= 0 {
+		out = out[i:]
+		if j := strings.Index(out, "└"); j >= 0 {
+			out = out[:j+len("└")]
+		}
+	}
+	return fmt.Sprintf("cf %s: %s", strings.Join(e.Args, " "), out)
 }
 
 // NotFound reports whether a cf command failed because the thing doesn't exist.

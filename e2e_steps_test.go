@@ -89,6 +89,11 @@ var steps = []step{
 	{task: "09-connect-github", stage: connectGithub, check: func(w *walk) {
 		w.mustRunMiseTask(nil, "cloudflare:09-connect-github", "--branch", w.prod)
 		w.pass("Workers Builds deploys every push, production from %s", w.prod)
+		// Again, with no flags, as the docs say a person can: it keeps what's set (an update, not a new connection).
+		if out := w.mustRunMiseTask(nil, "cloudflare:09-connect-github"); !strings.Contains(out, "a push to "+w.prod+" runs") {
+			w.t.Fatalf("cloudflare:09-connect-github again didn't keep production on %s:\n%s", w.prod, out)
+		}
+		w.pass("cloudflare:09-connect-github again keeps what's set: production from %s", w.prod)
 		w.miseShowSaysNext("mise run cloudflare:10-set-preview-secrets")
 	}},
 	{task: "10-set-preview-secrets", stage: connectGithub, check: func(w *walk) {

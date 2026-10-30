@@ -165,13 +165,16 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	}
 	for _, w := range workers {
 		previews := w.Preview != ""
-		settings := []string{
-			"--git-repository-branch", w.Branch,
+		// Which repository: create takes it, update can't change it (cf builds workers update has only the branch).
+		repository := []string{
 			"--git-repository-provider-type", "github",
 			"--git-repository-provider-account-id", fmt.Sprint(gh.Owner.ID),
 			"--git-repository-provider-account-name", gh.Owner.Login,
 			"--git-repository-repo-id", fmt.Sprint(gh.ID),
 			"--git-repository-repo-name", gh.Name,
+		}
+		settings := []string{
+			"--git-repository-branch", w.Branch,
 			"--production-settings-build-command", rep.Build,
 			"--production-settings-deploy-command", w.Deploy,
 			"--production-settings-build-token-uuid", rep.Token,
@@ -182,12 +185,24 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 			"--previews-base-config-build-token-uuid", rep.Token,
 			"--previews-base-config-root-directory", rep.Root,
 		}
-		if c.JSON(ctx, nil, "builds", "workers", "get", w.ScriptTag) == nil {
-			err = c.JSON(ctx, nil, append([]string{"builds", "workers", "update", w.ScriptTag}, settings...)...)
-		} else {
-			err = c.JSON(ctx, nil, append([]string{"builds", "workers", "create", "--script-tag", w.ScriptTag}, settings...)...)
+		var now struct {
+			Git struct {
+				RepoID json.RawMessage `json:"repo_id"`
+			} `json:"git_repository"`
 		}
-		if err != nil {
+		connected := c.JSON(ctx, &now, "builds", "workers", "get", w.ScriptTag) == nil
+		if id := strings.Trim(string(now.Git.RepoID), `"`); connected && id != "" && id != fmt.Sprint(gh.ID) {
+			// It builds from another repository (this one moved, say), which update can't change: made afresh.
+			if err := c.JSON(ctx, nil, "builds", "workers", "delete", w.ScriptTag, "--force"); err != nil && !cf.NotFound(err) {
+				fail(fmt.Errorf("%s builds from another repository, and its connection couldn't be removed to connect %s: %w", w.Worker, rep.Repository, err))
+			}
+			connected = false
+		}
+		if connected {
+			if err := c.JSON(ctx, nil, append([]string{"builds", "workers", "update", w.ScriptTag}, settings...)...); err != nil {
+				fail(fmt.Errorf("%s: %w", w.Worker, err))
+			}
+		} else if err := c.JSON(ctx, nil, append(append([]string{"builds", "workers", "create", "--script-tag", w.ScriptTag}, repository...), settings...)...); err != nil {
 			fail(fmt.Errorf("%s: %w\nIf Cloudflare can't see the repository, give Cloudflare's GitHub app access to %s on GitHub (Settings, Applications, Cloudflare Workers and Pages), then run this again", w.Worker, err, rep.Repository))
 		}
 	}
