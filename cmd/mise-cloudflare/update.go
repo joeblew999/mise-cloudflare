@@ -65,13 +65,12 @@ func (r repo) pins(ctx context.Context) map[string]string {
 	p := map[string]string{}
 	var tools map[string][]struct {
 		Version string
-		Active  bool
 		Source  struct{ Path string }
 	}
 	if json.Unmarshal([]byte(r.mise(ctx, "ls", "--local", "--json")), &tools) == nil {
 		for name, vs := range tools {
 			for _, v := range vs {
-				if v.Active {
+				if v.Source.Path != "" { // a file names it, installed yet or not
 					p[filepath.Base(v.Source.Path)+" "+name] = v.Version
 				}
 			}
@@ -133,9 +132,14 @@ func (r repo) exists(f string) bool {
 	return err == nil
 }
 
-// ownMise is the environment that keeps mise to the repo's own config, as in a repo on its own.
+// ownMise is the environment that keeps mise to the repo's own config, as in a repo on its own. mise only stops at a
+// ceiling given as the real path, so a path through a link (/tmp is /private/tmp on macOS) is resolved first.
 func (r repo) ownMise() []string {
-	return append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(r.dir))
+	dir := r.dir
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	return append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(dir))
 }
 
 // mise is what mise prints for args on the repo's own config, "" when it fails.

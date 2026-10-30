@@ -40,7 +40,13 @@ func repoAt(t *testing.T, path string) repo {
 	if path == "" {
 		t.Fatal("REPO_PATH names the repo to walk, and the root's task sets it: mise run template:e2e-serve")
 	}
-	top, _ := filepath.Abs(".")
+	top, err := filepath.Abs(".")
+	if err == nil {
+		top, err = filepath.EvalSymlinks(top) // mise stops only at a ceiling given as the real path (MISE_CEILING_PATHS)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 	return repo{t: t, top: top, name: path, dir: filepath.Join(top, path)}
 }
 
@@ -48,7 +54,11 @@ func repoAt(t *testing.T, path string) repo {
 // connect-github's steps push it. The checkout goes when the test ends.
 func (r repo) checkoutOfHead() repo {
 	r.t.Helper()
-	checkout := filepath.Join(r.t.TempDir(), "checkout")
+	tmp, err := filepath.EvalSymlinks(r.t.TempDir()) // the real path: macOS's /var is /private/var, and mise stops only there
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	checkout := filepath.Join(tmp, "checkout")
 	if out, err := exec.Command("git", "-C", r.top, "worktree", "add", "-q", "--detach", checkout, "HEAD").CombinedOutput(); err != nil {
 		r.t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
