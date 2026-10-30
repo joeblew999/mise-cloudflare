@@ -77,6 +77,10 @@ run = "mise-cloudflare clean ${usage_yes:+--yes}"
 description = "What the repo's GitHub workflow runs: its own setup and test tasks, if it has them, then check. The same here as on GitHub"
 run = "mise-cloudflare verify"
 
+["cloudflare:update"]
+description = "The repo's own pins at their newest releases: its mise tools, its packages (with aube, whichever lockfile it has) and Go modules, then init's files again if mise-cloudflare moved (at local it stays). What changed is in git: the steps prove it"
+run = "mise-cloudflare update"
+
 ["cloudflare:run-wrangler"]
 description = "Any other wrangler command, on the repo's login: mise run cloudflare:run-wrangler d1 list"
 usage = 'arg "[args]..." help="the wrangler command, passed on as it is: d1 list"'

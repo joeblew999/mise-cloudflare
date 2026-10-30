@@ -15,7 +15,7 @@ import (
 )
 
 // commands is every mise-cloudflare command, in the order of a repo's tasks: the numbered steps 03 to 14, then the rest.
-var commands = []string{"init", "check", "show", "serve", "set-secrets", "deploy", "connect-github", "set-preview-secrets", "preview", "login", "delete", "logout", "clean", "verify", "run-wrangler", "show-version", "show-help"}
+var commands = []string{"init", "check", "show", "serve", "set-secrets", "deploy", "connect-github", "set-preview-secrets", "preview", "login", "delete", "logout", "clean", "verify", "update", "run-wrangler", "show-version", "show-help"}
 
 // taskVerb is the command a task's name names: cloudflare:08-deploy names deploy, cloudflare:verify names verify.
 var taskVerb = regexp.MustCompile(`^cloudflare:(?:\d\d-)?([a-z][a-z-]*)$`)
@@ -69,6 +69,23 @@ func TestInstallCommand(t *testing.T) {
 	exec.Command("git", "-C", dir, "add", "package-lock.json").Run()
 	if got := installCommand(dir); got != "npm ci" {
 		t.Errorf("a committed package-lock.json: %q", got)
+	}
+}
+
+// TestMoved: update ends with every pin it read, the moved ones before → after, in the order of their file and name.
+func TestMoved(t *testing.T) {
+	before := map[string]string{"mise.toml node": "26.12.1", "mise.toml aube": "2.8.4", "package.json wrangler": "4.151.3", "go.mod example.com/old": "v1.0.0"}
+	after := map[string]string{"mise.toml node": "26.13.0", "mise.toml aube": "2.8.4", "package.json wrangler": "4.155.0", "go.mod example.com/new": "v2.0.0"}
+	lines, n := moved(before, after)
+	want := []string{
+		"example.com/new none → v2.0.0 (go.mod)",
+		"example.com/old v1.0.0 → none (go.mod)",
+		"aube 2.8.4 (mise.toml)",
+		"node 26.12.1 → 26.13.0 (mise.toml)",
+		"wrangler 4.151.3 → 4.155.0 (package.json)",
+	}
+	if !slices.Equal(lines, want) || n != 4 {
+		t.Errorf("moved: %d\n%q\nwant 4\n%q", n, lines, want)
 	}
 }
 

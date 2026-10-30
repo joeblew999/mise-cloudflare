@@ -72,6 +72,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:13-delete` | Deploy undone: the Worker deleted, then its own KV, D1 and R2 and its previews' own. An R2 bucket that still holds objects stays: it never deletes what's in one. It asks first; `--yes` doesn't | The Worker's name, to be sure |
 | `cloudflare:12-login` / `cloudflare:14-logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
 | `cloudflare:15-clean` | The local state undone, as `13-delete` undoes Cloudflare's: `.wrangler/` (the local D1, KV and R2, and what deploys wrote) and `.dev.vars`, so the next `06-serve` starts from nothing. It asks first; `--yes` doesn't | y, to be sure |
+| `cloudflare:update` | The repo's own pins at their newest releases, nothing outside it: its mise tools (`mise upgrade --bump`), its packages (aube, which writes whichever lockfile the repo has) and Go modules (`go get -u`, `go mod tidy`), then `03-init` if mise-cloudflare moved (at `local` it stays). mise and aube skip a release younger than their minimum age. What changed is in git: the steps prove it | Nothing |
 | `cloudflare:03-init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec -- mise-cloudflare init` | Nothing |
 | `cloudflare:show-version` | This build's version | Nothing |
 | `cloudflare:show-help` | Every command | Nothing |

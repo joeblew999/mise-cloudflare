@@ -40,6 +40,7 @@ The steps, in order (mise run cloudflare says which is next):
 And:
   mise run cloudflare:verify         what the repo's GitHub workflow runs: its setup and test tasks, then check
   mise run cloudflare:run-wrangler   any other wrangler command, on the repo's login: d1 list
+  mise run cloudflare:update         the repo's own pins at their newest releases: mise's tools, packages, Go modules
   mise run cloudflare:show-version   this build's version
   mise run cloudflare:show-help      this
 `
@@ -78,7 +79,7 @@ func main() {
 	case "show-help":
 		showHelp()
 		return
-	case "init", "update": // update: what the tasks of repos set up before init was its one name still run
+	case "init":
 		initRepo(dir)
 		return
 	}
@@ -116,6 +117,8 @@ func main() {
 		r.logout(ctx)
 	case "clean":
 		r.clean(*yes)
+	case "update":
+		r.update(ctx)
 	default:
 		fmt.Fprint(os.Stderr, help)
 		os.Exit(2)

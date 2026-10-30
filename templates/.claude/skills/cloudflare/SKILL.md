@@ -16,7 +16,8 @@ The tasks are numbered in the order a repo meets them, and each runs the command
 `07-set-secrets`, `08-deploy`, `09-connect-github`, `10-set-preview-secrets`, `11-preview`, `12-login`, `13-delete`,
 `14-logout`, `15-clean`, each `mise run cloudflare:<it>`. Steps 00 to 02 come before them: the repo's git, `mise install`, its own
 `setup`. And `mise run cloudflare:verify` (what GitHub runs), `mise run cloudflare:run-wrangler <...>` (any other
-wrangler command on the repo's login: `d1 list`, `secret put`, `tail`, …), `mise run cloudflare:show-help`.
+wrangler command on the repo's login: `d1 list`, `secret put`, `tail`, …), `mise run cloudflare:update` (the repo's own
+pins at their newest releases: mise's tools, packages, Go modules), `mise run cloudflare:show-help`.
 
 What GitHub runs on every push is `.github/workflows/cloudflare.yml`, which checks out, installs mise, then runs
 `mise run cloudflare:verify`. Run that task here and you see what GitHub sees.
