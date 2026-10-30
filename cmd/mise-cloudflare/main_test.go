@@ -103,6 +103,8 @@ func TestOwnMise(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// jq and yq are only labels, never installed or run: a parent folder's pin (jq) and the repo's own (yq), so which
+	// one mise reports shows which file it read. They're real tool names because mise refuses a tool it doesn't know.
 	os.WriteFile(filepath.Join(real, "mise.toml"), []byte("[tools]\njq = \"1.8.2\"\n"), 0o644)
 	os.Mkdir(filepath.Join(real, "repo"), 0o755)
 	os.WriteFile(filepath.Join(real, "repo", "mise.toml"), []byte("[tools]\nyq = \"4.44.1\"\n"), 0o644) // not installed here
