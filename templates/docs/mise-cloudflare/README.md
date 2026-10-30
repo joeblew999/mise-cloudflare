@@ -9,24 +9,37 @@ Written by `mise-cloudflare init`, for the version this repo's `.mise/config.tom
 
 ## Set up and upgrade
 
-In a repo, new or with a Worker of its own (a `wrangler.jsonc`, and wrangler in its `package.json`), at the
-repository's root (GitHub and Claude Code read `.github/` and `.claude/` only there):
+Step by step, at the repository's root (GitHub and Claude Code read `.github/` and `.claude/` only there), in a repo
+that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `package.json`):
 
-```sh
-mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
-mise trust --all && mise install
-mise run cloudflare
-```
+1. **Install mise**, once on each machine: [mise's getting started](https://mise.jdx.dev/getting-started.html)
+   (`curl https://mise.run | sh`, or `brew install mise`).
+2. **mise-cloudflare's files, always.** Name the release: the newest is on
+   [its releases](https://github.com/joeblew999/mise-cloudflare/releases).
 
-A repo with no Worker yet can take the template's: `mise run cloudflare:template` writes its code, its
-`wrangler.jsonc` and `package.json` named for the repo's folder, the lockfile, `.dev.vars.example`, and the `mise.toml`
-that installs its wrangler; then `mise install` and `mise run setup`. It never writes over a file: a repo with a Worker
-of its own gets none of it, and a `mise.toml` of its own is left as it is, with what to add to it.
+   ```sh
+   mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
+   mise trust --all && mise install
+   ```
 
-`init` writes everything, mise-cloudflare's pin among it: `.mise/config.toml`, at the release that ran `init`, so
-`mise install` gets that release from GitHub, here and on GitHub's machines alike. Commit what `init` wrote. There's
-nothing to edit, then or ever. `init` writes only its
-own files: a `.gitignore` or `.claude/settings.json` the repo has already it leaves as it is, and `check` names what
+   `init` writes the repo's `.mise/` folder (its tasks, and mise-cloudflare pinned at the release that ran it, which
+   `mise install` gets from GitHub), its GitHub workflow, its Claude Code hook and skill, its docs and its `.gitignore`.
+3. **The template's Worker, only in a repo with none yet.**
+
+   ```sh
+   mise run cloudflare:template
+   mise install && mise run setup
+   ```
+
+   It writes the template's Worker, named for the repo's folder, and the `mise.toml` that installs its wrangler. It never
+   writes over a file: a repo with a Worker of its own gets none of it, and skips this step (it installs its wrangler its
+   own way).
+4. **Then `mise run cloudflare`:** what's done, and what to run next.
+
+Commit what steps 2 and 3 wrote.
+
+mise-cloudflare's pin, `.mise/config.toml`, is the release that ran `init`, so `mise install` gets that release from
+GitHub, here and on GitHub's machines alike. There's nothing to edit, then or ever. `init` writes only its own files: a `.gitignore` or `.claude/settings.json` the repo has already it leaves as it is, and `check` names what
 they lack (the secrets git-ignored, the hook's entry). Pin wrangler to an exact version in `package.json` and list the
 Worker's secrets in `.dev.vars.example` with local values: `check` and `serve` ask for them.
 

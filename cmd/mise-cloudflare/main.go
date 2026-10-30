@@ -83,10 +83,7 @@ func main() {
 	case "init":
 		initRepo(dir)
 		return
-	case "template": // a repo with no Worker yet
-		if inCI() {
-			fail(errors.New("in CI template doesn't run: CI only checks the repo, and template writes the template's Worker into it; run mise run cloudflare:template on your machine"))
-		}
+	case "template": // a repo with no Worker yet; it never writes over a file, so it runs in CI too (the walk there makes a new repo with it)
 		templateRepo(dir)
 		return
 	case "update": // any folder with pins of its own, a Worker or not

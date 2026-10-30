@@ -23,18 +23,37 @@ the root's tasks run.
 
 ## Use it in your repo
 
-In a repo, new or with a Worker of its own (a `wrangler.jsonc`, and wrangler in its `package.json`):
+Step by step, at the repository's root (GitHub and Claude Code read `.github/` and `.claude/` only there), in a repo
+that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `package.json`):
 
-```sh
-mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
-mise trust --all && mise install
-mise run cloudflare
-```
+1. **Install mise**, once on each machine: [mise's getting started](https://mise.jdx.dev/getting-started.html)
+   (`curl https://mise.run | sh`, or `brew install mise`).
+2. **mise-cloudflare's files, always.** Name the release: the newest is on
+   [its releases](https://github.com/joeblew999/mise-cloudflare/releases).
 
-`init` pins mise-cloudflare in the repo's `.mise/config.toml`, at the release that ran it, so `mise install` gets that
-release from GitHub. A repo with no Worker yet can take the template's: `mise run cloudflare:template`, which never
-writes over a file. In this checkout the template pins a release the same way, and `mise run tool:install` overrides
-it on this machine only, with this checkout's build (`templates/.mise/config.local.toml`, never committed).
+   ```sh
+   mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
+   mise trust --all && mise install
+   ```
+
+   `init` writes the repo's `.mise/` folder (its tasks, and mise-cloudflare pinned at the release that ran it, which
+   `mise install` gets from GitHub), its GitHub workflow, its Claude Code hook and skill, its docs and its `.gitignore`.
+3. **The template's Worker, only in a repo with none yet.**
+
+   ```sh
+   mise run cloudflare:template
+   mise install && mise run setup
+   ```
+
+   It writes the template's Worker, named for the repo's folder, and the `mise.toml` that installs its wrangler. It never
+   writes over a file: a repo with a Worker of its own gets none of it, and skips this step (it installs its wrangler its
+   own way).
+4. **Then `mise run cloudflare`:** what's done, and what to run next.
+
+Commit what steps 2 and 3 wrote.
+
+In this checkout the template pins a release the same way, and `mise run tool:install` overrides it on this machine
+only, with this checkout's build (`templates/.mise/config.local.toml`, never committed).
 
 `init` writes everything your repo gets, its own docs among them: `docs/mise-cloudflare/README.md`, with every
 command, the logins, previews, staging and production. That page is [templates/docs/mise-cloudflare/README.md](templates/docs/mise-cloudflare/README.md)
