@@ -26,10 +26,10 @@ type CF struct {
 	Account string
 }
 
-// Installed reports whether cf is on the PATH (the cloudflare:09-connect-github task brings it).
+// Installed reports whether cf runs here (the tasks that use it bring it). On the PATH isn't enough: mise's shim for cf
+// is there wherever mise has ever installed it, and fails ("No version is set for shim: cf") where nothing pins it.
 func Installed() bool {
-	_, err := exec.LookPath("cf")
-	return err == nil
+	return exec.Command("cf", "--version").Run() == nil
 }
 
 func (c CF) cmd(ctx context.Context, args ...string) *exec.Cmd {

@@ -13,11 +13,14 @@ func (r repo) logout(ctx context.Context) {
 		r.refuseStrayTokens()
 		must(r.w.Delete(ctx))
 	}
-	if cf.Installed() {
-		c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
-		if who, err := c.Whoami(ctx); err == nil && who.Authenticated {
-			must(c.Delete(ctx))
-		}
+	if !cf.Installed() {
+		fmt.Printf("✓ %s's wrangler login is logged out and deleted\n", r.w.Profile)
+		fmt.Printf("· cf doesn't run here, so its login for Workers Builds, if there is one, is still there: mise run cloudflare:14-logout brings cf and logs out both\n")
+		return
 	}
-	fmt.Printf("✓ %s is logged out and deleted\n", r.w.Profile)
+	c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
+	if who, err := c.Whoami(ctx); err == nil && who.Authenticated {
+		must(c.Delete(ctx))
+	}
+	fmt.Printf("✓ %s is logged out and deleted (wrangler's login and cf's)\n", r.w.Profile)
 }

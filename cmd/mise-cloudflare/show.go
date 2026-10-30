@@ -17,19 +17,20 @@ import (
 
 // statusReport is mise-cloudflare -json: where the repo is, and what to run next.
 type statusReport struct {
-	Worker      string             `json:"worker"`
-	Profile     string             `json:"profile"`
-	LoggedIn    bool               `json:"loggedIn"`
-	Accounts    []wrangler.Account `json:"accounts"`
-	Scopes      []string           `json:"scopes"` // what the login holds
-	Needs       []string           `json:"needs"`  // what it must hold: wrangler's own login's
-	Deployed    bool               `json:"deployed"`
-	Secrets     []string           `json:"secretsToSet"` // the config's secrets.required not yet on Cloudflare
-	URL         string             `json:"url,omitempty"`
-	GitHub      string             `json:"github"` // "Workers Builds" when it deploys every push, else ""
-	StrayTokens []string           `json:"strayTokens"`
-	Problems    []string           `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
-	Next        string             `json:"next"`
+	Worker         string             `json:"worker"`
+	Profile        string             `json:"profile"`
+	LoggedIn       bool               `json:"loggedIn"`
+	Accounts       []wrangler.Account `json:"accounts"`
+	Scopes         []string           `json:"scopes"` // what the login holds
+	Needs          []string           `json:"needs"`  // what it must hold: wrangler's own login's
+	Deployed       bool               `json:"deployed"`
+	Secrets        []string           `json:"secretsToSet"` // the config's secrets.required not yet on Cloudflare
+	URL            string             `json:"url,omitempty"`
+	GitHub         string             `json:"github"`                   // "Workers Builds" when it deploys every push, else ""
+	GitHubCantTell string             `json:"githubCantTell,omitempty"` // why this machine can't tell whether it does
+	StrayTokens    []string           `json:"strayTokens"`
+	Problems       []string           `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
+	Next           string             `json:"next"`
 }
 
 // show is mise-cloudflare with no command or show (mise run cloudflare, cloudflare:05-show): the steps in order, which are done for this repo, and the
@@ -68,8 +69,11 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 			}
 		}
 	}
-	if rep.Deployed && r.buildsConnected(ctx) {
-		rep.GitHub = "Workers Builds"
+	if rep.Deployed {
+		var connected bool
+		if connected, rep.GitHubCantTell = r.buildsConnected(ctx); connected {
+			rep.GitHub = "Workers Builds"
+		}
 	}
 	// What GitHub deploying needs from the wrangler config first (a previews block with the Worker's bindings), and,
 	// once Workers Builds deploys, any KV, D1 or R2 added since the previews' own were made.
@@ -93,6 +97,8 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 		rep.Next = "mise run cloudflare:08-deploy"
 	case len(previewProblems) > 0:
 		rep.Next = previewProblems[0] + "; then mise run cloudflare:09-connect-github"
+	case rep.GitHubCantTell != "":
+		rep.Next = "mise run cloudflare: it brings cf, and shows whether Workers Builds deploys it yet"
 	case rep.GitHub == "":
 		rep.Next = "mise run cloudflare:09-connect-github"
 	case len(previewSecrets) > 0:
@@ -116,9 +122,12 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 	if len(rep.Secrets) > 0 {
 		fmt.Printf("    first, its secrets: %s (mise run cloudflare:07-set-secrets)\n", strings.Join(rep.Secrets, ", "))
 	}
-	if rep.GitHub != "" {
+	switch {
+	case rep.GitHub != "":
 		fmt.Printf("  ✓ 09. Deploy every push  %s deploys it: a preview for every pull request\n", rep.GitHub)
-	} else {
+	case rep.GitHubCantTell != "":
+		fmt.Printf("  ? 09. Deploy every push  mise run cloudflare:09-connect-github   can't tell here whether it's done: %s\n", rep.GitHubCantTell)
+	default:
 		fmt.Printf("  · 09. Deploy every push  mise run cloudflare:09-connect-github   a preview for every pull request, then staging and production\n")
 	}
 	switch {
@@ -167,17 +176,22 @@ func (r repo) deployed(ctx context.Context) bool {
 	return r.wranglerJSON(ctx, &v, "versions", "view", d.Versions[0].ID, "--json") == nil && v.Resources.Runtime.Date != ""
 }
 
-// buildsConnected reports whether Workers Builds builds the Worker, if this machine has cf logged in for the repo.
-func (r repo) buildsConnected(ctx context.Context) bool {
+// buildsConnected reports whether Workers Builds builds the Worker, if this machine has cf logged in for the repo, and,
+// when cf doesn't run here, that it can't tell and why.
+func (r repo) buildsConnected(ctx context.Context) (connected bool, cantTell string) {
 	if !cf.Installed() {
-		return false
+		return false, "cf, which reads Workers Builds, doesn't run here (mise run cloudflare brings it)"
 	}
 	c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
 	who, err := c.Whoami(ctx)
-	if err != nil || !who.Authenticated || len(who.Accounts) != 1 {
-		return false
+	if err != nil {
+		return false, err.Error()
+	}
+	// Not logged in yet, cf's login is made by cloudflare:09-connect-github, which then connects it or says it is.
+	if !who.Authenticated || len(who.Accounts) != 1 {
+		return false, ""
 	}
 	c.Account = who.Accounts[0].ID
 	tag := findWorker(ctx, c, r.wc.Name)
-	return tag != "" && c.JSON(ctx, nil, "builds", "workers", "get", tag) == nil
+	return tag != "" && c.JSON(ctx, nil, "builds", "workers", "get", tag) == nil, ""
 }

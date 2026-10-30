@@ -152,6 +152,10 @@ func openRepo(ctx context.Context, dir string) repo {
 	if !w.Installed() {
 		fail(errors.New("wrangler isn't installed here: mise run setup installs it (or the repo's own way: its package.json pins wrangler)"))
 	}
+	// wrangler runs on node. The repo's mise.toml pins it (the template's does), and a mise task puts it on the PATH.
+	if exec.Command("node", "--version").Run() != nil {
+		fail(errors.New("node, which wrangler runs on, doesn't run here: run this through its mise task (mise run cloudflare…), which brings the node the repo's mise.toml pins; a repo with no pin needs one: mise use node@lts"))
+	}
 	wc, err := wconfig.Read(ctx, dir)
 	must(err)
 	w.Profile = wc.Name // the login is named after the Worker

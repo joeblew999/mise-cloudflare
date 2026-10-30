@@ -52,7 +52,7 @@ type builds struct{ Branch, Staging, Build string }
 // removes it all.
 func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	if !cf.Installed() {
-		fail(errors.New("cf isn't installed: run mise run cloudflare:09-connect-github, which brings it"))
+		fail(errors.New("cf, which connects Workers Builds, doesn't run here: run mise run cloudflare:09-connect-github, which brings it"))
 	}
 	r.refuseStrayTokens()
 	// The GitHub repository first: without one there's nothing for Workers Builds to build, so no login is asked for.
@@ -381,7 +381,7 @@ func githubRepo(ctx context.Context, dir string) (ghRepo, error) {
 			return g, nil
 		}
 	}
-	return g, fmt.Errorf("GitHub doesn't show the repository %s/%s: a private one needs a GitHub login that can read it: gh auth login, then run this again (or set GITHUB_TOKEN to such a token)", m[1], m[2])
+	return g, fmt.Errorf("GitHub doesn't show the repository %s/%s: a private one needs a GitHub login that can read it: gh auth login (mise exec gh -- gh auth login where gh isn't installed), then run this again (or set GITHUB_TOKEN to such a token)", m[1], m[2])
 }
 
 // githubToken is the GitHub login to use: GITHUB_TOKEN or GH_TOKEN, else gh's own (gh auth token), else none.
