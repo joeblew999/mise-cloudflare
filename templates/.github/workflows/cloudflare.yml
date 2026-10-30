@@ -28,7 +28,8 @@ jobs:
       - name: Check out with git (no actions/checkout)
         run: |
           git init -q .
-          git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          # With the job's own token (contents: read): a private repository can't be fetched without one.
+          git fetch -q --depth 1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
           git checkout -q --detach FETCH_HEAD
           git log --oneline -1
 
