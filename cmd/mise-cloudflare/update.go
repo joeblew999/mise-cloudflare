@@ -133,15 +133,22 @@ func (r repo) exists(f string) bool {
 	return err == nil
 }
 
-// ownMise is the environment that keeps mise to the repo's own config, as in a repo on its own. mise only stops at a
-// ceiling given as the real path, so a path through a link (/tmp is /private/tmp on macOS) is resolved first, and on
-// Windows given in long names (C:\Users\runneradmin, not C:\Users\RUNNER~1).
+// ownMise is the environment that keeps mise to the repo's own config, as in a repo on its own. mise stops at a ceiling
+// equal to a parent of its working folder exactly as the OS reports it (mise's src/config/miserc.rs): on macOS and Linux
+// the real path, links resolved (/tmp is /private/tmp on macOS); on Windows the path as given, links not resolved, in
+// long or short names. So the ceiling is each of those forms, and mise stops at whichever it sees.
 func (r repo) ownMise() []string {
-	dir := r.dir
-	if real, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = real
+	forms := []string{r.dir, longPath(r.dir)}
+	if real, err := filepath.EvalSymlinks(r.dir); err == nil {
+		forms = append(forms, real, longPath(real))
 	}
-	return append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(longPath(dir)))
+	var ceilings []string
+	for _, f := range forms {
+		if d := filepath.Dir(f); !slices.Contains(ceilings, d) {
+			ceilings = append(ceilings, d)
+		}
+	}
+	return append(os.Environ(), "MISE_CEILING_PATHS="+strings.Join(ceilings, string(filepath.ListSeparator)))
 }
 
 // mise is what mise prints for args on the repo's own config, "" when it fails.
