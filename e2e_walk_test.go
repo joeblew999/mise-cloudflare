@@ -7,9 +7,9 @@
 //   - e2e_mise_test.go: the repo, and the calls into its own mise file, made in it as a person there makes them.
 //   - e2e_cloudflare_test.go: what the walk looks at besides, as a person does: the Worker's URL, the account's D1, KV
 //     and R2, Cloudflare's builds.
-//   - e2e_older_test.go: the tests the root's older tasks still run, until TestWalk replaces them.
 //
-// mise_test.go checks that the mise files and the Go line up, both ways.
+// tool_test.go is the release (mise run tool:release), and mise_test.go checks that the mise files and the Go line up,
+// both ways.
 package e2e
 
 import (
@@ -24,9 +24,11 @@ import (
 	"time"
 )
 
-// TestWalk walks the repo REPO_PATH names (a folder of this repo: templates, or a stamped copy, examples/new) as far as
-// the stage E2E_STAGE names (serve, deploy or connect-github). The root's tasks set both: mise run template:e2e-serve
-// is REPO_PATH=templates E2E_STAGE=serve. Without E2E_STAGE it skips, so go test ./... never touches Cloudflare.
+// TestWalk walks the repo REPO_PATH names (a folder of this repo: templates) as far as the stage E2E_STAGE names (serve,
+// deploy or connect-github); with E2E_STAMPED=true, a copy stamped out from it instead, in a folder of its own that
+// goes when the walk ends, pinning mise-cloudflare at the release E2E_PIN names, or this checkout's build. The root's
+// tasks set them: mise run template:e2e-serve is REPO_PATH=templates E2E_STAGE=serve. Without E2E_STAGE it skips, so
+// go test ./... never touches Cloudflare.
 func TestWalk(t *testing.T) {
 	name := os.Getenv("E2E_STAGE")
 	if name == "" {
@@ -37,7 +39,15 @@ func TestWalk(t *testing.T) {
 		t.Fatalf("E2E_STAGE=%s: the stages are %s", name, strings.Join(stageNames, ", "))
 	}
 	r := repoAt(t, os.Getenv("REPO_PATH"))
-	if stage(upTo) == connectGithub {
+	stamped, pin := os.Getenv("E2E_STAMPED") == "true", os.Getenv("E2E_PIN")
+	switch {
+	case pin != "" && !stamped:
+		t.Fatalf("E2E_PIN=%s pins a stamped copy's mise-cloudflare: E2E_STAMPED=true too", pin)
+	case stamped && stage(upTo) == connectGithub:
+		t.Fatal("a stamped copy has its own git, not on GitHub, where connect-github's steps push: walk it as far as deploy")
+	case stamped:
+		r = r.stampedCopy(pin)
+	case stage(upTo) == connectGithub:
 		r = r.checkoutOfHead()
 	}
 	r.miseSetUp()

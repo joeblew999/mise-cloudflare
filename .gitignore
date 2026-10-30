@@ -7,6 +7,5 @@ dist/
 # Cloudflare's cf CLI caches the account it logs into here: never commit it.
 .cloudflare/
 bin/
-examples/new/
 # A go build of the tool at the root: mise run tool:build writes bin/.
 /mise-cloudflare

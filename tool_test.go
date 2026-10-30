@@ -1,5 +1,5 @@
 // The root's tool: task that isn't a one-line command: mise run tool:release. It runs only from its own task
-// (MISE_TASK_NAME).
+// (MISE_TASK_NAME), so go test ./... never releases.
 
 package e2e
 
@@ -15,7 +15,7 @@ import (
 // TestToolRelease: mise run tool:release releases mise-cloudflare from the commit checked out (release.yml runs the
 // same on GitHub): the commit's v* tag, or the next patch version, tagged and pushed, when it has none; goreleaser's
 // binaries for every machine on that tag's GitHub release (.goreleaser.yaml); a new repo pinning the release, tried as a
-// person tries it (mise run example:create --version, then mise run example:e2e-serve); and the version fetched by
+// person tries it (mise run example:e2e-serve --version: the walk on a copy stamped out pinning it); and the version fetched by
 // proxy.golang.org, so go get and pkg.go.dev have it at once. With --dry-run (DRY_RUN=true) it tags and publishes
 // nothing: goreleaser builds a snapshot into dist/.
 func TestToolRelease(t *testing.T) {
@@ -40,8 +40,7 @@ func TestToolRelease(t *testing.T) {
 		fmt.Println("tagged", tag)
 	}
 	runShown(t, []string{"GORELEASER_CURRENT_TAG=" + tag}, "goreleaser", "release", "--clean")
-	runShown(t, nil, "mise", "run", "example:create", "--version", tag)
-	runShown(t, nil, "mise", "run", "example:e2e-serve")
+	runShown(t, nil, "mise", "run", "example:e2e-serve", "--version", tag)
 	out, err := exec.Command("go", "list", "-m").Output()
 	if err != nil {
 		t.Fatalf("go list -m: %v", err)
@@ -103,5 +102,13 @@ func runShown(t *testing.T, env []string, name string, args ...string) {
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("%s: %v", name, err)
+	}
+}
+
+// onlyFrom skips a test that only its own root task runs (mise sets MISE_TASK_NAME), so go test ./... never does it.
+func onlyFrom(t *testing.T, task string) {
+	t.Helper()
+	if os.Getenv("MISE_TASK_NAME") != task {
+		t.Skip("mise run " + task)
 	}
 }

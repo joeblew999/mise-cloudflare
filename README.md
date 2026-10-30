@@ -14,11 +14,12 @@ This repo is two things, kept apart:
 | | What | Where |
 |---|---|---|
 | **For other repos** | The `mise-cloudflare` binary, and the template: a whole repo you can drop anywhere and run, whose tool half `init` writes into a repo (its tasks, its check workflow, its Claude Code hook and skill, its docs, its `.gitignore`) | [templates/](templates/), [cmd/mise-cloudflare/](cmd/mise-cloudflare/), [internal/](internal/) |
-| **For this repo** | The tasks for working on it, the steps that set a repo up, the examples, the tests, its CI and releases. This README | [mise.toml](mise.toml), [example.mise.toml](example.mise.toml), [examples/](examples/), [root/](root/), [.github/workflows/](.github/workflows/) |
+| **For this repo** | The tasks for working on it, the end-to-end walk, the release, its CI. This README | [mise.toml](mise.toml), the `*_test.go` at the top, [.github/workflows/](.github/workflows/) |
 
 Nothing for this repo is ever in `templates/`, and nothing in `templates/` is this repo's own. The Go says it too:
 `cmd/mise-cloudflare` is the one entry point that ships (the binary other repos run), with `internal/` and
-`templates/`; everything this repo runs for itself in Go is under `root/`.
+`templates/`; everything this repo runs for itself in Go is a test at the top (the `*_test.go`, package `e2e`), which
+the root's tasks run.
 
 ## Use it in your repo
 
@@ -36,119 +37,93 @@ here, in the template, just as a repo has it.
 
 ## Working on mise-cloudflare
 
-Everything is driven from this repo's [mise.toml](mise.toml), run at the top, never inside an example, and each task
-runs what it needs first: run the furthest you need, here, never waiting on GitHub.
+Everything is driven from this repo's [mise.toml](mise.toml), run at the top, and each task runs what it needs first:
+run the furthest you need, here, never waiting on GitHub. `mise tasks` lists each with what it does.
 
-### The steps: a repo, set up
+### The walk
 
-[example.mise.toml](example.mise.toml), which mise.toml includes, is the steps: what a person does to a repo, in order.
-One name all the way through: from 04 on, step `example:nn-x` runs the repo's task `cloudflare:x`, which runs
-`mise-cloudflare x`, which is `main.go`'s `case "x"` calling `r.x` in `x.go` (`TestMise` checks the names line up).
+A repo's steps are its own numbered tasks, `cloudflare:03-init` to `cloudflare:15-clean`
+([templates/.mise/tasks/mise-cloudflare.toml](templates/.mise/tasks/mise-cloudflare.toml)). One name all the way
+through: `cloudflare:08-deploy` runs `mise-cloudflare deploy`, which is `main.go`'s `case "deploy"` calling `r.deploy`
+in `deploy.go`. Steps 00 to 02 come before them: the repo's git, `mise install`, its own `setup`.
 
-| Step | Runs in the repo |
-|---|---|
-| `example:00-git-init` | `git init`: a git repo of its own |
-| `example:01-mise-install` | `mise install`: what it pins, mise-cloudflare at `local` among them |
-| `example:02-setup` | its own `setup` task: wrangler from its `package.json` |
-| `example:03-init` | `mise-cloudflare init`: the template's tool half written into it, each file at its path |
-| `example:04-check` | `cloudflare:04-check` |
-| `example:05-show` | `cloudflare:05-show` |
-| `example:06-serve` | `cloudflare:06-serve` |
-| `example:07-set-secrets` | `cloudflare:07-set-secrets` |
-| `example:08-deploy` | `cloudflare:08-deploy` |
-| `example:09-connect-github` | `cloudflare:09-connect-github`: it needs the repo on GitHub, which an example's own git has not, so it stops and says so |
-| `example:10-set-preview-secrets` | `cloudflare:10-set-preview-secrets` |
-| `example:11-preview` | `cloudflare:11-preview` |
-| `example:12-login` | `cloudflare:12-login` |
-| `example:13-delete` | `cloudflare:13-delete`: 08 and 11 undone |
-| `example:14-logout` | `cloudflare:14-logout` |
-| `example:15-clean` | `cloudflare:15-clean`: 06's local state undone |
+The end-to-end test, `TestWalk`, walks them in their order, through the repo's own mise file, as a person takes them,
+each step with its check, as far as a stage:
 
-`example:verify` runs in the repo what its own GitHub workflow runs there: the workflow only checks out and installs mise,
-then runs `mise run cloudflare:verify`, so `mise run example:verify` here does on this machine exactly what GitHub does in
-that repo. `mise tasks` lists each with what it does. A step that asks you something (`06-dev`, `07-secret`, `10-secret`) runs on
-your terminal, and no step depends on one, so nothing asks you twice.
+| Stage | As far as | Needs |
+|---|---|---|
+| `serve` | `06-serve`: the Worker locally, with local D1, KV and R2; on the way, `04-check`'s rules and what the repo's GitHub workflow runs (`cloudflare:verify`) | Nothing |
+| `deploy` | `08-deploy` on the repo's own login, the live D1, KV, R2 and secret, stray tokens refused, then `13-delete` | A Cloudflare account; the first time, an Allow |
+| `connect-github` | `09-connect-github`: Workers Builds builds production from a throwaway branch and a preview for a pull request's branch, gone with its branch | GitHub too |
 
-The steps run on the template, or on a copy stamped out from it, as a person meets them:
+It walks two repos:
 
-- **The template:** [templates/](templates/), committed, the default: `mise run example:05-show`.
-- **A copy:** `mise run example:create` makes `examples/new/` from only what a person brings to a new repo, copied from
-  the template: the Worker's code, its `package.json` and lockfile, and the repo's `mise.toml`, with a Worker name of
-  its own (`mise-cloudflare-new`). The steps then do the rest to it: `REPO_PATH=examples/new mise run example:05-show`
-  gives it its git, its tools, its wrangler and everything `init` writes. It is never committed, and each
-  `mise run example:create` starts it again.
+- **The template**, [templates/](templates/), in place; for `connect-github`, in a checkout of this repo at HEAD, as
+  Cloudflare builds it from GitHub.
+- **A copy stamped out from it**, as a person's repo is: only what a user brings (the Worker's code, its `package.json`
+  and lockfile, its `mise.toml`), a Worker of its own (`mise-cloudflare-new`), its own git, then `mise-cloudflare init`.
+  The walk makes it in a folder of its own, and it goes when the walk ends. It pins this checkout's build (`local`), or
+  a release with `--version`, as the release tries it. Not `connect-github`: it has no GitHub.
 
-### The examples
-
-Each folder in [examples/](examples/) is another repo, a user's, inside this one ([examples/README.md](examples/README.md)):
-its own git, its own `mise.toml` pinning mise-cloudflare at `local` (this checkout's build, which `mise run tool:install`
-links), and what `init` writes, all inside it. mise there reads only the example's own `mise.toml`
-(`MISE_CEILING_PATHS`), and nothing of an example's goes in this repo's own `.github/` or `.claude/`
-(`TestMise`, in `mise run tool:test`); the template is what this version's `init` writes (the walk's `03-init`). This repo
-tracks the reference's files; `mise run root:deploy-every-push` runs in a checkout of this repo, where the reference is a subfolder,
-as Cloudflare builds it from GitHub.
+Each walk first says what it runs: the repo's mise tools, mise-cloudflare's build, the installed wrangler. It runs in
+the repo on that repo's own mise only (`MISE_CEILING_PATHS`). A walk that deploys starts by deleting whatever a stopped
+one left on Cloudflare, and deletes what it made even when it fails. Besides the steps it runs only
+`cloudflare:run-wrangler`, to look at the account; the rest it looks at as a person does: the Worker's URL, git,
+Cloudflare's builds. Previews, staging and production are shown working by Cloudflare's own checks: never build a
+harness for those.
 
 ### This repo's tasks
 
 Every task is named noun:verb, what it acts on and then what it does, as a repo's own are (`cloudflare:08-deploy`):
-`example:` acts on a repo in `examples/` (the steps, `example:create`, and the end-to-end tests on it), `tool:` on
-mise-cloudflare itself, and `root:` on this repo itself.
+`template:` acts on the template, `example:` on a copy stamped out from it, `tool:` on mise-cloudflare itself, and
+`root:` on this repo itself.
 
 | Task | What | When | Cloudflare |
 |---|---|---|---|
-| `mise run example:create` | A new repo, `examples/new/`, from only what a user brings, pinning this checkout's build (`local`), or a release with `--version`; the steps do the rest | To try the steps on a new repo | No |
-| `mise run template:e2e`, `mise run example:e2e` | The end-to-end that needs no account, on the template (`templates/`) or on a stamped copy (`examples/new/`), through its own mise file, as a person takes it: `04-check`'s rules, `05-show`'s next step, `12-login` stopping at once in CI, the Worker locally with `06-serve` | After every change | No |
-| `mise run example:deploy` | The steps on Cloudflare, on `<REPO_PATH>`, a few minutes: `12-login`, `07-set-secrets`, `08-deploy`, the live D1, KV, R2 and secret, stray tokens refused by `08-deploy`, `13-delete`; everything deleted after | After a change to how it deploys | Yes |
+| `mise run template:e2e-serve`, `mise run example:e2e-serve` | The walk as far as `serve`, on the template or on a stamped copy (`--version` pins a release) | After every change | No |
+| `mise run template:e2e-deploy`, `mise run example:e2e-deploy` | The walk as far as `deploy`, about 3 minutes | After a change to how it deploys | Yes |
+| `mise run template:e2e-connect-github` | The walk on the template as far as `connect-github`, about 7 minutes (it waits on Cloudflare's builds) | After a change to `connect-github` | Yes, and GitHub |
+| `mise run template:check-mise` | `TestMise` on the template's mise file and the tool's Go (below) | After a change to a task or a command | No |
+| `mise run template:update` | The template's own pins at their newest releases, by its own `cloudflare:update`: every pin listed, the moved ones before → after | To move its pins; then the walks | No |
+| `mise run root:update` | This repo's own pins (this `mise.toml`'s tools, `go.mod`'s modules) at their newest, by the tool's own update | To move its pins; then `tool:test` and the walks | No |
 | `mise run tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
-| `mise run tool:install` | That build as the mise version `local`, for the examples and any repo on this machine: `mise use github:joeblew999/mise-cloudflare@local` there | To try a change in another repo, never by waiting on a release | No |
-| `mise run tool:test` | The tool's own checks, run for real: `go vet`, its Go tests, the release config. They need no example | After every change | No |
-| `mise run tool:release` | A release from the commit checked out, as `release.yml` runs it: the commit's `v*` tag or the next patch version, goreleaser's binaries on the tag's release, a new repo pinning it and tried, the version on proxy.golang.org. `--dry-run` tags and publishes nothing | Never by hand: a merge to main runs it | GitHub |
-| `mise run root:deploy-every-push` | Workers Builds deploying every push of the root, through GitHub, about 8 minutes (it waits on Cloudflare's builds): production from a throwaway branch, a branch's preview with its own D1, KV, R2 and secret, gone with its branch | After a change to `connect-github` | Yes, and GitHub |
+| `mise run tool:install` | That build as the mise version `local`, which the template pins, for any repo on this machine: `mise use github:joeblew999/mise-cloudflare@local` there | To try a change in another repo, never by waiting on a release | No |
+| `mise run tool:test` | The tool's own checks: `go vet`, its Go tests, the release config | After every change | No |
+| `mise run tool:release` | A release from the commit checked out, as `release.yml` runs it: the commit's `v*` tag or the next patch version, goreleaser's binaries on the tag's release, a copy stamped out pinning it and walked (`example:e2e-serve --version`), the version on proxy.golang.org. `--dry-run` tags and publishes nothing | Never by hand: a merge to main runs it | GitHub |
 
-Every task here runs Go that exists, and [mise_test.go](mise_test.go) (`TestMise`, in `mise run tool:test`) checks
-it: each test a task runs (`go test . -run '^TestWalk$'`), each program (`go run ./root/example/create`), each stage a
-walk goes to (`E2E_STAGE`). It checks the template's mise file against the Go both ways too: the end-to-end's steps
-against its numbered tasks, and its tasks against the tool's commands.
-
-A test does what a person does, in their order: the root's numbered steps, one at a time from 00
-(`rootStep("07-set-secrets")` is `mise run example:07-set-secrets` at the root), and each step runs the repo's own task
-of its number (`mise run cloudflare:07-set-secrets`). The one thing a test runs in the repo itself is
-`repoTask("run-wrangler")`, to look at what is on the account; the rest it looks at as a person does: the Worker's
-URL, git, Cloudflare's builds. `root:deploy-every-push` runs in a checkout of the root, as Cloudflare builds it from
-GitHub, where the reference is a folder of the root's own git: its steps there are 01, 02, then 12 on (00, 03 and 04
-would make it a repo of its own, or put its workflow in the root's). `example:deploy` and `root:deploy-every-push`
-start by deleting whatever a stopped run left of the Worker on Cloudflare, and delete what
-they made with `13-delete` even when they fail. Previews, staging and production are shown working by Cloudflare's own checks on the pull requests:
-never build a harness for those.
+[mise_test.go](mise_test.go), `TestMise`, checks a mise file against the Go it runs, both ways, for any repo (the
+caller says which: `template:check-mise` points it at the template's). Each task's command is a command's file in
+`cmd/mise-cloudflare`, and each command a task's; each task the walk names is one; every task declares its flags and
+arguments with mise's `usage` and passes them by name. The root's `mise.toml` is the control plane, and isn't checked.
 
 ### Layout
 
-| Folder | Whose | What |
+| Path | Whose | What |
 |---|---|---|
 | [templates/](templates/) | other repos' | the template: a whole repo you can drop anywhere and run, a sample Worker plus the tool's half, which `init` writes into a repo at the same paths (the tasks, the workflow, the Claude Code hook and settings, the agent skill, the docs, the `.gitignore`); [templates.go](templates/templates.go) lists that half |
 | [cmd/mise-cloudflare/](cmd/mise-cloudflare/) | other repos' | the command: a file per command, `x.go` holding `r.x`, which `main.go`'s `case "x"` calls |
 | [internal/](internal/) | other repos' | the login (`wrangler`), Cloudflare's cf (`cf`), the Worker's config as wrangler reads it (`wconfig`), the rules (`rules`) |
-| [root/example/create/](root/example/create/) | this repo's | `mise run example:create` |
-| [root/tool/release/](root/tool/release/) | this repo's | `mise run tool:release` |
-| [examples/](examples/) | this repo's | repos of their own that use it: the reference, and the new one |
+| [e2e_walk_test.go](e2e_walk_test.go), [e2e_steps_test.go](e2e_steps_test.go), [e2e_mise_test.go](e2e_mise_test.go), [e2e_cloudflare_test.go](e2e_cloudflare_test.go) | this repo's | the walk: `TestWalk` and its stages; the steps, each with its check; the repo and the calls into its own mise file (the stamped copy and the checkout made here); what it looks at on Cloudflare |
+| [tool_test.go](tool_test.go) | this repo's | `TestToolRelease`, the release: only `mise run tool:release` runs it |
+| [mise_test.go](mise_test.go) | this repo's, for now | the mise ↔ Go checker, `TestMise` |
 | [.claude/](.claude/), [.github/workflows/](.github/workflows/) | this repo's | its own Claude Code hook and its own workflows (`ci`, `release`); other repos get theirs from `templates/` |
-| [e2e_test.go](e2e_test.go), [e2e_steps_test.go](e2e_steps_test.go), [e2e_mise_test.go](e2e_mise_test.go), [mise_test.go](mise_test.go) | this repo's | the end-to-end: the tests the root's tasks run (which repo, how far), the walk of the repo's numbered tasks with a check each, the calls into the repo's own mise file, and this repo checked against the template |
 
 ### CI and releases
 
 Shell steps only, no JavaScript actions, and no Cloudflare credentials. Each workflow checks out and installs mise,
 then only runs the root mise, as on any machine:
 
-- [ci.yml](.github/workflows/ci.yml), on every push and pull request: `mise run tool:test`; on the reference,
-  `mise run template:e2e` and `mise run example:verify` (what its own workflow runs); then a stamped copy,
-  `mise run example:create`, and the same on it, with `REPO_PATH=examples/new`.
+- [ci.yml](.github/workflows/ci.yml), on every push and pull request (not the walk's throwaway `e2e-*` branches):
+  `mise run tool:test`, `mise run template:check-mise`, then the walk as far as `serve` on the template
+  (`mise run template:e2e-serve`) and on a stamped copy (`mise run example:e2e-serve`).
 - [release.yml](.github/workflows/release.yml), on every change to the tool merged to main: `mise run tool:release`. It
   tags the next patch version, [goreleaser](.goreleaser.yaml) puts the `mise-cloudflare` binary for macOS, Linux and
-  Windows on the release, then a new repo pins that release and is tried as a person tries it
-  (`mise run example:create --version`, then `mise run example:e2e`). So the release is always main.
-  `mise run tool:release --dry-run` does it here without tagging or publishing anything.
+  Windows on the release, then a copy stamped out pinning that release is walked (`mise run example:e2e-serve
+  --version`). So the release is always main. `mise run tool:release --dry-run` does it here without tagging or
+  publishing anything.
 
-Before merging a change to how it deploys, run `mise run example:deploy`.
+Before merging a change to how it deploys, run `mise run template:e2e-deploy`, and `mise run
+template:e2e-connect-github` for a change to `connect-github`.
 
 ### Rules
 

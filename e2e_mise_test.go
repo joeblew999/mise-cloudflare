@@ -5,10 +5,12 @@ package e2e
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"net"
 	"net/http"
@@ -24,9 +26,8 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 )
 
-// repo is a Worker repo that uses mise-cloudflare, in this repo: this repo (top, whose GitHub the throwaway branches go
-// to), the repo's folder in it (REPO_PATH: templates, or a stamped copy such as examples/new), its full path, and its
-// Worker's name.
+// repo is a Worker repo that uses mise-cloudflare: this repo (top, whose GitHub the throwaway branches go to), the
+// repo's name (REPO_PATH, its folder here: templates), its full path, and its Worker's name.
 type repo struct {
 	t      *testing.T
 	top    string
@@ -65,6 +66,76 @@ func (r repo) checkoutOfHead() repo {
 	top := r.top
 	r.t.Cleanup(func() { exec.Command("git", "-C", top, "worktree", "remove", "--force", checkout).Run() })
 	r.top, r.dir = checkout, filepath.Join(checkout, r.name)
+	return r
+}
+
+// The stamped copy's Worker is its own, so its walk never touches the template's.
+const templateWorker, stampedWorker = "mise-cloudflare-template", "mise-cloudflare-new"
+
+// brought is what a user's repo has before mise-cloudflare: the Worker's code, its package.json and lockfile, and the
+// repo's mise.toml.
+var brought = []string{"mise.toml", "package.json", "pnpm-lock.yaml", "wrangler.jsonc", ".dev.vars.example", "src"}
+
+// stampedCopy is a new repo made from only what a user brings, copied from this one under a Worker name of its own,
+// pinning mise-cloudflare at version, a release from GitHub as mise use does, or this checkout's build (local) when
+// it is "". Then, as a person adding mise-cloudflare does, its own git and mise-cloudflare init. It is in a folder of
+// its own that goes when the test ends; its logins are wrangler's and cf's on this machine, so they stay.
+func (r repo) stampedCopy(version string) repo {
+	r.t.Helper()
+	version = strings.TrimPrefix(version, "v")
+	tmp, err := filepath.EvalSymlinks(r.t.TempDir()) // the real path: mise stops only at a ceiling given as one
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	to := filepath.Join(tmp, "stamped")
+	renamed := false // the Worker in its wrangler.jsonc: its own, not the template's
+	for _, b := range brought {
+		err := filepath.WalkDir(filepath.Join(r.dir, b), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			rel, _ := filepath.Rel(r.dir, path)
+			if rel == "package.json" || rel == "wrangler.jsonc" {
+				renamed = renamed || rel == "wrangler.jsonc" && bytes.Contains(data, []byte(`"`+templateWorker+`"`))
+				data = bytes.ReplaceAll(data, []byte(`"`+templateWorker+`"`), []byte(`"`+stampedWorker+`"`))
+			}
+			if rel == "mise.toml" && version != "" {
+				pinned := []byte(`"github:joeblew999/mise-cloudflare" = "local"`)
+				if !bytes.Contains(data, pinned) {
+					return fmt.Errorf("%s/mise.toml doesn't pin mise-cloudflare at local", r.name)
+				}
+				data = bytes.ReplaceAll(data, pinned, []byte(`"github:joeblew999/mise-cloudflare" = "`+version+`"`))
+			}
+			dst := filepath.Join(to, rel)
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				return err
+			}
+			return os.WriteFile(dst, data, 0o644)
+		})
+		if err != nil {
+			r.t.Fatal(err)
+		}
+	}
+	if !renamed {
+		r.t.Fatalf("%s/wrangler.jsonc doesn't name the Worker %s: the stamped copy would walk its Worker, not one of its own", r.name, templateWorker)
+	}
+	if out, err := exec.Command("git", "-C", to, "init", "-q").CombinedOutput(); err != nil {
+		r.t.Fatalf("git init: %v\n%s", err, out)
+	}
+	cmd := exec.Command("mise", "exec", "github:joeblew999/mise-cloudflare@"+cmp.Or(version, "local"), "--", "mise-cloudflare", "init")
+	cmd.Dir = to
+	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+tmp, "MISE_TRUSTED_CONFIG_PATHS="+to, "MISE_YES=1")
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		r.t.Fatalf("mise-cloudflare init: %v", err)
+	}
+	from := r.name
+	r.name, r.dir = "a copy of "+from, to
+	r.pass("%s stamped out: %s, its Worker %s, mise-cloudflare at %s, its own git, and what init writes", r.name, strings.Join(brought, ", "), stampedWorker, cmp.Or(version, "local"))
 	return r
 }
 

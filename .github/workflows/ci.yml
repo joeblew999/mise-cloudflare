@@ -1,5 +1,5 @@
 # mise-cloudflare's CI: every check that needs no Cloudflare account, on the template (templates) and on a copy
-# stamped out from it (examples/new). Cloudflare credentials never come here.
+# stamped out from it (made by the walk). Cloudflare credentials never come here.
 # Shell steps only, as go-htmx4's: no JavaScript actions.
 name: ci
 
@@ -49,7 +49,5 @@ jobs:
       - name: The template, templates - the walk as far as the stage serve, which needs no account, what its own workflow runs included (mise run template:e2e-serve)
         run: mise run template:e2e-serve
 
-      - name: A copy stamped out from it, examples/new (mise run example:create) - the same walk, on it (mise run example:e2e-serve)
-        run: |
-          mise run example:create
-          mise run example:e2e-serve
+      - name: A copy stamped out from it, as a person's repo is - the same walk, on it (mise run example:e2e-serve)
+        run: mise run example:e2e-serve
