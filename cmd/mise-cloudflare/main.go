@@ -82,11 +82,14 @@ func main() {
 	case "init":
 		initRepo(dir)
 		return
+	case "update": // any folder with pins of its own, a Worker or not
+		if inCI() {
+			fail(errors.New("in CI update doesn't run: CI only checks the repo, and update changes its pins; run mise run cloudflare:update on your machine, then the steps"))
+		}
+		repo{dir: dir}.update(ctx)
+		return
 	}
 	// CI only checks the repo; Cloudflare's Workers Builds deploys. No one is there to click Allow.
-	if inCI() && command == "update" {
-		fail(errors.New("in CI update doesn't run: CI only checks the repo, and update changes its pins; run mise run cloudflare:update on your machine, then the steps"))
-	}
 	if inCI() && command != "" && command != "show" && command != "check" && command != "verify" && command != "serve" && command != "clean" {
 		fail(errors.New("in CI there's no one to log in: CI runs mise run cloudflare:verify, and Cloudflare's Workers Builds deploys (mise run cloudflare:09-connect-github)"))
 	}
@@ -120,8 +123,6 @@ func main() {
 		r.logout(ctx)
 	case "clean":
 		r.clean(*yes)
-	case "update":
-		r.update(ctx)
 	default:
 		fmt.Fprint(os.Stderr, help)
 		os.Exit(2)

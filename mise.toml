@@ -10,6 +10,7 @@
 #     mise run template:e2e-serve      TestWalk on it, as far as the stage serve (REPO_PATH=templates E2E_STAGE=serve)
 #     mise run template:e2e-deploy     TestWalk on it, as far as the stage deploy, on Cloudflare (E2E_STAGE=deploy)
 #     mise run template:e2e-connect-github  TestWalk on it, as far as connect-github, through GitHub (about 8 minutes)
+#     mise run template:update         its own pins at their newest releases, by its own task (cloudflare:update)
 #     mise run template:check-mise     TestMise on its mise file and the tool's Go (MISE_FILE, GO_CMD, GO_LAYOUT=file, GO_CALLERS=.)
 #   example: the repo REPO_PATH names (templates, the template, by default; examples/new, a copy stamped out from it)
 #     mise run example:create          a new repo, examples/new, from only what a user brings; the steps do the rest
@@ -24,6 +25,7 @@
 #     mise run tool:test               its own checks: go vet, its Go tests, the release config (no example needed)
 #     mise run tool:release            a release from the commit checked out, as release.yml runs it (--dry-run)
 #   root: this repo itself
+#     mise run root:update             this repo's own pins (this file's tools, go.mod) at their newest, by the tool's update
 #     mise run root:deploy-every-push  Workers Builds deploying every push of the root, through GitHub (TestDeployEveryPush)
 # Each runs what it needs first: run the furthest you need.
 
@@ -34,9 +36,9 @@ idiomatic_version_file_enable_tools = ["go"]
 skills.fetch = false
 
 [tools]
-node = "26.12.1"   # the Go tests run the example's wrangler with it
-usage = "7.0.1"    # --help and tab-completion for the tasks' flags
-goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
+node = "26.13.0"   # the Go tests run the example's wrangler with it
+usage = { version = "7.1.3", workflow = "publish-cli.yml" }    # --help and tab-completion for the tasks' flags
+goreleaser = "2.19.0"   # the release's binaries (.goreleaser.yaml)
 "npm:cf" = "1.0.0-beta.26"   # Cloudflare's own CLI: builds and clean run it themselves
 
 [task_config]
@@ -75,6 +77,17 @@ run = "REPO_PATH=templates E2E_STAGE=deploy go test . -run '^TestWalk$' -count=1
 description = "TestWalk on the template, as far as the stage connect-github (09-connect-github, needing GitHub too), in a checkout of this repo at HEAD, as Cloudflare builds it: Workers Builds builds production from a throwaway branch, a pull request's branch gets its own preview, gone with its branch; then everything deleted. About 8 minutes: it waits on Cloudflare's builds. After tool:install"
 depends = ["tool:install"]
 run = "REPO_PATH=templates E2E_STAGE=connect-github go test . -run '^TestWalk$' -count=1 -v -timeout 90m"
+
+[tasks."template:update"]
+description = "The template's own pins at their newest releases, by its own task, cloudflare:update, run in templates/ as in a repo on its own (MISE_CEILING_PATHS): node, aube, wrangler; mise-cloudflare stays at local. It ends with every pin, the moved ones before → after. Then the walks prove it. After tool:install"
+depends = ["tool:install"]
+dir = "{{config_root}}/templates"
+env = { MISE_CEILING_PATHS = "{{config_root}}" }
+run = "mise run cloudflare:update"
+
+[tasks."root:update"]
+description = "This repo's own pins at their newest releases, with the tool's own update run on it from source: this mise.toml's tools (node, usage, goreleaser, cf) and go.mod's modules. It ends with every pin, the moved ones before → after. Then tool:test and the walks prove it"
+run = "go run ./cmd/mise-cloudflare update"
 
 [tasks."example:e2e-serve"]
 description = "TestWalk on a copy stamped out from the template, examples/new (mise run example:create first), as far as the stage serve (06-serve, needing nothing): its numbered tasks in their order, through its own mise file, each checked. After tool:install"

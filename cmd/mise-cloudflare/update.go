@@ -28,7 +28,7 @@ func (r repo) update(ctx context.Context) {
 	}
 	before := r.pins(ctx)
 	upgrade := []string{"upgrade", "--bump", "--local"}
-	if before["mise.toml "+self] == "local" {
+	if selfPin(before) == "local" {
 		upgrade = append(upgrade, "--exclude", self)
 	}
 	r.runOwnMise(ctx, upgrade...)
@@ -40,7 +40,7 @@ func (r repo) update(ctx context.Context) {
 		r.runOwnMise(ctx, "exec", "--", "go", "mod", "tidy")
 	}
 	after := r.pins(ctx)
-	if b, a := before["mise.toml "+self], after["mise.toml "+self]; a != b {
+	if b, a := selfPin(before), selfPin(after); a != b {
 		fmt.Printf("mise-cloudflare moved from %s to %s: its files written again\n", b, a)
 		r.runOwnMise(ctx, "run", "cloudflare:03-init")
 	}
@@ -58,19 +58,21 @@ func (r repo) update(ctx context.Context) {
 	}
 }
 
-// pins is every version the repo pins of its own, by file and name: its mise tools ("mise.toml node"), its packages
-// ("package.json wrangler") and its Go modules ("go.mod golang.org/x/term"), each as that file's tool reports it.
+// pins is every version the repo pins of its own, by file and name: its mise tools by the file mise read each from
+// ("mise.toml node"; "go.mod go" for go.mod's toolchain line), its packages ("package.json wrangler") and its Go modules
+// ("go.mod golang.org/x/term"), each as that file's tool reports it.
 func (r repo) pins(ctx context.Context) map[string]string {
 	p := map[string]string{}
 	var tools map[string][]struct {
 		Version string
 		Active  bool
+		Source  struct{ Path string }
 	}
 	if json.Unmarshal([]byte(r.mise(ctx, "ls", "--local", "--json")), &tools) == nil {
 		for name, vs := range tools {
 			for _, v := range vs {
 				if v.Active {
-					p["mise.toml "+name] = v.Version
+					p[filepath.Base(v.Source.Path)+" "+name] = v.Version
 				}
 			}
 		}
@@ -92,6 +94,16 @@ func (r repo) pins(ctx context.Context) map[string]string {
 		}
 	}
 	return p
+}
+
+// selfPin is the version of mise-cloudflare the repo's mise pins, from whichever file it does: "" if none.
+func selfPin(p map[string]string) string {
+	for k, v := range p {
+		if strings.HasSuffix(k, " "+self) {
+			return v
+		}
+	}
+	return ""
 }
 
 // moved is every pin, one line each in the order of their file and name, and how many moved: one that stayed is
