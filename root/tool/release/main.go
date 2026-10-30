@@ -1,7 +1,7 @@
 // Command release releases mise-cloudflare from the commit checked out (mise run tool:release; release.yml runs the
 // same on GitHub): the commit's v* tag, or the next patch version, tagged and pushed, when it has none; goreleaser's
 // binaries for every machine on that tag's GitHub release (.goreleaser.yaml); a new repo pinning the release, tried as
-// a person tries it (mise run example:create --version, then EXAMPLE=new mise run example:try); and the version fetched by proxy.golang.org, so go get and pkg.go.dev have it at
+// a person tries it (mise run example:create --version, then mise run example:e2e); and the version fetched by proxy.golang.org, so go get and pkg.go.dev have it at
 // once. With -dry-run it tags and publishes nothing: goreleaser builds a snapshot into dist/. It is this repo's, never
 // part of the tool.
 package main
@@ -39,7 +39,7 @@ func main() {
 	}
 	run([]string{"GORELEASER_CURRENT_TAG=" + tag}, "goreleaser", "release", "--clean")
 	run(nil, "mise", "run", "example:create", "--version", tag)
-	run([]string{"EXAMPLE=new"}, "mise", "run", "example:try")
+	run(nil, "mise", "run", "example:e2e")
 	run([]string{"GOPROXY=https://proxy.golang.org", "GOFLAGS=-mod=mod"}, "go", "list", "-m", module()+"@"+tag)
 }
 

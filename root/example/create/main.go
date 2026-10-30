@@ -1,27 +1,29 @@
 // Command new makes a new repo for this repo's steps to run on: examples/new, made from only what a user
-// brings to a repo of theirs, copied from examples/reference (the Worker's code, its package.json and lockfile, and the
+// brings to a repo of theirs, copied from the template, templates (the Worker's code, its package.json and lockfile, and the
 // repo's mise.toml), under a Worker name of its own, pinning this checkout's build (local), or with -version a release
-// from GitHub, as mise use does. The steps do the rest, as on any repo: EXAMPLE=new mise run example:05-show, and so
-// on. It is the root's (mise run example:create), never part of the tool.
+// from GitHub, as mise use does. Then it gives it its own git and runs init in it, as a person
+// adding mise-cloudflare does: mise run example:e2e is the end-to-end on it. It is the root's (mise run example:create), never part of the tool.
 package main
 
 import (
 	"bytes"
+	"cmp"
 	"flag"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 const (
-	from, to       = "examples/reference", "examples/new"
-	worker, itsOwn = "mise-cloudflare-example", "mise-cloudflare-new"
+	from, to       = "templates", "examples/new"
+	worker, itsOwn = "mise-cloudflare-template", "mise-cloudflare-new"
 )
 
-// brought is what a user's repo has before mise-cloudflare. Everything else in a repo of examples/ is the steps' work:
-// its git, what init writes (the .gitignore's lines among it), and what setup installs.
+// brought is what a user's repo has before mise-cloudflare. newRepo then gives it its own git and runs init, as a person
+// adding mise-cloudflare does; what setup installs is the end-to-end's (mise run example:e2e).
 var brought = []string{"mise.toml", "package.json", "aube-lock.yaml", "wrangler.jsonc", ".dev.vars.example", "src"}
 
 func main() {
@@ -35,8 +37,8 @@ func main() {
 	if *version != "" {
 		pin = *version + ", from GitHub"
 	}
-	fmt.Printf("made %s from %s: %s, the Worker %s, mise-cloudflare at %s\n", to, from, strings.Join(brought, ", "), itsOwn, pin)
-	fmt.Println("next: EXAMPLE=new mise run example:05-show (each step runs the ones it needs first)")
+	fmt.Printf("made %s from %s: %s, the Worker %s, mise-cloudflare at %s, its own git, and what init writes\n", to, from, strings.Join(brought, ", "), itsOwn, pin)
+	fmt.Println("next: mise run example:e2e")
 }
 
 // newRepo makes it, pinning version (or this checkout's build, local, when it is "").
@@ -74,5 +76,17 @@ func newRepo(version string) error {
 			return err
 		}
 	}
-	return nil
+	// Then as a person adding mise-cloudflare: its own git, and mise-cloudflare init, at the version its mise.toml pins.
+	if out, err := exec.Command("git", "-C", to, "init", "-q").CombinedOutput(); err != nil {
+		return fmt.Errorf("git init: %v\n%s", err, out)
+	}
+	abs, err := filepath.Abs(to)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("mise", "exec", "github:joeblew999/mise-cloudflare@"+cmp.Or(version, "local"), "--", "mise-cloudflare", "init")
+	cmd.Dir = to
+	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(abs), "MISE_TRUSTED_CONFIG_PATHS="+abs, "MISE_YES=1")
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
 }

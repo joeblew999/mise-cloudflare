@@ -1,7 +1,7 @@
 // No account ID and no resource IDs: the first deploy creates D1, KV and R2, named after the Worker, and later deploys find them.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mise-cloudflare-example",
+  "name": "mise-cloudflare-template",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
   "d1_databases": [{ "binding": "DB" }],

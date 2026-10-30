@@ -1,0 +1,7 @@
+# The Worker's local secrets, a stray Cloudflare token, and cf's login cache: never committed
+.dev.vars
+.env
+.cloudflare/
+# Installed packages, and wrangler's local data: its local D1, KV and R2, and what each deploy wrote
+node_modules/
+.wrangler/

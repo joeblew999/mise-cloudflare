@@ -1,22 +1,26 @@
 # mise-cloudflare's own tasks, for working on it. Run every task here, at the top: everything is driven from this file.
 #
-# example.mise.toml, included below, is the steps, 00-git-init to 14-logout: what a person does to a repo, in order.
-# They run on a repo in examples/, two ways:
-#   on the reference, examples/reference (the default): mise run example:05-show
-#   on a new repo:     mise run example:create, then EXAMPLE=new mise run example:05-show
+# example.mise.toml, included below, is the steps, 00-git-init to 15-clean: what a person does to a repo, in order.
+# They run on the repo REPO_PATH names, two ways:
+#   on the template, templates (the default):  mise run example:05-show
+#   on a copy stamped out from it:             mise run example:create, then REPO_PATH=examples/new mise run example:05-show
 # This file is only what the root does itself, each task named for what it acts on (noun:verb):
-#   example: a repo in examples/ (EXAMPLE names it: reference by default)
+#   template: the template, templates/
+#     mise run template:e2e            the end-to-end on it, through its own mise file (TestTemplateE2e)
+#     mise run template:e2e-serve      TestWalk on it, as far as the stage serve (REPO_PATH=templates E2E_STAGE=serve)
+#     mise run template:e2e-deploy     TestWalk on it, as far as the stage deploy, on Cloudflare (E2E_STAGE=deploy)
+#     mise run template:e2e-connect-github  TestWalk on it, as far as connect-github, through GitHub (about 8 minutes)
+#     mise run template:check-mise     TestMise on its mise file and the tool's Go (MISE_FILE, GO_CMD, GO_LAYOUT=file, GO_CALLERS=.)
+#   example: the repo REPO_PATH names (templates, the template, by default; examples/new, a copy stamped out from it)
 #     mise run example:create          a new repo, examples/new, from only what a user brings; the steps do the rest
-#     mise run example:try             the steps that need no account, on it (TestTry)
-#     mise run example:deploy          the steps on Cloudflare, on it (TestDeploy)
-#     mise run example:clean           delete what a stopped example:deploy or root:deploy-every-push left (TestClean)
+#     mise run example:e2e             the end-to-end on a stamped copy, examples/new, through its mise file (TestExampleE2e)
+#     mise run example:deploy          the steps on Cloudflare, on it (TestExampleDeploy)
 #   tool: mise-cloudflare itself
 #     mise run tool:build              its build, bin/mise-cloudflare
 #     mise run tool:install            that build as the mise version local, which the examples pin (and any repo can)
 #     mise run tool:test               its own checks: go vet, its Go tests, the release config (no example needed)
 #     mise run tool:release            a release from the commit checked out, as release.yml runs it (--dry-run)
 #   root: this repo itself
-#     mise run root:check              the root against the templates, after the reference's example:04-check (TestCheck)
 #     mise run root:deploy-every-push  Workers Builds deploying every push of the root, through GitHub (TestDeployEveryPush)
 # Each runs what it needs first: run the furthest you need.
 
@@ -36,25 +40,45 @@ goreleaser = "2.18.3"   # the release's binaries (.goreleaser.yaml)
 includes = ["example.mise.toml"]
 
 [tasks."example:create"]
-description = "A new repo, examples/new: only what a user brings, from the reference (the Worker's code, package.json, lockfile and mise.toml, the Worker named mise-cloudflare-new), pinning this checkout's build (local), or a release with --version. The steps do the rest, on it with EXAMPLE=new: EXAMPLE=new mise run example:05-show"
+description = "A copy stamped out from the template, examples/new: only what a user brings, from templates (the Worker's code, package.json, lockfile and mise.toml, the Worker named mise-cloudflare-new), pinning this checkout's build (local), or a release with --version; then its own git and mise-cloudflare init in it, as a person adding mise-cloudflare does. Then: mise run example:e2e"
 usage = 'flag "--version <version>" help="pin this release from GitHub, as mise use does, instead of the build of this checkout"'
+depends = ["tool:install"]
 run = "go run ./root/example/create -version=${usage_version:-}"
 
-[tasks."example:try"]
-description = "TestExampleTry: the steps that need no Cloudflare account, as a person takes them, on examples/<EXAMPLE> (reference by default; new after example:create): 00 to 04, 05-show's next step, 12-login stopping at once in CI, the Worker locally with 06-serve. After tool:test and tool:install. After every change"
+[tasks."template:e2e"]
+description = "TestTemplateE2e: the end-to-end on the template, templates/, through its own mise file, with no Cloudflare account: mise install, mise run setup, cloudflare:04-check, what cloudflare:05-show says next, cloudflare:12-login stopping at once in CI, the Worker locally with cloudflare:06-serve, cloudflare:15-clean. After tool:test and tool:install. After every change"
 depends = ["tool:test", "tool:install"]
-run = "TRY=1 go test ./root/e2e -run '^TestExampleTry$' -count=1 -v -timeout 10m"
+run = "E2E=1 REPO_PATH=templates go test . -run '^TestTemplateE2e$' -count=1 -v -timeout 10m"
+
+[tasks."template:check-mise"]
+description = "TestMise on the template's mise file against Go, and only Go (a task that runs anything else is reported as not checked), both ways: against the tool's Go it runs (each task's command is its file, each command file is a task's), and against the end-to-end that runs it (each task the Go names is one), by the base rule (mise_test.go)"
+run = "MISE_FILE=templates/.mise/tasks/mise-cloudflare.toml GO_CMD=cmd GO_LAYOUT=file GO_CALLERS=. go test . -run '^TestMise$' -count=1 -v"
+
+[tasks."template:e2e-serve"]
+description = "TestWalk on the template, templates/, as far as the stage serve (06-serve, needing nothing): its numbered tasks in their order, through its own mise file, each checked (e2e_test.go). After tool:install"
+depends = ["tool:install"]
+run = "REPO_PATH=templates E2E_STAGE=serve go test . -run '^TestWalk$' -count=1 -v -timeout 10m"
+
+[tasks."template:e2e-deploy"]
+description = "TestWalk on the template, templates/, as far as the stage deploy (08-deploy, needing a Cloudflare account): its Worker deployed on its own login, checked live, then deleted (e2e_walk_test.go). The first time, an Allow. After tool:install"
+depends = ["tool:install"]
+run = "REPO_PATH=templates E2E_STAGE=deploy go test . -run '^TestWalk$' -count=1 -v -timeout 30m"
+
+[tasks."template:e2e-connect-github"]
+description = "TestWalk on the template, as far as the stage connect-github (09-connect-github, needing GitHub too), in a checkout of this repo at HEAD, as Cloudflare builds it: Workers Builds builds production from a throwaway branch, a pull request's branch gets its own preview, gone with its branch; then everything deleted. About 8 minutes: it waits on Cloudflare's builds. After tool:install"
+depends = ["tool:install"]
+run = "REPO_PATH=templates E2E_STAGE=connect-github go test . -run '^TestWalk$' -count=1 -v -timeout 90m"
+
+[tasks."example:e2e"]
+description = "TestExampleE2e: the same end-to-end on a copy stamped out from the template, examples/new (mise run example:create first), through its own mise file. After tool:test and tool:install"
+depends = ["tool:test", "tool:install"]
+run = "E2E=1 REPO_PATH=examples/new go test . -run '^TestExampleE2e$' -count=1 -v -timeout 10m"
 
 [tasks."example:deploy"]
-description = "TestExampleDeploy: the steps on Cloudflare, as a person takes them, on examples/<EXAMPLE>, a few minutes: 12-login, 07-set-secrets, 08-deploy, the live D1, KV, R2 and secret, stray tokens refused by 08-deploy, 13-delete; everything deleted after. After example:try. After a change to how it deploys. The first time, an Allow"
+description = "TestExampleDeploy: the steps on Cloudflare, as a person takes them, on <REPO_PATH>, a few minutes: 12-login, 07-set-secrets, 08-deploy, the live D1, KV, R2 and secret, stray tokens refused by 08-deploy, 13-delete; everything deleted after. After tool:test and tool:install. After a change to how it deploys. The first time, an Allow"
 usage = 'flag "--clean" help="also run 14-logout: the next run logs in again"'
-depends = ["example:try"]
-run = "CLOUDFLARE_E2E=1 DEPLOY_CLEAN=${usage_clean:-false} go test ./root/e2e -run '^TestExampleDeploy$' -count=1 -v -timeout 30m"
-
-[tasks."example:clean"]
-description = "TestExampleClean: examples/<EXAMPLE> back to the start, whatever a stopped example:deploy or root:deploy-every-push left: nothing of its Worker on Cloudflare (09-connect-github --off, the root's e2e-* branches, 13-delete), and none of its local state (15-clean). After tool:install"
-depends = ["tool:install"]
-run = "CLOUDFLARE_E2E=1 go test ./root/e2e -run '^TestExampleClean$' -count=1 -v -timeout 15m"
+depends = ["tool:test", "tool:install"]
+run = "CLOUDFLARE_E2E=1 DEPLOY_CLEAN=${usage_clean:-false} REPO_PATH=${REPO_PATH:-templates} go test . -run '^TestExampleDeploy$' -count=1 -v -timeout 30m"
 
 [tasks."tool:build"]
 description = "This repo's build, bin/mise-cloudflare"
@@ -70,17 +94,12 @@ description = "The tool's own checks, run for real (no cached results): go vet, 
 run = "go vet ./... && go test -count=1 ./... && goreleaser check"
 
 [tasks."tool:release"]
-description = "A release of mise-cloudflare from the commit checked out, as release.yml runs it on GitHub: the commit's v* tag, or the next patch version tagged and pushed; goreleaser's binaries on that tag's release; a new repo made on it and tried (example:create --version, then EXAMPLE=new example:try); the version on proxy.golang.org. --dry-run tags and publishes nothing (a goreleaser snapshot into dist/). After tool:test"
+description = "A release of mise-cloudflare from the commit checked out, as release.yml runs it on GitHub: the commit's v* tag, or the next patch version tagged and pushed; goreleaser's binaries on that tag's release; a new repo made on it and tried (example:create --version, then example:e2e); the version on proxy.golang.org. --dry-run tags and publishes nothing (a goreleaser snapshot into dist/). After tool:test"
 usage = 'flag "--dry-run" help="tag and publish nothing: goreleaser builds a snapshot into dist/"'
 depends = ["tool:test"]
 run = "go run ./root/tool/release -dry-run=${usage_dry_run:-false}"
 
-[tasks."root:check"]
-description = "TestRootCheck: the root against what it gives other repos, once the reference is set up: the examples and the root keep to themselves, the steps line up with a repo's tasks, the tool reads the reference's config and scopes through its wrangler, and every task here runs the Go of its name. After example:04-check"
-depends = ["example:04-check"]
-run = "CHECK=1 go test ./root/e2e -run '^TestRootCheck$' -count=1 -v"
-
 [tasks."root:deploy-every-push"]
-description = "TestRootDeployEveryPush: Cloudflare's Workers Builds deploying every push of the root, through GitHub (about 25 minutes), in a checkout of it where the reference is a subfolder: production from a throwaway branch, a branch's preview, gone with its branch. Everything deleted after. After example:deploy. After a change to connect-github"
+description = "TestRootDeployEveryPush: Cloudflare's Workers Builds deploying every push of the root, through GitHub (about 8 minutes: it waits on Cloudflare's builds), in a checkout of it where the reference is a subfolder: production from a throwaway branch, a branch's preview, gone with its branch. Everything deleted after. After example:deploy. After a change to connect-github"
 depends = ["example:deploy"]
-run = "CLOUDFLARE_E2E=1 go test ./root/e2e -run '^TestRootDeployEveryPush$' -count=1 -v -timeout 90m"
+run = "CLOUDFLARE_E2E=1 go test . -run '^TestRootDeployEveryPush$' -count=1 -v -timeout 90m"

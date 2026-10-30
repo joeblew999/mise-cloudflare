@@ -1,6 +1,9 @@
-// Package templates holds every file mise-cloudflare init writes into a repo: everything that is for other repos. The
-// mise tasks, the GitHub Actions check workflow, the Claude Code cloud session hook, the agent skill and the repo's
-// docs. What is for this repo itself (its own mise.toml, tests, CI and README) is never here.
+// Package templates is the template: a whole repo with mise-cloudflare, which runs wherever it is put. It has
+// two halves. The tool's half, listed below, is what mise-cloudflare init writes into any repo, at the same paths: the
+// mise tasks, the GitHub workflow, the Claude Code hook and its settings, the agent skill, the docs and the
+// .gitignore. The rest is a sample Worker, the repo's own (src/, wrangler.jsonc, package.json and its lockfile,
+// mise.toml, .dev.vars.example), there so the template runs: init never writes it. What is for this repo itself (its
+// own mise.toml, tests, CI and README) is never here.
 package templates
 
 import (
@@ -8,31 +11,18 @@ import (
 	"io/fs"
 )
 
-//go:embed tasks.toml
-var Tasks []byte
+//go:embed .mise/tasks/mise-cloudflare.toml
+//go:embed .github/workflows/cloudflare.yml
+//go:embed .claude/hooks/mise-cloudflare-session-start.sh .claude/settings.json .claude/skills
+//go:embed docs/mise-cloudflare
+//go:embed .gitignore
+var tool embed.FS
 
-// Workflow has NAME and DIR filled in by init.
-//
-//go:embed workflow.yml
-var Workflow []byte
+// Tool is the template's tool half: the files init writes into a repo, at their paths there.
+var Tool fs.FS = tool
 
-// SessionStart is the Claude Code cloud session hook, which init writes into a repo's .claude/hooks as HookFile.
-//
-//go:embed session-start.sh
-var SessionStart []byte
+// Tasks is the repo's mise tasks, .mise/tasks/mise-cloudflare.toml.
+var Tasks, _ = fs.ReadFile(Tool, ".mise/tasks/mise-cloudflare.toml")
 
-// HookFile is the hook's name in a repo's .claude/hooks.
+// HookFile is the Claude Code hook's name in a repo's .claude/hooks.
 const HookFile = "mise-cloudflare-session-start.sh"
-
-//go:embed skills
-var skills embed.FS
-
-// Skills is the agent skill init installs into a repo's .claude/skills: cloudflare/SKILL.md.
-var Skills, _ = fs.Sub(skills, "skills")
-
-//go:embed docs
-var docs embed.FS
-
-// Docs is what init writes into a repo's docs/mise-cloudflare: how mise-cloudflare works there, for the repo's people
-// and agents alike.
-var Docs, _ = fs.Sub(docs, "docs")

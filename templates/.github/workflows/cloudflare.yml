@@ -1,5 +1,5 @@
 # Written by mise-cloudflare: don't edit it. mise run cloudflare:03-init writes it again after upgrading.
-# Checks the Worker in . on every push and pull request: it checks out, installs mise and the pinned tools, then
+# Checks the repo's Worker on every push and pull request: it checks out, installs mise and the pinned tools, then
 # runs mise run cloudflare:verify (the repo's setup and test tasks if it has them, then check), the same as on any machine.
 # No Cloudflare credentials: Cloudflare's Workers Builds deploys (mise run cloudflare:09-connect-github).
 name: cloudflare
@@ -38,8 +38,7 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           curl -fsSL https://mise.run | MISE_QUIET=1 sh
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
-          cd "." && mise install
+          mise install
 
-      - name: mise run cloudflare:verify, in .
-        working-directory: .
+      - name: mise run cloudflare:verify
         run: mise run cloudflare:verify

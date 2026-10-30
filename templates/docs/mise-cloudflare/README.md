@@ -9,16 +9,18 @@ Written by `mise-cloudflare init`, for the version this repo's `mise.toml` pins:
 
 ## Set up and upgrade
 
-In a repo that has a Worker (a `wrangler.jsonc`, and wrangler in its `package.json`):
+In a repo that has a Worker (a `wrangler.jsonc`, and wrangler in its `package.json`), at the repository's root
+(GitHub and Claude Code read `.github/` and `.claude/` only there):
 
 ```sh
 mise use github:joeblew999/mise-cloudflare
 mise-cloudflare init
 ```
 
-Commit what `init` wrote and the pin in `mise.toml`. There's nothing to edit, then or ever. `init` also fixes what it
-can for `check`: it git-ignores `.dev.vars`, `.env`, `.cloudflare/`, `node_modules/` and `.wrangler/` (wrangler's local D1, KV and R2, and each deploy's output), pins wrangler to the version
-installed, and writes `.dev.vars.example` when there's none.
+Commit what `init` wrote and the pin in `mise.toml`. There's nothing to edit, then or ever. `init` writes only its
+own files: a `.gitignore` or `.claude/settings.json` the repo has already it leaves as it is, and `check` names what
+they lack (the secrets git-ignored, the hook's entry). Pin wrangler to an exact version in `package.json` and list the
+Worker's secrets in `.dev.vars.example` with local values: `check` and `serve` ask for them.
 
 To upgrade: `mise use github:joeblew999/mise-cloudflare@<version>`, then `mise run cloudflare:03-init`. mise holds back a
 release for a while after it's published (its minimum release age), so name the version to get one at once.
@@ -80,9 +82,10 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 |---|---|
 | `.mise/tasks/mise-cloudflare.toml` | The tasks, `mise run cloudflare` and `cloudflare:<command>` (mise finds them there by itself) |
 | `docs/mise-cloudflare/README.md` | This page |
-| `.github/workflows/cloudflare.yml` (`cloudflare-<folder>.yml` for a Worker in a subfolder) | Checks the repo on every push and pull request |
+| `.github/workflows/cloudflare.yml` | Checks the repo on every push and pull request |
 | `.claude/skills/cloudflare/SKILL.md` | The agent skill: how Claude works on the Worker |
-| `.claude/hooks/mise-cloudflare-session-start.sh`, and its entry in `.claude/settings.json` | Sets a Claude Code cloud session up when it starts |
+| `.claude/hooks/mise-cloudflare-session-start.sh`, and `.claude/settings.json` that runs it | Sets a Claude Code cloud session up when it starts |
+| `.gitignore` | The Worker's local secrets, a stray token, cf's login cache, installed packages and wrangler's local data, never committed |
 
 None is for editing. They come from inside mise-cloudflare, for the version `mise.toml` pins. There's no settings
 file: each choice is a command's flag, kept by Cloudflare's Workers Builds setup.

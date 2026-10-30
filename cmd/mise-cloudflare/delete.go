@@ -30,7 +30,7 @@ func (r repo) delete(ctx context.Context, yes bool) {
 	r.ensureLogin(ctx)
 	if _, err := wrangler.Output(r.w.Cmd(ctx, "delete", "--force")); err == nil {
 		fmt.Printf("✓ the Worker %s is deleted\n", r.wc.Name)
-	} else if strings.Contains(err.Error(), "10007") {
+	} else if strings.Contains(err.Error(), "10007") || strings.Contains(err.Error(), "10090") { // not there: 10090 for a Worker that never was
 		fmt.Printf("✓ the Worker %s isn't on Cloudflare\n", r.wc.Name)
 	} else {
 		fail(err)

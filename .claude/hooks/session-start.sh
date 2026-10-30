@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # This repo's own Claude Code cloud session hook, for working on mise-cloudflare: mise, then every tool this repo's
-# mise.toml pins, so mise run … works at once. Other repos get theirs from templates/session-start.sh, through init.
+# mise.toml pins, so mise run … works at once. Other repos get theirs from templates/.claude/hooks/, through init.
 # Does nothing on your own machine.
 set -euo pipefail
 [ "${CLAUDE_CODE_REMOTE:-}" = true ] || exit 0

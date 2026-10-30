@@ -73,13 +73,13 @@ func main() {
 	must(err)
 	switch command {
 	case "show-version":
-		fmt.Println(buildVersion())
+		showVersion()
 		return
 	case "show-help":
-		fmt.Print(help)
+		showHelp()
 		return
 	case "init", "update": // update: what the tasks of repos set up before init was its one name still run
-		initRepo(ctx, dir)
+		initRepo(dir)
 		return
 	}
 	// CI only checks the repo; Cloudflare's Workers Builds deploys. No one is there to click Allow.

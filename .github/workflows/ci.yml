@@ -1,5 +1,5 @@
-# mise-cloudflare's CI: every check that needs no Cloudflare account, both ways the steps run, on an existing repo
-# (examples/reference) and on a new one (examples/new). Cloudflare credentials never come here.
+# mise-cloudflare's CI: every check that needs no Cloudflare account, on the template (templates) and on a copy
+# stamped out from it (examples/new). Cloudflare credentials never come here.
 # Shell steps only, as go-htmx4's: no JavaScript actions.
 name: ci
 
@@ -39,16 +39,16 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           mise install
 
-      - name: The root against the templates, once the reference is set up (mise run root:check)
-        run: mise run root:check
+      - name: The tool's own tests, and the mise files and the Go lined up (mise run tool:test, which runs TestMise)
+        run: mise run tool:test
 
-      - name: An existing repo, examples/reference - the steps that need no account (mise run example:try, after tool:test), then what its own workflow runs (mise run example:verify)
+      - name: The template, templates - the steps that need no account (mise run template:e2e, after tool:test), then what its own workflow runs (mise run example:verify)
         run: |
-          mise run example:try
+          mise run template:e2e
           mise run example:verify
 
-      - name: A new repo, examples/new (mise run example:create) - the same, in it (EXAMPLE=new)
+      - name: A copy stamped out from it, examples/new (mise run example:create) - the same, in it (REPO_PATH=examples/new)
         run: |
           mise run example:create
-          EXAMPLE=new mise run example:try
-          EXAMPLE=new mise run example:verify
+          mise run example:e2e
+          REPO_PATH=examples/new mise run example:verify

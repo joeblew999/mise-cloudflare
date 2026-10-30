@@ -1,6 +1,6 @@
-# A Worker repo set up with mise-cloudflare as any repo is (mise run cloudflare shows the way). It pins the tool as
-# any repo does, at the version local: this checkout's build, which mise run tool:install makes in the repo above. Any
-# other repo pins a release: mise use github:joeblew999/mise-cloudflare@<version>
+# A Worker repo with mise-cloudflare (mise run cloudflare shows the way). It pins mise-cloudflare at local, the build
+# of the mise-cloudflare checkout it comes with (mise run tool:install there makes it); a copy that runs anywhere
+# else pins a release instead: mise use github:joeblew999/mise-cloudflare@<version>
 
 [settings]
 # mise 2026.10 fails to install aube while it fetches its agent skill (a 404); it isn't needed.

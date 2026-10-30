@@ -1,6 +1,0 @@
-node_modules/
-.wrangler/
-.dev.vars
-.env*
-# Cloudflare's cf CLI caches the account it logs into here: never commit it.
-.cloudflare/
