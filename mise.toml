@@ -9,9 +9,9 @@
 #     mise run template:e2e-connect-github  TestWalk on it, as far as connect-github, through GitHub (about 7 minutes)
 #     mise run template:update         its own pins at their newest releases, by its own task (cloudflare:update)
 #     mise run template:check-mise     TestMise on its mise file and the tool's Go (MISE_FILE, GO_CMD, GO_LAYOUT=file, GO_CALLERS=.)
-#   example: a copy stamped out from the template, as a person's repo is, made by the walk and gone after it
-#     mise run example:e2e-serve       TestWalk on a stamped copy, as far as the stage serve (E2E_STAMPED=true; --version pins a release)
-#     mise run example:e2e-deploy      TestWalk on a stamped copy, as far as the stage deploy, on Cloudflare (E2E_STAGE=deploy)
+#   example: a new repo, made as a person makes one (init, then cloudflare:template), by the walk and gone after it
+#     mise run example:e2e-serve       TestWalk on a new repo, as far as the stage serve (E2E_STAMPED=true; --version runs a release)
+#     mise run example:e2e-deploy      TestWalk on a new repo, as far as the stage deploy, on Cloudflare (E2E_STAGE=deploy)
 #   tool: mise-cloudflare itself
 #     mise run tool:build              its build, bin/mise-cloudflare
 #     mise run tool:install            that build as the mise version local, the template's on this machine (and any repo's)
@@ -64,13 +64,13 @@ description = "This repo's own pins at their newest releases, with the tool's ow
 run = "go run ./cmd/mise-cloudflare update"
 
 [tasks."example:e2e-serve"]
-description = "TestWalk on a copy stamped out from the template, as a person's repo is (only what a user brings, its own Worker, mise-cloudflare-new, its own git, then mise-cloudflare init), in a folder of its own that goes when the walk ends; as far as the stage serve (06-serve, needing nothing). It pins this checkout's build (local), or a release with --version, as the release tries it. After tool:install"
+description = "TestWalk on a new repo, made as a person makes one (an empty folder with its own git, mise-cloudflare init, then its own cloudflare:template: the template's Worker named for the folder, mise-cloudflare-new), in a folder of its own that goes when the walk ends; as far as the stage serve (06-serve, needing nothing). It pins this checkout's build (local), or a release with --version, as the release tries it. After tool:install"
 usage = 'flag "--version <version>" help="pin this release of mise-cloudflare from GitHub, as mise use does, instead of the build of this checkout"'
 depends = ["tool:install"]
 run = "REPO_PATH=templates E2E_STAMPED=true E2E_PIN=${usage_version:-} E2E_STAGE=serve go test . -run '^TestWalk$' -count=1 -v -timeout 10m"
 
 [tasks."example:e2e-deploy"]
-description = "TestWalk on a copy stamped out from the template, as example:e2e-serve makes it, as far as the stage deploy (08-deploy, needing a Cloudflare account): its Worker, mise-cloudflare-new, deployed on its own login, checked live, then deleted. No connect-github: the copy has its own git, not on GitHub, which Workers Builds builds from. The first time, an Allow. After tool:install"
+description = "TestWalk on a new repo, as example:e2e-serve makes it, as far as the stage deploy (08-deploy, needing a Cloudflare account): its Worker, mise-cloudflare-new, deployed on its own login, checked live, then deleted. No connect-github: the copy has its own git, not on GitHub, which Workers Builds builds from. The first time, an Allow. After tool:install"
 usage = 'flag "--version <version>" help="pin this release of mise-cloudflare from GitHub, as mise use does, instead of the build of this checkout"'
 depends = ["tool:install"]
 run = "REPO_PATH=templates E2E_STAMPED=true E2E_PIN=${usage_version:-} E2E_STAGE=deploy go test . -run '^TestWalk$' -count=1 -v -timeout 30m"

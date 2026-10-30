@@ -41,6 +41,7 @@ And:
   mise run cloudflare:verify         what the repo's GitHub workflow runs: its setup and test tasks, then check
   mise run cloudflare:run-wrangler   any other wrangler command, on the repo's login: d1 list
   mise run cloudflare:update         the repo's own pins at their newest releases: mise's tools, packages, Go modules
+  mise run cloudflare:template       the template's own Worker, in a repo with none yet: it never writes over a file
   mise run cloudflare:show-version   this build's version
   mise run cloudflare:show-help      this
 `
@@ -81,6 +82,12 @@ func main() {
 		return
 	case "init":
 		initRepo(dir)
+		return
+	case "template": // a repo with no Worker yet
+		if inCI() {
+			fail(errors.New("in CI template doesn't run: CI only checks the repo, and template writes the template's Worker into it; run mise run cloudflare:template on your machine"))
+		}
+		templateRepo(dir)
 		return
 	case "update": // any folder with pins of its own, a Worker or not
 		if inCI() {
@@ -138,6 +145,9 @@ type repo struct {
 
 func openRepo(ctx context.Context, dir string) repo {
 	w := wrangler.W{Dir: dir}
+	if !hasWorker(dir) {
+		fail(errNoWorker)
+	}
 	if !w.Installed() {
 		fail(errors.New("wrangler isn't installed here: install the repo's dependencies (its package.json pins wrangler)"))
 	}

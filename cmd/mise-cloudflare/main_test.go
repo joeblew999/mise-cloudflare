@@ -10,13 +10,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/joeblew999/mise-cloudflare/templates"
 )
 
 // commands is every mise-cloudflare command, in the order of a repo's tasks: the numbered steps 03 to 14, then the rest.
-var commands = []string{"init", "check", "show", "serve", "set-secrets", "deploy", "connect-github", "set-preview-secrets", "preview", "login", "delete", "logout", "clean", "verify", "update", "run-wrangler", "show-version", "show-help"}
+var commands = []string{"init", "check", "show", "serve", "set-secrets", "deploy", "connect-github", "set-preview-secrets", "preview", "login", "delete", "logout", "clean", "verify", "update", "template", "run-wrangler", "show-version", "show-help"}
 
 // taskVerb is the command a task's name names: cloudflare:08-deploy names deploy, cloudflare:verify names verify.
 var taskVerb = regexp.MustCompile(`^cloudflare:(?:\d\d-)?([a-z][a-z-]*)$`)
@@ -112,6 +113,45 @@ func TestOwnMise(t *testing.T) {
 	got := repo{dir: filepath.Join(link, "repo")}.pins(context.Background())
 	if want := map[string]string{"mise.toml yq": "4.44.1"}; !maps.Equal(got, want) {
 		t.Errorf("a repo through a link, its yq not installed: pins %v, want %v (its own, not its parent folder's jq)", got, want)
+	}
+}
+
+// TestTemplate: template writes the template's Worker, named for the folder, into a repo with none, and never writes
+// over a file: a repo with a Worker of its own gets none of it, and a mise.toml of its own is left as it is.
+func TestTemplate(t *testing.T) {
+	empty := filepath.Join(t.TempDir(), "My_New Repo")
+	os.Mkdir(empty, 0o755)
+	templateRepo(empty)
+	for _, f := range []string{"src/worker.js", "wrangler.jsonc", "package.json", "pnpm-lock.yaml", ".dev.vars.example", "mise.toml"} {
+		if _, err := os.Stat(filepath.Join(empty, f)); err != nil {
+			t.Errorf("%s not written into an empty repo: %v", f, err)
+		}
+	}
+	for _, f := range []string{"wrangler.jsonc", "package.json"} {
+		if b, _ := os.ReadFile(filepath.Join(empty, f)); !bytes.Contains(b, []byte(`"my-new-repo"`)) || bytes.Contains(b, []byte(templates.WorkerName)) {
+			t.Errorf("%s isn't named for its folder, my-new-repo:\n%s", f, b)
+		}
+	}
+	own := t.TempDir()
+	os.WriteFile(filepath.Join(own, "package.json"), []byte(`{"name":"mine"}`), 0o644)
+	templateRepo(own)
+	if entries, _ := os.ReadDir(own); len(entries) != 1 {
+		t.Errorf("a repo with a package.json of its own got the template's: %v", entries)
+	}
+	tools := t.TempDir()
+	mine := "[tools]\njq = \"1.8.2\"\n"
+	os.WriteFile(filepath.Join(tools, "mise.toml"), []byte(mine), 0o644)
+	templateRepo(tools)
+	if b, _ := os.ReadFile(filepath.Join(tools, "mise.toml")); string(b) != mine {
+		t.Errorf("the repo's own mise.toml was written over: %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(tools, "wrangler.jsonc")); err != nil {
+		t.Errorf("no Worker written beside a mise.toml of the repo's own: %v", err)
+	}
+	for _, bad := range []string{"___", strings.Repeat("a", 64)} {
+		if _, err := workerName(bad); err == nil {
+			t.Errorf("%q makes a Worker name", bad)
+		}
 	}
 }
 

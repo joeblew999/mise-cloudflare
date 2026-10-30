@@ -81,6 +81,10 @@ run = "mise-cloudflare verify"
 description = "The repo's own pins at their newest releases: its mise tools, its packages (with aube, whichever lockfile it has) and Go modules, mise-cloudflare's pin among them (at local it stays; moved, 03-init writes its files again). What changed is in git: the steps prove it"
 run = "mise-cloudflare update"
 
+["cloudflare:template"]
+description = "The template's own Worker, in a repo with none yet: its code, wrangler.jsonc and package.json named for the repo's folder, the lockfile, .dev.vars.example, and the mise.toml that installs its wrangler. It never writes over a file: a repo with a Worker of its own gets none of it. Then mise install, mise run setup"
+run = "mise-cloudflare template"
+
 ["cloudflare:run-wrangler"]
 description = "Any other wrangler command, on the repo's login: mise run cloudflare:run-wrangler d1 list"
 usage = 'arg "[args]..." help="the wrangler command, passed on as it is: d1 list"'

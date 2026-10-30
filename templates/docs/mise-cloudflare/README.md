@@ -9,14 +9,19 @@ Written by `mise-cloudflare init`, for the version this repo's `.mise/config.tom
 
 ## Set up and upgrade
 
-In a repo that has a Worker (a `wrangler.jsonc`, and wrangler in its `package.json`), at the repository's root
-(GitHub and Claude Code read `.github/` and `.claude/` only there):
+In a repo, new or with a Worker of its own (a `wrangler.jsonc`, and wrangler in its `package.json`), at the
+repository's root (GitHub and Claude Code read `.github/` and `.claude/` only there):
 
 ```sh
 mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
 mise trust --all && mise install
 mise run cloudflare
 ```
+
+A repo with no Worker yet can take the template's: `mise run cloudflare:template` writes its code, its
+`wrangler.jsonc` and `package.json` named for the repo's folder, the lockfile, `.dev.vars.example`, and the `mise.toml`
+that installs its wrangler; then `mise install` and `mise run setup`. It never writes over a file: a repo with a Worker
+of its own gets none of it, and a `mise.toml` of its own is left as it is, with what to add to it.
 
 `init` writes everything, mise-cloudflare's pin among it: `.mise/config.toml`, at the release that ran `init`, so
 `mise install` gets that release from GitHub, here and on GitHub's machines alike. Commit what `init` wrote. There's
@@ -77,6 +82,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:13-delete` | Deploy undone: the Worker deleted, then its own KV, D1 and R2 and its previews' own. An R2 bucket that still holds objects stays: it never deletes what's in one. It asks first; `--yes` doesn't | The Worker's name, to be sure |
 | `cloudflare:12-login` / `cloudflare:14-logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
 | `cloudflare:15-clean` | The local state undone, as `13-delete` undoes Cloudflare's: `.wrangler/` (the local D1, KV and R2, and what deploys wrote) and `.dev.vars`, so the next `06-serve` starts from nothing. It asks first; `--yes` doesn't | y, to be sure |
+| `cloudflare:template` | The template's own Worker, in a repo with none yet, named for the repo's folder, with the `mise.toml` that installs its wrangler. It never writes over a file | Nothing |
 | `cloudflare:update` | The repo's own pins at their newest releases, nothing outside it: its mise tools (`mise upgrade --bump`), its packages (aube, which writes whichever lockfile the repo has) and Go modules (`go get -u`, `go mod tidy`), then `03-init` if mise-cloudflare moved (at `local` it stays). mise and aube skip a release younger than their minimum age. What changed is in git: the steps prove it | Nothing |
 | `cloudflare:03-init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init` | Nothing |
 | `cloudflare:show-version` | This build's version | Nothing |

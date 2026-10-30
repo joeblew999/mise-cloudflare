@@ -23,7 +23,7 @@ the root's tasks run.
 
 ## Use it in your repo
 
-In a repo that has a Worker (a `wrangler.jsonc`, and wrangler in its `package.json`):
+In a repo, new or with a Worker of its own (a `wrangler.jsonc`, and wrangler in its `package.json`):
 
 ```sh
 mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
@@ -32,7 +32,8 @@ mise run cloudflare
 ```
 
 `init` pins mise-cloudflare in the repo's `.mise/config.toml`, at the release that ran it, so `mise install` gets that
-release from GitHub. In this checkout the template pins a release the same way, and `mise run tool:install` overrides
+release from GitHub. A repo with no Worker yet can take the template's: `mise run cloudflare:template`, which never
+writes over a file. In this checkout the template pins a release the same way, and `mise run tool:install` overrides
 it on this machine only, with this checkout's build (`templates/.mise/config.local.toml`, never committed).
 
 `init` writes everything your repo gets, its own docs among them: `docs/mise-cloudflare/README.md`, with every
@@ -64,8 +65,8 @@ It walks two repos:
 
 - **The template**, [templates/](templates/), in place; for `connect-github`, in a checkout of this repo at HEAD, as
   Cloudflare builds it from GitHub.
-- **A copy stamped out from it**, as a person's repo is: only what a user brings (the Worker's code, its `package.json`
-  and lockfile, its `mise.toml`), a Worker of its own (`mise-cloudflare-new`), its own git, then `mise-cloudflare init`.
+- **A new repo**, made as a person makes one: an empty folder (`mise-cloudflare-new`) with its own git,
+  `mise-cloudflare init`, then its own `cloudflare:template`, which writes the template's Worker named for the folder.
   The walk makes it in a folder of its own, and it goes when the walk ends. Its `init` runs at this checkout's build
   (`local`), or at a release with `--version`, as the release tries it, and pins itself in `.mise/config.toml`. Not
   `connect-github`: it has no GitHub.
