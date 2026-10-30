@@ -41,10 +41,11 @@ func main() {
 	fmt.Println("next: mise run example:e2e")
 }
 
-// newRepo makes it, pinning version (or this checkout's build, local, when it is "").
+// newRepo makes it, pinning version (or this checkout's build, local, when it is ""). It never deletes one that's there:
+// mise run example:create runs example:delete first.
 func newRepo(version string) error {
-	if err := os.RemoveAll(to); err != nil {
-		return err
+	if _, err := os.Stat(to); err == nil {
+		return fmt.Errorf("%s is there: mise run example:delete first (mise run example:create does)", to)
 	}
 	for _, b := range brought {
 		err := filepath.WalkDir(filepath.Join(from, b), func(path string, d fs.DirEntry, err error) error {

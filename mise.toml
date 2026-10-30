@@ -13,6 +13,9 @@
 #     mise run template:check-mise     TestMise on its mise file and the tool's Go (MISE_FILE, GO_CMD, GO_LAYOUT=file, GO_CALLERS=.)
 #   example: the repo REPO_PATH names (templates, the template, by default; examples/new, a copy stamped out from it)
 #     mise run example:create          a new repo, examples/new, from only what a user brings; the steps do the rest
+#     mise run example:delete          deletes examples/new; example:create makes it again
+#     mise run example:e2e-serve       TestWalk on examples/new, as far as the stage serve (REPO_PATH=examples/new E2E_STAGE=serve)
+#     mise run example:e2e-deploy      TestWalk on examples/new, as far as the stage deploy, on Cloudflare (E2E_STAGE=deploy)
 #     mise run example:e2e             the end-to-end on a stamped copy, examples/new, through its mise file (TestExampleE2e)
 #     mise run example:deploy          the steps on Cloudflare, on it (TestExampleDeploy)
 #   tool: mise-cloudflare itself
@@ -42,8 +45,12 @@ includes = ["example.mise.toml"]
 [tasks."example:create"]
 description = "A copy stamped out from the template, examples/new: only what a user brings, from templates (the Worker's code, package.json, lockfile and mise.toml, the Worker named mise-cloudflare-new), pinning this checkout's build (local), or a release with --version; then its own git and mise-cloudflare init in it, as a person adding mise-cloudflare does. Then: mise run example:e2e"
 usage = 'flag "--version <version>" help="pin this release from GitHub, as mise use does, instead of the build of this checkout"'
-depends = ["tool:install"]
+depends = ["tool:install", "example:delete"]
 run = "go run ./root/example/create -version=${usage_version:-}"
+
+[tasks."example:delete"]
+description = "Deletes the copy example:create stamped out, examples/new, with its own git and what its setup installed; mise run example:create makes it again. Only the folder: the walk deletes its Worker on Cloudflare itself (13-delete), and its login stays on this machine"
+run = "go run ./root/example/delete"
 
 [tasks."template:e2e"]
 description = "TestTemplateE2e: the end-to-end on the template, templates/, through its own mise file, with no Cloudflare account: mise install, mise run setup, cloudflare:04-check, what cloudflare:05-show says next, cloudflare:12-login stopping at once in CI, the Worker locally with cloudflare:06-serve, cloudflare:15-clean. After tool:test and tool:install. After every change"
@@ -68,6 +75,16 @@ run = "REPO_PATH=templates E2E_STAGE=deploy go test . -run '^TestWalk$' -count=1
 description = "TestWalk on the template, as far as the stage connect-github (09-connect-github, needing GitHub too), in a checkout of this repo at HEAD, as Cloudflare builds it: Workers Builds builds production from a throwaway branch, a pull request's branch gets its own preview, gone with its branch; then everything deleted. About 8 minutes: it waits on Cloudflare's builds. After tool:install"
 depends = ["tool:install"]
 run = "REPO_PATH=templates E2E_STAGE=connect-github go test . -run '^TestWalk$' -count=1 -v -timeout 90m"
+
+[tasks."example:e2e-serve"]
+description = "TestWalk on a copy stamped out from the template, examples/new (mise run example:create first), as far as the stage serve (06-serve, needing nothing): its numbered tasks in their order, through its own mise file, each checked. After tool:install"
+depends = ["tool:install"]
+run = "REPO_PATH=examples/new E2E_STAGE=serve go test . -run '^TestWalk$' -count=1 -v -timeout 10m"
+
+[tasks."example:e2e-deploy"]
+description = "TestWalk on a copy stamped out from the template, examples/new (mise run example:create first), as far as the stage deploy (08-deploy, needing a Cloudflare account): its Worker, mise-cloudflare-new, deployed on its own login, checked live, then deleted. No connect-github: examples/new has its own git, not on GitHub, which Workers Builds builds from. The first time, an Allow. After tool:install"
+depends = ["tool:install"]
+run = "REPO_PATH=examples/new E2E_STAGE=deploy go test . -run '^TestWalk$' -count=1 -v -timeout 30m"
 
 [tasks."example:e2e"]
 description = "TestExampleE2e: the same end-to-end on a copy stamped out from the template, examples/new (mise run example:create first), through its own mise file. After tool:test and tool:install"
