@@ -41,19 +41,20 @@ usage = 'flag "--version <version>" help="pin this release from GitHub, as mise 
 run = "go run ./root/example/create -version=${usage_version:-}"
 
 [tasks."example:try"]
-description = "TestTry: the steps that need no Cloudflare account, as a person takes them, on examples/<EXAMPLE> (reference by default; new after example:create): 04-check's rules, 05-show's next step, 12-login stopping at once in CI, the Worker locally with 06-serve. After tool:test. After every change"
-depends = ["tool:test"]
-run = "TRY=1 go test ./root/e2e -run '^TestTry$' -count=1 -v -timeout 10m"
+description = "TestExampleTry: the steps that need no Cloudflare account, as a person takes them, on examples/<EXAMPLE> (reference by default; new after example:create): 00 to 04, 05-show's next step, 12-login stopping at once in CI, the Worker locally with 06-serve. After tool:test and tool:install. After every change"
+depends = ["tool:test", "tool:install"]
+run = "TRY=1 go test ./root/e2e -run '^TestExampleTry$' -count=1 -v -timeout 10m"
 
 [tasks."example:deploy"]
-description = "TestDeploy: the steps on Cloudflare, as a person takes them, on examples/<EXAMPLE>, a few minutes: 12-login, 07-set-secrets, 08-deploy, the live D1, KV, R2 and secret, stray tokens refused by 08-deploy, 13-delete; everything deleted after. After example:try. After a change to how it deploys. The first time, an Allow"
+description = "TestExampleDeploy: the steps on Cloudflare, as a person takes them, on examples/<EXAMPLE>, a few minutes: 12-login, 07-set-secrets, 08-deploy, the live D1, KV, R2 and secret, stray tokens refused by 08-deploy, 13-delete; everything deleted after. After example:try. After a change to how it deploys. The first time, an Allow"
 usage = 'flag "--clean" help="also run 14-logout: the next run logs in again"'
 depends = ["example:try"]
-run = "CLOUDFLARE_E2E=1 DEPLOY_CLEAN=${usage_clean:-false} go test ./root/e2e -run '^TestDeploy$' -count=1 -v -timeout 30m"
+run = "CLOUDFLARE_E2E=1 DEPLOY_CLEAN=${usage_clean:-false} go test ./root/e2e -run '^TestExampleDeploy$' -count=1 -v -timeout 30m"
 
 [tasks."example:clean"]
-description = "TestClean: delete whatever a stopped example:deploy or root:deploy-every-push left of examples/<EXAMPLE>'s Worker, so the next one can start: its Workers Builds setup (09-connect-github --off), the root's e2e-* branches, the Worker, its D1, KV and R2 and its previews'"
-run = "CLOUDFLARE_E2E=1 go test ./root/e2e -run '^TestClean$' -count=1 -v -timeout 15m"
+description = "TestExampleClean: examples/<EXAMPLE> back to the start, whatever a stopped example:deploy or root:deploy-every-push left: nothing of its Worker on Cloudflare (09-connect-github --off, the root's e2e-* branches, 13-delete), and none of its local state (15-clean). After tool:install"
+depends = ["tool:install"]
+run = "CLOUDFLARE_E2E=1 go test ./root/e2e -run '^TestExampleClean$' -count=1 -v -timeout 15m"
 
 [tasks."tool:build"]
 description = "This repo's build, bin/mise-cloudflare"
@@ -75,11 +76,11 @@ depends = ["tool:test"]
 run = "go run ./root/tool/release -dry-run=${usage_dry_run:-false}"
 
 [tasks."root:check"]
-description = "TestCheck: the root against what it gives other repos, once the reference is set up: the examples and the root keep to themselves, the steps line up with a repo's tasks, the tool reads the reference's config and scopes through its wrangler. After example:04-check"
+description = "TestRootCheck: the root against what it gives other repos, once the reference is set up: the examples and the root keep to themselves, the steps line up with a repo's tasks, the tool reads the reference's config and scopes through its wrangler, and every task here runs the Go of its name. After example:04-check"
 depends = ["example:04-check"]
-run = "CHECK=1 go test ./root/e2e -run '^TestCheck$' -count=1 -v"
+run = "CHECK=1 go test ./root/e2e -run '^TestRootCheck$' -count=1 -v"
 
 [tasks."root:deploy-every-push"]
-description = "TestDeployEveryPush: Cloudflare's Workers Builds deploying every push of the root, through GitHub (about 25 minutes), in a checkout of it where the reference is a subfolder: production from a throwaway branch, a branch's preview, gone with its branch. Everything deleted after. After example:deploy. After a change to connect-github"
+description = "TestRootDeployEveryPush: Cloudflare's Workers Builds deploying every push of the root, through GitHub (about 25 minutes), in a checkout of it where the reference is a subfolder: production from a throwaway branch, a branch's preview, gone with its branch. Everything deleted after. After example:deploy. After a change to connect-github"
 depends = ["example:deploy"]
-run = "CLOUDFLARE_E2E=1 go test ./root/e2e -run '^TestDeployEveryPush$' -count=1 -v -timeout 90m"
+run = "CLOUDFLARE_E2E=1 go test ./root/e2e -run '^TestRootDeployEveryPush$' -count=1 -v -timeout 90m"

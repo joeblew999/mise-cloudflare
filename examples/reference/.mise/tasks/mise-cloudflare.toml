@@ -59,6 +59,10 @@ description = "14. The repo's Cloudflare logins logged out and deleted: wrangler
 tools = { "npm:cf" = "1.0.0-beta.26" }
 run = "mise-cloudflare logout"
 
+["cloudflare:15-clean"]
+description = "15. The local state undone, as 13-delete undoes Cloudflare's: .wrangler/ (the local D1, KV and R2, and what deploys wrote) and .dev.vars, so the next 06-serve starts from nothing (it asks first; --yes doesn't)"
+run = "mise-cloudflare clean"
+
 ["cloudflare:verify"]
 description = "What the repo's GitHub workflow runs: its own setup and test tasks, if it has them, then check. The same here as on GitHub"
 run = "mise-cloudflare verify"

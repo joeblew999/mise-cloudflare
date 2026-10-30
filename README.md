@@ -63,6 +63,7 @@ One name all the way through: from 04 on, step `example:nn-x` runs the repo's ta
 | `example:12-login` | `cloudflare:12-login` |
 | `example:13-delete` | `cloudflare:13-delete`: 08 and 11 undone |
 | `example:14-logout` | `cloudflare:14-logout` |
+| `example:15-clean` | `cloudflare:15-clean`: 06's local state undone |
 
 `example:verify` runs in the repo what its own GitHub workflow runs there: the workflow only checks out and installs mise,
 then runs `mise run cloudflare:verify`, so `mise run example:verify` here does on this machine exactly what GitHub does in
@@ -99,7 +100,7 @@ mise-cloudflare itself, and `root:` on this repo itself.
 | `mise run example:create` | A new repo, `examples/new/`, from only what a user brings, pinning this checkout's build (`local`), or a release with `--version`; the steps do the rest | To try the steps on a new repo | No |
 | `mise run example:try` | The steps that need no account, as a person takes them, on `examples/<EXAMPLE>`: `04-check`'s rules, `05-show`'s next step, `12-login` stopping at once in CI, the Worker locally with `06-serve` | After every change | No |
 | `mise run example:deploy` | The steps on Cloudflare, on `examples/<EXAMPLE>`, a few minutes: `12-login`, `07-set-secrets`, `08-deploy`, the live D1, KV, R2 and secret, stray tokens refused by `08-deploy`, `13-delete`; everything deleted after | After a change to how it deploys | Yes |
-| `mise run example:clean` | Deletes what a stopped `example:deploy` or `root:deploy-every-push` left of `examples/<EXAMPLE>`'s Worker: its Workers Builds setup, the root's `e2e-*` branches, the Worker, its D1, KV and R2 and its previews' | After a stopped run | Yes |
+| `mise run example:clean` | `examples/<EXAMPLE>` back to the start, whatever a stopped `example:deploy` or `root:deploy-every-push` left: nothing of its Worker on Cloudflare (its Workers Builds setup, the root's `e2e-*` branches, then `13-delete`), and none of its local state (`15-clean`) | After a stopped run | Yes |
 | `mise run tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
 | `mise run tool:install` | That build as the mise version `local`, for the examples and any repo on this machine: `mise use github:joeblew999/mise-cloudflare@local` there | To try a change in another repo, never by waiting on a release | No |
 | `mise run tool:test` | The tool's own checks, run for real: `go vet`, its Go tests, the release config. They need no example | After every change | No |
@@ -107,14 +108,22 @@ mise-cloudflare itself, and `root:` on this repo itself.
 | `mise run root:check` | The root against what it gives other repos, once the reference is set up: the examples and the root keep to themselves, the steps line up with a repo's tasks, the tool reads the reference's config and scopes through its own wrangler | After every change | No |
 | `mise run root:deploy-every-push` | Workers Builds deploying every push of the root, through GitHub, about 25 minutes: production from a throwaway branch, a branch's preview with its own D1, KV, R2 and secret, gone with its branch | After a change to `connect-github` | Yes, and GitHub |
 
-An end-to-end task runs the Go test of its name, in the file of its name: `mise run example:try` is `TestTry` in
-[root/e2e/try_test.go](root/e2e/try_test.go), `root:check` is `TestCheck`, and so on; what they share is in
-[root/e2e/e2e_test.go](root/e2e/e2e_test.go). A test on an example does only what a person does: the root's numbered
-steps, in order, `mise run example:nn-x`, on the repo `EXAMPLE` names, and it looks at the repo and cleans up with the
-repo's own tasks. `root:deploy-every-push` runs in a checkout of the root, where the reference is a subfolder, as
-Cloudflare builds it from GitHub, so it runs the reference's own tasks there. `example:deploy` and
-`root:deploy-every-push` refuse to start while the Worker or its D1, KV or R2 exists, and delete what they made even
-when they fail. Previews, staging and production are shown working by Cloudflare's own checks on the pull requests:
+Every task here runs the Go of its name, by one rule (`mise run root:check` checks it): `noun:verb` runs the test
+`TestNounVerb` in `root/e2e/noun_verb_test.go`, or the program `root/noun/verb`. So `mise run example:try` is
+`TestExampleTry` in [root/e2e/example_try_test.go](root/e2e/example_try_test.go), `root:deploy-every-push` is
+`TestRootDeployEveryPush` in [root/e2e/root_deploy_every_push_test.go](root/e2e/root_deploy_every_push_test.go),
+and `example:create` is [root/example/create](root/example/create/main.go); what the tests share is in
+[root/e2e/e2e_test.go](root/e2e/e2e_test.go).
+
+A test does what a person does, in their order: the root's numbered steps, one at a time from 00
+(`rootStep("07-set-secrets")` is `mise run example:07-set-secrets` at the root), and each step runs the repo's own task
+of its number (`mise run cloudflare:07-set-secrets`). The one thing a test runs in the repo itself is
+`repoTask("run-wrangler")`, to look at what is on the account; the rest it looks at as a person does: the Worker's
+URL, git, Cloudflare's builds. `root:deploy-every-push` runs in a checkout of the root, as Cloudflare builds it from
+GitHub, where the reference is a folder of the root's own git: its steps there are 01, 02, then 12 on (00, 03 and 04
+would make it a repo of its own, or put its workflow in the root's). `example:deploy` and `root:deploy-every-push`
+start by deleting whatever a stopped run left of the Worker on Cloudflare (as `example:clean` does), and delete what
+they made with `13-delete` even when they fail. Previews, staging and production are shown working by Cloudflare's own checks on the pull requests:
 never build a harness for those.
 
 ### Layout
@@ -128,7 +137,7 @@ never build a harness for those.
 | [root/tool/release/](root/tool/release/) | this repo's | `mise run tool:release` |
 | [examples/](examples/) | this repo's | repos of their own that use it: the reference, and the new one |
 | [.claude/](.claude/), [.github/workflows/](.github/workflows/) | this repo's | its own Claude Code hook and its own workflows (`ci`, `release`); other repos get theirs from `templates/` |
-| [root/e2e/](root/e2e/) | this repo's | `check`, `try`, `deploy`, `deploy-every-push` and `clean`, a file each |
+| [root/e2e/](root/e2e/) | this repo's | the end-to-end tests, a file each, named for its task: `example_try`, `example_deploy`, `example_clean`, `root_check`, `root_deploy_every_push` |
 
 ### CI and releases
 

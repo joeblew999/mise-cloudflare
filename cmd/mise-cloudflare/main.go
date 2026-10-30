@@ -35,6 +35,7 @@ The steps, in order (mise run cloudflare says which is next):
   mise run cloudflare:12-login                 the repo's Cloudflare login (the others make it when they need it)
   mise run cloudflare:13-delete                deploy undone: the Worker, its KV, D1 and R2, its previews' own (--yes: don't ask)
   mise run cloudflare:14-logout                the repo's logins logged out and deleted
+  mise run cloudflare:15-clean                 the local state undone: .wrangler/ and .dev.vars (--yes: don't ask)
 
 And:
   mise run cloudflare:verify         what the repo's GitHub workflow runs: its setup and test tasks, then check
@@ -57,7 +58,7 @@ func main() {
 	branch := flags.String("branch", "", "connect-github: the branch whose pushes deploy production (default the repository's default branch, or production with --staging)")
 	staging := flags.String("staging", "", "connect-github: a staging branch, whose pushes deploy the wrangler environment env.staging")
 	build := flags.String("build", "", "connect-github: the build command (default installing from the lockfile: npm ci, …)")
-	yes := flags.Bool("yes", false, "delete: don't ask first")
+	yes := flags.Bool("yes", false, "delete, clean: don't ask first")
 	flags.Usage = func() { fmt.Fprint(os.Stderr, help) }
 	if !passes[command] {
 		flags.Parse(args)
@@ -82,7 +83,7 @@ func main() {
 		return
 	}
 	// CI only checks the repo; Cloudflare's Workers Builds deploys. No one is there to click Allow.
-	if inCI() && command != "" && command != "show" && command != "check" && command != "verify" && command != "serve" {
+	if inCI() && command != "" && command != "show" && command != "check" && command != "verify" && command != "serve" && command != "clean" {
 		fail(errors.New("in CI there's no one to log in: CI runs mise run cloudflare:verify, and Cloudflare's Workers Builds deploys (mise run cloudflare:09-connect-github)"))
 	}
 	r := openRepo(ctx, dir)
@@ -113,6 +114,8 @@ func main() {
 		r.delete(ctx, *yes)
 	case "logout":
 		r.logout(ctx)
+	case "clean":
+		r.clean(*yes)
 	default:
 		fmt.Fprint(os.Stderr, help)
 		os.Exit(2)

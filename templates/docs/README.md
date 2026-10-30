@@ -17,7 +17,7 @@ mise-cloudflare init
 ```
 
 Commit what `init` wrote and the pin in `mise.toml`. There's nothing to edit, then or ever. `init` also fixes what it
-can for `check`: it git-ignores `.dev.vars`, `.env`, `.cloudflare/` and `node_modules/`, pins wrangler to the version
+can for `check`: it git-ignores `.dev.vars`, `.env`, `.cloudflare/`, `node_modules/` and `.wrangler/` (wrangler's local D1, KV and R2, and each deploy's output), pins wrangler to the version
 installed, and writes `.dev.vars.example` when there's none.
 
 To upgrade: `mise use github:joeblew999/mise-cloudflare@<version>`, then `mise run cloudflare:03-init`. mise holds back a
@@ -69,6 +69,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:run-wrangler <...>` | Any wrangler command on the repo's login: `wrangler d1 list`, `secret put`, `tail`, … | Allow, the first time |
 | `cloudflare:13-delete` | Deploy undone: the Worker deleted, then its own KV, D1 and R2 and its previews' own. An R2 bucket that still holds objects stays: it never deletes what's in one. It asks first; `--yes` doesn't | The Worker's name, to be sure |
 | `cloudflare:12-login` / `cloudflare:14-logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
+| `cloudflare:15-clean` | The local state undone, as `13-delete` undoes Cloudflare's: `.wrangler/` (the local D1, KV and R2, and what deploys wrote) and `.dev.vars`, so the next `06-serve` starts from nothing. It asks first; `--yes` doesn't | y, to be sure |
 | `cloudflare:03-init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec -- mise-cloudflare init` | Nothing |
 | `cloudflare:show-version` | This build's version | Nothing |
 | `cloudflare:show-help` | Every command | Nothing |

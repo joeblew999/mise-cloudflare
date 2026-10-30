@@ -15,11 +15,12 @@ import (
 	"github.com/joeblew999/mise-cloudflare/templates"
 )
 
-// TestCheck checks this repo's own side against what it gives other repos, after the steps have set the reference up
-// (mise run root:check runs example:04-check first): the examples keep to themselves, the steps run a repo's tasks in
-// the template's order, and the tool reads the reference's config and scopes through its own wrangler. That the
-// reference has what this version's init writes is example:04-check's own check.
-func TestCheck(t *testing.T) {
+// TestRootCheck checks this repo's own side against what it gives other repos, after the steps have set the reference
+// up (mise run root:check runs example:04-check first): the examples keep to themselves, the steps run a repo's tasks
+// in the template's order, every task here runs the Go of its name, and the tool reads the reference's config and
+// scopes through its own wrangler. That the reference has what this version's init writes is example:04-check's own
+// check.
+func TestRootCheck(t *testing.T) {
 	if os.Getenv("CHECK") != "1" {
 		t.Skip("mise run root:check")
 	}
@@ -67,6 +68,37 @@ func TestCheck(t *testing.T) {
 		}
 		if !slices.Equal(stepped, tasks) {
 			t.Errorf("the steps %v don't line up with the template's tasks %v", stepped, tasks)
+		}
+	})
+
+	t.Run("every task here runs the Go of its name", func(t *testing.T) {
+		tasks, err := os.ReadFile("../../mise.toml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// noun:verb runs TestNounVerb in root/e2e/noun_verb_test.go, or the program root/noun/verb; the others (tool:build,
+		// tool:install, tool:test) run go or mise themselves, with no Go of their own.
+		camel := func(s string) string {
+			out := ""
+			for _, w := range strings.Split(s, "-") {
+				out += strings.ToUpper(w[:1]) + w[1:]
+			}
+			return out
+		}
+		test, program := regexp.MustCompile(`go test \./root/e2e -run '\^(Test\w+)\$'`), regexp.MustCompile(`go run \./root/(\S+)`)
+		for _, m := range regexp.MustCompile(`(?m)^\[tasks\."([a-z]+):([a-z-]+)"\]\n(?:.*\n)*?run = "([^"]*)"`).FindAllStringSubmatch(string(tasks), -1) {
+			noun, verb, run := m[1], m[2], m[3]
+			if got := test.FindStringSubmatch(run); got != nil {
+				want, file := "Test"+camel(noun)+camel(verb), noun+"_"+strings.ReplaceAll(verb, "-", "_")+"_test.go"
+				if got[1] != want {
+					t.Errorf("%s:%s runs %s, not %s", noun, verb, got[1], want)
+				}
+				if b, _ := os.ReadFile(file); !strings.Contains(string(b), "func "+want+"(t *testing.T)") {
+					t.Errorf("%s:%s: root/e2e/%s has no %s", noun, verb, file, want)
+				}
+			} else if got := program.FindStringSubmatch(run); got != nil && got[1] != noun+"/"+verb {
+				t.Errorf("%s:%s runs root/%s, not root/%s/%s", noun, verb, got[1], noun, verb)
+			}
 		}
 	})
 

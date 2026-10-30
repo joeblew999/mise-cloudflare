@@ -1,7 +1,8 @@
-# The steps, in order, exactly as a person does them to a repo that uses mise-cloudflare: mise run <step>, at the top
-# (mise.toml includes this file). Each runs in a repo in examples/, on that repo's own mise only (MISE_CEILING_PATHS),
-# never this repo's, and each runs the steps it needs first. A step that asks you something (06, 07, 10) runs on your
-# terminal, and no step depends on it.
+# The steps, in order, exactly as a person does them to a repo that uses mise-cloudflare: mise run example:<step>, at
+# the top (mise.toml includes this file). Each runs in a repo in examples/, on that repo's own mise only
+# (MISE_CEILING_PATHS), never this repo's, and each runs the steps it needs first. A step that asks you something (06,
+# 07, 10) runs on your terminal, and no step depends on it. The end-to-end tests (root/e2e) run them one at a time, in
+# this order, as a person does.
 #
 # Two ways, on an existing repo or a new one:
 #   examples/reference, committed (the default):    mise run example:05-show
@@ -9,27 +10,29 @@
 #
 # example:verify runs in the repo what its own GitHub workflow runs (mise run cloudflare:verify): CI runs it on both.
 #
-# One name all the way through: each step runs one thing, and is named after it. From 04 on, step example:nn-x runs the repo's
-# task cloudflare:x, which runs mise-cloudflare x; steps 00 to 03 come before those tasks exist. The repo's tasks file
-# (templates/tasks.toml) has them in this order too.
+# One name and one number all the way through: from 04 on, step example:nn-x runs the repo's task cloudflare:nn-x,
+# which runs mise-cloudflare x; steps 00 to 03 come before those tasks exist. The repo's tasks file
+# (templates/tasks.toml) has them in this order too (root:check checks it).
 #
-#   step             runs                   what
-#   00-git-init      git init               a git repo of its own (an example needs it: a person's repo is one already)
-#   01-mise-install  mise install           what it pins: node, aube, mise-cloudflare at local (this checkout's build)
-#   02-setup         setup                  its own task: aube install, the wrangler package.json pins
-#   03-init          mise-cloudflare init   writes the cloudflare tasks, the skill, the workflow, the hook, the docs
-#   04-check         cloudflare:04-check       its rules
-#   05-status        cloudflare:05-show      what's done, and what to run next
-#   06-dev           cloudflare:06-serve         the Worker locally, no account (Ctrl-C stops it)
-#   07-secret        cloudflare:07-set-secrets      the secrets the Worker requires, before it deploys (it asks for each)
-#   08-deploy        cloudflare:08-deploy      on Cloudflare, on its own login (the first time, Allow)
-#   09-github        cloudflare:09-connect-github      Cloudflare deploys every push: it needs the repo on GitHub, and
-#                                           the example's own git has none, so here it stops and says so
-#   10-secret        cloudflare:07-set-secrets      --previews: the secrets previews require, which they don't inherit
-#   11-preview       cloudflare:11-preview     a preview of what's here now, at its own URL
-#   12-login         cloudflare:12-login       the repo's login (the others make it when they need it)
-#   13-delete        cloudflare:13-delete      08-deploy and 11-preview undone: the Worker, its KV, D1 and R2, its previews'
-#   14-logout        cloudflare:14-logout      the logins deleted: the next 08-deploy asks for Allow again
+#   step                     runs                                 what
+#   00-git-init              git init                             a git repo of its own (a person's repo is one already)
+#   01-mise-install          mise install                         what it pins: node, aube, mise-cloudflare at local
+#   02-setup                 mise run setup                       its own task: aube install
+#   03-init                  mise-cloudflare init                 the cloudflare tasks, the skill, the workflow, the hook, the docs
+#   04-check                 cloudflare:04-check                  its rules
+#   05-show                  cloudflare:05-show                   what's done, and what to run next
+#   06-serve                 cloudflare:06-serve                  the Worker locally, no account (Ctrl-C stops it)
+#   07-set-secrets           cloudflare:07-set-secrets            the secrets the Worker requires, before it deploys
+#   08-deploy                cloudflare:08-deploy                 on Cloudflare, on its own login (the first time, Allow)
+#   09-connect-github        cloudflare:09-connect-github         Cloudflare deploys every push: it needs the repo on
+#                                                                 GitHub, and the example's own git has none, so here it
+#                                                                 stops and says so
+#   10-set-preview-secrets   cloudflare:10-set-preview-secrets    the secrets previews require, which they don't inherit
+#   11-preview               cloudflare:11-preview                a preview of what's here now, at its own URL
+#   12-login                 cloudflare:12-login                  the repo's login (the others make it when they need it)
+#   13-delete                cloudflare:13-delete                 08 and 11 undone: the Worker, its KV, D1 and R2, its previews'
+#   14-logout                cloudflare:14-logout                 the logins deleted: the next 08-deploy asks for Allow again
+#   15-clean                 cloudflare:15-clean                  the local state undone: .wrangler/ and .dev.vars
 
 ["example:00-git-init"]
 description = "00. git init: the repo a git repo of its own (its .git, local, never committed), so init writes everything inside it. A person's repo is one already"
@@ -111,7 +114,7 @@ raw = true # it asks you: connected to your terminal, not prefixed
 run = "mise run cloudflare:10-set-preview-secrets"
 
 ["example:11-preview"]
-description = "11. cloudflare:11-preview: a preview of what's here now, at its own URL, with its own KV, D1 and R2 (after 08-deploy; its secrets are 10-secret's, set once)"
+description = "11. cloudflare:11-preview: a preview of what's here now, at its own URL, with its own KV, D1 and R2 (after 08-deploy; its secrets are 10-set-preview-secrets', set once)"
 depends = ["example:08-deploy"]
 dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
@@ -137,6 +140,13 @@ depends = ["example:03-init"]
 dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 run = "mise run cloudflare:14-logout"
+
+["example:15-clean"]
+description = "15. cloudflare:15-clean: the local state undone, .wrangler/ (the local D1, KV and R2, what deploys wrote) and .dev.vars; the next 06-serve starts from nothing"
+depends = ["example:03-init"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
+env = { MISE_CEILING_PATHS = "{{config_root}}" }
+run = "mise run cloudflare:15-clean --yes"
 
 ["example:verify"]
 description = "ci: what the repo's own GitHub workflow runs, here: its task cloudflare:verify (its setup and test tasks, then check). The workflow does only that, after it checks out and installs mise"

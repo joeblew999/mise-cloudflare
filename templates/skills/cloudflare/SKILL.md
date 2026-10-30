@@ -14,7 +14,7 @@ Start with `mise run cloudflare`: it shows the steps, which are done, and what t
 The tasks are numbered in the order a repo meets them, and each runs the command of its name
 (`mise run cloudflare:08-deploy` runs `mise-cloudflare deploy`): `03-init`, `04-check`, `05-show`, `06-serve`,
 `07-set-secrets`, `08-deploy`, `09-connect-github`, `10-set-preview-secrets`, `11-preview`, `12-login`, `13-delete`,
-`14-logout`, each `mise run cloudflare:<it>`. Steps 00 to 02 come before them: the repo's git, `mise install`, its own
+`14-logout`, `15-clean`, each `mise run cloudflare:<it>`. Steps 00 to 02 come before them: the repo's git, `mise install`, its own
 `setup`. And `mise run cloudflare:verify` (what GitHub runs), `mise run cloudflare:run-wrangler <...>` (any other
 wrangler command on the repo's login: `d1 list`, `secret put`, `tail`, …), `mise run cloudflare:show-help`.
 

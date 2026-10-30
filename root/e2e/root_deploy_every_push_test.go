@@ -12,14 +12,17 @@ import (
 	"time"
 )
 
-// TestDeployEveryPush proves mise run cloudflare:09-connect-github on the root (mise run root:deploy-every-push), as a
-// person comes to it: what cloudflare:05-show says, each time (the secret, a deploy), then Cloudflare deploying every push. A push to a throwaway branch is built and deployed as production by Cloudflare;
-// a pull request's branch gets a preview, with its own D1, KV, R2 and secret; deleting the branch deletes the preview.
-// Then --off, and everything deleted. main is never touched.
-// It runs in a checkout of this repo at HEAD, what Cloudflare builds from GitHub: the reference is a subfolder of it
-// there, not the repo of its own example:00-git-init makes it here, so it runs the reference's own tasks, not the
-// root's steps.
-func TestDeployEveryPush(t *testing.T) {
+// TestRootDeployEveryPush is Cloudflare's Workers Builds deploying every push of this repo (mise run
+// root:deploy-every-push): the root's steps on the reference, as a person takes them, what 05-show says each time (the
+// secret, a deploy, 09-connect-github), then a push to a throwaway branch built and deployed as production by
+// Cloudflare, a pull request's branch with a preview of its own D1, KV, R2 and secret, and the preview gone with its
+// branch. Then 09-connect-github --off, and 13-delete. main is never touched.
+//
+// It runs in a checkout of this repo at HEAD, which is what Cloudflare builds from GitHub: there the reference is a
+// folder in this repo's own git, as on GitHub, and init's files are committed in it. So it runs 01 and 02, then from
+// 12 on: 00-git-init would make it a repo of its own, and 03-init and 04-check would put its workflow and hook in this
+// repo's own .github and .claude, which this repo keeps out (root:check).
+func TestRootDeployEveryPush(t *testing.T) {
 	needAccount(t)
 	top, _ := filepath.Abs("../..")
 	checkout := filepath.Join(t.TempDir(), "checkout")
@@ -27,36 +30,41 @@ func TestDeployEveryPush(t *testing.T) {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
 	t.Cleanup(func() { exec.Command("git", "-C", top, "worktree", "remove", "--force", checkout).Run() })
-	r := repo{t: t, dir: filepath.Join(checkout, "examples", "reference"), worker: "mise-cloudflare-example"}
-	r.must(nil, "mise", "trust", "-q", "mise.toml")
+	r := repo{t: t, top: checkout, name: "reference", dir: filepath.Join(checkout, "examples", "reference")}
 	stamp := time.Now().Unix()
 	prod, prev := fmt.Sprintf("e2e-prod-%d", stamp), fmt.Sprintf("e2e-preview-%d", stamp)
 
 	r.heading("The Worker deployed as a developer does: what 05-show says, each time")
-	r.must(nil, "mise", "run", "setup")
-	r.mustTask("", "12-login")
-	r.notDeployed()
+	r.mustRootStep(nil, "01-mise-install")
+	r.mustRootStep(nil, "02-setup")
+	r.readWorker()
+	r.mustRootStep(nil, "12-login")
+	r.cleanCloudflare()
 	t.Cleanup(func() {
 		r.heading("Removing everything: Cloudflare's setup, the branches, the Worker, its D1, KV and R2, the previews'")
-		r.run(nil, "mise", "run", "cloudflare:09-connect-github", "--off")
+		r.rootStep(nil, "", "09-connect-github", "--off")
 		for _, b := range []string{prod, prev} {
 			r.run(nil, "git", "push", "-q", "origin", "--delete", b)
 		}
-		r.deleteAll()
+		r.rootStep(nil, "", "13-delete")
 	})
 	r.next("mise run cloudflare:07-set-secrets")
-	r.mustTask("set-by-deploy\n", "07-set-secrets")
+	if _, err := r.rootStep(nil, "set-by-deploy\n", "07-set-secrets"); err != nil {
+		t.Fatalf("example:07-set-secrets: %v", err)
+	}
 	r.next("mise run cloudflare:08-deploy")
-	r.must(nil, "mise", "run", "cloudflare:08-deploy")
+	r.mustRootStep(nil, "08-deploy")
 	url := r.show().URL
 	waitWork(t, url, 2*time.Minute)
 	r.pass("%s: D1, KV, R2 and the secret work", url)
 	r.next("mise run cloudflare:09-connect-github")
 
-	r.heading("mise run cloudflare:09-connect-github --branch %s: Cloudflare deploys every push, production from %s", prod, prod)
-	r.must(nil, "mise", "run", "cloudflare:09-connect-github", "--branch", prod)
+	r.heading("example:09-connect-github --branch %s: Cloudflare deploys every push, production from %s", prod, prod)
+	r.mustRootStep(nil, "09-connect-github", "--branch", prod)
 	r.next("mise run cloudflare:10-set-preview-secrets")
-	r.mustTask("set-by-deploy\n", "10-set-preview-secrets")
+	if _, err := r.rootStep(nil, "set-by-deploy\n", "10-set-preview-secrets"); err != nil {
+		t.Fatalf("example:10-set-preview-secrets: %v", err)
+	}
 	r.next("push a branch")
 
 	r.heading("A push to %s: Cloudflare builds and deploys production", prod)
@@ -86,39 +94,14 @@ func TestDeployEveryPush(t *testing.T) {
 	}
 	r.pass("%s is gone", preview)
 
-	r.heading("mise run cloudflare:09-connect-github --off, then the Worker and everything of it deleted")
-	r.must(nil, "mise", "run", "cloudflare:09-connect-github", "--off")
-	r.deleteAll()
+	r.heading("example:09-connect-github --off, then example:13-delete: the Worker and everything of it")
+	r.mustRootStep(nil, "09-connect-github", "--off")
+	r.mustRootStep(nil, "13-delete")
 	if left := r.leftovers(); len(left) > 0 {
 		t.Fatalf("left on the account: %s", strings.Join(left, ", "))
 	}
 	r.pass("nothing left on the account")
 	fmt.Println("\nALL PASSED")
-}
-
-// notDeployed fails unless the Worker and its D1, KV and R2 (and its previews') aren't on the account: another run may
-// be using them.
-func (r repo) notDeployed() {
-	r.t.Helper()
-	if out, err := r.wranglerTry("deployments", "list", "--json"); err == nil {
-		r.t.Fatalf("%s is already deployed: another run may be using it. Wait for it, or delete it (mise run example:clean)", r.worker)
-	} else if !strings.Contains(out, "10007") {
-		r.t.Fatalf("couldn't tell whether %s is deployed", r.worker)
-	}
-	if left := r.leftovers(); len(left) > 0 {
-		r.t.Fatalf("%s is left over from another run: delete it first (mise run example:clean)", strings.Join(left, ", "))
-	}
-	r.pass("nothing of %s is on the account yet", r.worker)
-}
-
-// mustTask runs one of the repo's own tasks, with input typed into it, and stops at its failure.
-func (r repo) mustTask(input, task string, args ...string) string {
-	r.t.Helper()
-	out, err := r.task(input, task, args...)
-	if err != nil {
-		r.t.Fatalf("cloudflare:%s %s: %v", task, strings.Join(args, " "), err)
-	}
-	return out
 }
 
 // built waits for Cloudflare's own record of a Workers Builds build of the Worker from branch, and returns its outcome

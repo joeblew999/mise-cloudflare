@@ -1,10 +1,16 @@
-// Package e2e is the root's end-to-end tests. Each is a task of the root's mise, named for what it acts on, and runs the
-// Go test of its name, in the file of its name: mise run example:try is TestTry in try_test.go, and root:check is
-// TestCheck. A test on an example does what a person does, in their order: the root's numbered steps, mise run
-// example:nn-x, on the repo EXAMPLE names in examples/ (the reference by default); it looks at the repo, and cleans up,
-// with the repo's own tasks. try and check need no account (TRY=1, CHECK=1); deploy, deploy-every-push and clean are
-// real, on a Cloudflare account (CLOUDFLARE_E2E=1). Without those the tests skip, so go test ./... never touches
-// Cloudflare. This file is what they share.
+// Package e2e is the root's end-to-end tests. Each is a task of the root's mise (mise.toml), and runs the Go test of
+// its name, in the file of its name: mise run example:try is TestExampleTry in example_try_test.go, and
+// root:deploy-every-push is TestRootDeployEveryPush in root_deploy_every_push_test.go (root:check checks it).
+//
+// A test does what a person does, in their order: the root's numbered steps (example.mise.toml), one at a time, from
+// 00, with rootStep. Each step runs the repo's own task of its number (mise run cloudflare:nn-x, the repo's
+// .mise/tasks/mise-cloudflare.toml), which runs mise-cloudflare. The only thing a test runs in the repo itself is
+// repoTask("run-wrangler"), to look at what is on the account; the rest of what it looks at (the Worker's URL, git,
+// Cloudflare's builds) it looks at as a person does, in a browser or the dashboard.
+//
+// try and check need no account (TRY=1, CHECK=1); deploy, deploy-every-push and clean are real, on a Cloudflare account
+// (CLOUDFLARE_E2E=1). Without those the tests skip, so go test ./... never touches Cloudflare. This file is what they
+// share.
 package e2e
 
 import (
@@ -35,33 +41,42 @@ func needAccount(t *testing.T) {
 	}
 }
 
-// repo is a Worker repo that uses mise-cloudflare: its folder, its Worker's name, and, for one in examples/, the root
-// whose steps run on it (top) and its name there (EXAMPLE).
+// repo is a Worker repo that uses mise-cloudflare, in examples/ of a root: the root, whose steps run on it (top), its
+// name there (EXAMPLE), its folder, and its Worker's name.
 type repo struct {
 	t      *testing.T
 	top    string
 	name   string
 	dir    string
 	worker string
-	env    string // a wrangler environment's Worker (staging), "" for the Worker itself
 }
 
-// example is the repo EXAMPLE names in this repo's examples/ (the reference by default), set up by the root's steps up
-// to example:04-check, whose rules must pass, with its Worker's name as wrangler reads it.
+// example is the repo EXAMPLE names in this repo's examples/ (the reference by default), set up by the root's steps
+// 00 to 04.
 func example(t *testing.T) repo {
 	top, _ := filepath.Abs("../..")
 	r := repo{t: t, top: top, name: cmp.Or(os.Getenv("EXAMPLE"), "reference")}
 	r.dir = filepath.Join(top, "examples", r.name)
-	if out := r.mustStep(nil, "04-check"); !strings.Contains(out, "rules: pass") {
+	out := ""
+	for _, s := range []string{"00-git-init", "01-mise-install", "02-setup", "03-init", "04-check"} {
+		out = r.mustRootStep(nil, s)
+	}
+	if !strings.Contains(out, "rules: pass") {
 		t.Fatalf("example:04-check on examples/%s: %s", r.name, out)
 	}
+	r.pass("example:04-check on examples/%s: the rules pass", r.name)
+	r.readWorker()
+	return r
+}
+
+// readWorker reads the repo's Worker's name as wrangler does.
+func (r *repo) readWorker() {
+	r.t.Helper()
 	c, err := wconfig.Read(context.Background(), r.dir)
 	if err != nil {
-		t.Fatal(err)
+		r.t.Fatal(err)
 	}
 	r.worker = c.Name
-	r.pass("example:04-check on examples/%s: the rules pass", r.name)
-	return r
 }
 
 func (r repo) heading(format string, a ...any) { fmt.Printf("\n=== %s\n", fmt.Sprintf(format, a...)) }
@@ -100,42 +115,51 @@ func (r repo) must(env []string, name string, args ...string) string {
 	return out
 }
 
-// runStep runs the root's step example:<step> on the repo, as a person runs it at the root, with input typed into it
-// (a secret's value, when it asks).
-func (r repo) runStep(env []string, input, step string, args ...string) (string, error) {
+// rootStep runs the root's step example:<step> (example.mise.toml) at the top of the root, on the repo, with input
+// typed into it (a secret's value, when it asks): mise run example:<step>, alone (--skip-deps), as the test takes the
+// steps in their order itself.
+func (r repo) rootStep(env []string, input, step string, args ...string) (string, error) {
 	fmt.Printf("$ EXAMPLE=%s mise run example:%s %s\n", r.name, step, strings.Join(args, " "))
 	env = append([]string{"EXAMPLE=" + r.name, "MISE_YES=1", "MISE_TRUSTED_CONFIG_PATHS=" + r.top}, env...)
-	return r.runIn(r.top, env, input, "mise", append([]string{"run", "example:" + step}, args...)...)
+	return r.runIn(r.top, env, input, "mise", append([]string{"run", "--skip-deps", "example:" + step}, args...)...)
 }
 
-func (r repo) mustStep(env []string, step string, args ...string) string {
+func (r repo) mustRootStep(env []string, step string, args ...string) string {
 	r.t.Helper()
-	out, err := r.runStep(env, "", step, args...)
+	out, err := r.rootStep(env, "", step, args...)
 	if err != nil {
 		r.t.Fatalf("example:%s %s: %v", step, strings.Join(args, " "), err)
 	}
 	return out
 }
 
-// task runs one of the repo's own tasks, mise run cloudflare:<task>, in the repo: how a test looks at it and cleans up.
-func (r repo) task(input, task string, args ...string) (string, error) {
+// repoTask runs the repo's own task cloudflare:<task> (its .mise/tasks/mise-cloudflare.toml) in the repo, on its own
+// mise only: mise run cloudflare:<task>. A test runs only run-wrangler there, to look at the account; everything it
+// does is a rootStep.
+func (r repo) repoTask(task string, args ...string) (string, error) {
 	env := []string{"MISE_CEILING_PATHS=" + filepath.Dir(r.dir), "MISE_TRUSTED_CONFIG_PATHS=" + r.dir, "MISE_YES=1"}
-	return r.runIn(r.dir, env, input, "mise", append([]string{"run", "cloudflare:" + task}, args...)...)
+	return r.runIn(r.dir, env, "", "mise", append([]string{"run", "cloudflare:" + task}, args...)...)
 }
 
-// wranglerTry runs a wrangler command on the repo's login, with its own task cloudflare:run-wrangler.
-func (r repo) wranglerTry(args ...string) (string, error) { return r.task("", "run-wrangler", args...) }
+// wranglerTry runs a wrangler command on the repo's login: repoTask("run-wrangler").
+func (r repo) wranglerTry(args ...string) (string, error) { return r.repoTask("run-wrangler", args...) }
 
+// wrangler is what a wrangler command prints on stdout, on the repo's login (repoTask("run-wrangler")): the JSON or the
+// list itself. What mise prints around it ("[cloudflare:run-wrangler] $ …", which starts like JSON) goes to stderr.
 func (r repo) wrangler(args ...string) string {
 	r.t.Helper()
-	out, err := r.wranglerTry(args...)
+	cmd := exec.Command("mise", append([]string{"run", "cloudflare:run-wrangler"}, args...)...)
+	cmd.Dir = r.dir
+	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(r.dir), "MISE_TRUSTED_CONFIG_PATHS="+r.dir, "MISE_YES=1", "MISE_TASK_OUTPUT=interleave")
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
 	if err != nil {
 		r.t.Fatalf("wrangler %s: %v", strings.Join(args, " "), err)
 	}
-	return out
+	return string(out)
 }
 
-// shown is what step 05 shows, as JSON: cloudflare:05-show --json.
+// shown is what step 05 shows, as JSON: example:05-show --json.
 type shown struct {
 	Profile  string   `json:"profile"`
 	LoggedIn bool     `json:"loggedIn"`
@@ -155,12 +179,12 @@ func (r repo) next(want string) {
 	r.pass("05-show says next: %s", want)
 }
 
+// show is the root's step 05-show --json, its output unprefixed (and only its stdout read) so its JSON reads as JSON.
 func (r repo) show() shown {
 	r.t.Helper()
-	// The repo's own task, cloudflare:05-show --json, its output unprefixed so its JSON reads as JSON.
-	cmd := exec.Command("mise", "run", "cloudflare:05-show", "--json")
-	cmd.Dir = r.dir
-	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(r.dir), "MISE_TRUSTED_CONFIG_PATHS="+r.dir, "MISE_TASK_OUTPUT=interleave")
+	cmd := exec.Command("mise", "run", "--skip-deps", "example:05-show", "--json")
+	cmd.Dir = r.top
+	cmd.Env = append(os.Environ(), "EXAMPLE="+r.name, "MISE_TRUSTED_CONFIG_PATHS="+r.top, "MISE_TASK_OUTPUT=interleave")
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	var s shown
@@ -168,7 +192,7 @@ func (r repo) show() shown {
 		err = json.NewDecoder(strings.NewReader(jsonPart(string(out)))).Decode(&s)
 	}
 	if err != nil {
-		r.t.Fatalf("cloudflare:05-show --json: %v\n%s", err, out)
+		r.t.Fatalf("example:05-show --json: %v\n%s", err, out)
 	}
 	return s
 }
@@ -279,8 +303,11 @@ func (r repo) deployedURL() string {
 
 // d1 is the uuid of the Worker's D1 (wrangler names it <worker>-db), "" if it doesn't exist.
 func (r repo) d1() string {
+	r.t.Helper()
 	var dbs []struct{ UUID, Name string }
-	json.Unmarshal([]byte(jsonPart(r.wrangler("d1", "list", "--json"))), &dbs)
+	if out := r.wrangler("d1", "list", "--json"); json.Unmarshal([]byte(jsonPart(out)), &dbs) != nil {
+		r.t.Fatalf("wrangler d1 list --json printed no list of D1 databases:\n%s", out)
+	}
 	for _, d := range dbs {
 		if d.Name == r.worker+"-db" {
 			return d.UUID
@@ -291,8 +318,11 @@ func (r repo) d1() string {
 
 // kv is the id of the Worker's KV namespace (<worker>-kv), "" if it doesn't exist.
 func (r repo) kv() string {
+	r.t.Helper()
 	var ns []struct{ ID, Title string }
-	json.Unmarshal([]byte(jsonPart(r.wrangler("kv", "namespace", "list"))), &ns)
+	if out := r.wrangler("kv", "namespace", "list"); json.Unmarshal([]byte(jsonPart(out)), &ns) != nil {
+		r.t.Fatalf("wrangler kv namespace list printed no list of KV namespaces:\n%s", out)
+	}
 	for _, n := range ns {
 		if n.Title == r.worker+"-kv" {
 			return n.ID
@@ -343,37 +373,53 @@ func (r repo) leftovers() []string {
 	return left
 }
 
-// deleteAll deletes the Worker, its D1, KV and R2, and its previews' own, with wrangler on the repo's login. Errors
-// are ignored: it also runs as cleanup after a failure, when some of them may not exist.
-func (r repo) deleteAll() {
-	if !strings.HasSuffix(r.worker, "-previews") {
-		p := r
-		p.worker = r.worker + "-previews"
-		defer p.deleteAll()
-	}
-	if r.env != "" {
-		r.wranglerTry("delete", "--force", "--env", r.env)
-	} else {
-		r.wranglerTry("delete", "--force")
-	}
-	if id := r.d1(); id != "" {
-		r.wranglerTry("d1", "delete", r.worker+"-db", "-y")
-	}
-	if id := r.kv(); id != "" {
-		r.wranglerTry("kv", "namespace", "delete", "--namespace-id", id, "-y")
-	}
-	if r.r2() {
-		r.wranglerTry("r2", "object", "delete", r.worker+"-bucket/stamp.txt", "--remote")
-		r.wranglerTry("r2", "bucket", "delete", r.worker+"-bucket")
-	}
-}
-
 // TestJSONPart: wrangler's JSON is found past a warning that has brackets in it.
 func TestJSONPart(t *testing.T) {
 	out := "\u25b2 [WARNING] auth activate is experimental\n\n[\n  {\"uuid\": \"x\"}\n]\n"
 	if got := jsonPart(out); !strings.HasPrefix(got, "[\n  {") {
 		t.Errorf("got %q", got)
 	}
+}
+
+// cleanCloudflare deletes everything of the repo's Worker on Cloudflare, with the root's steps, so a real run starts
+// from nothing whatever a stopped one left: Workers Builds' setup for it (09-connect-github --off, when cf has a login
+// for it; without one there's none), root:deploy-every-push's throwaway e2e-* branches on the root's GitHub, and the
+// Worker with its D1, KV and R2 and its previews' (13-delete). Then nothing of it may be on the account.
+func (r repo) cleanCloudflare() {
+	r.t.Helper()
+	r.heading("Nothing of %s on Cloudflare: what a stopped run left, deleted", r.worker)
+	if out, _ := r.run(nil, "cf", "auth", "whoami", "--profile", r.worker); strings.Contains(out, `"authenticated": true`) {
+		r.mustRootStep(nil, "09-connect-github", "--off")
+	}
+	heads, err := r.runIn(r.top, nil, "", "git", "ls-remote", "--heads", "origin")
+	if err != nil {
+		r.t.Fatalf("git ls-remote origin: %v", err)
+	}
+	for _, line := range strings.Split(heads, "\n") {
+		if f := strings.Fields(line); len(f) == 2 && strings.HasPrefix(f[1], "refs/heads/e2e-") {
+			b := strings.TrimPrefix(f[1], "refs/heads/")
+			if _, err := r.runIn(r.top, nil, "", "git", "push", "-q", "origin", "--delete", b); err != nil {
+				r.t.Fatalf("deleting the branch %s: %v", b, err)
+			}
+			r.pass("deleted the branch %s", b)
+		}
+	}
+	r.mustRootStep(nil, "13-delete")
+	r.notDeployed()
+}
+
+// notDeployed fails unless the Worker and its D1, KV and R2 (and its previews') aren't on the account.
+func (r repo) notDeployed() {
+	r.t.Helper()
+	if out, err := r.wranglerTry("deployments", "list", "--json"); err == nil {
+		r.t.Fatalf("%s is still deployed", r.worker)
+	} else if !strings.Contains(out, "10007") {
+		r.t.Fatalf("couldn't tell whether %s is deployed", r.worker)
+	}
+	if left := r.leftovers(); len(left) > 0 {
+		r.t.Fatalf("%s is still on the account", strings.Join(left, ", "))
+	}
+	r.pass("nothing of %s is on the account", r.worker)
 }
 
 // gone waits, for up to limit, until url no longer answers 200.
