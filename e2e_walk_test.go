@@ -7,8 +7,8 @@
 //   - e2e_mise_test.go: the repo, and the calls into its own mise file, made in it as a person there makes them.
 //   - e2e_cloudflare_test.go: what the walk looks at besides, as a person does: the Worker's URL, the account's D1, KV
 //     and R2, Cloudflare's builds.
-//   - e2e_process_test.go, e2e_process_windows_test.go: the local Worker's processes, started and ended the way each
-//     OS does it.
+//   - e2e_os_test.go, e2e_os_windows_test.go: what each OS does its own way: the local Worker's processes, and a
+//     path's long name (Windows' C:\Users\RUNNER~1 is C:\Users\runneradmin).
 //
 // tool_test.go is the release (mise run tool:release), and mise_test.go checks that the mise files and the Go line up,
 // both ways.

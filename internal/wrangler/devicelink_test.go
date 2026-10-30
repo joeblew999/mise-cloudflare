@@ -27,6 +27,7 @@ func TestDeviceLinkOnStderr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer f.Close() // before its folder goes: Windows can't delete a file that's open
 	stderr := os.Stderr
 	os.Stderr = f
 	err = RunDeviceLogin(exec.Command("sh", "-c", `printf '%s' "$0" >&2`, in), true)

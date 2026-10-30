@@ -42,6 +42,7 @@ func repoAt(t *testing.T, path string) repo {
 	top, err := filepath.Abs(".")
 	if err == nil {
 		top, err = filepath.EvalSymlinks(top) // mise stops only at a ceiling given as the real path (MISE_CEILING_PATHS)
+		top = longPath(top)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +54,7 @@ func repoAt(t *testing.T, path string) repo {
 // connect-github's steps push it. The checkout goes when the test ends.
 func (r repo) checkoutOfHead() repo {
 	r.t.Helper()
-	tmp, err := filepath.EvalSymlinks(r.t.TempDir()) // the real path: macOS's /var is /private/var, and mise stops only there
+	tmp, err := filepath.EvalSymlinks(longPath(r.t.TempDir())) // the real path: macOS's /var is /private/var, and mise stops only there
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -87,7 +88,7 @@ const stampedWorker = "mise-cloudflare-new"
 func (r repo) stampedCopy(version string) repo {
 	r.t.Helper()
 	version = strings.TrimPrefix(version, "v")
-	tmp, err := filepath.EvalSymlinks(r.t.TempDir()) // the real path: mise stops only at a ceiling given as one
+	tmp, err := filepath.EvalSymlinks(longPath(r.t.TempDir())) // the real path, in long names: mise stops only at a ceiling given as one
 	if err != nil {
 		r.t.Fatal(err)
 	}

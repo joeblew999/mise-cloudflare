@@ -110,7 +110,7 @@ func TestOwnMise(t *testing.T) {
 	if err := os.Symlink(real, link); err != nil {
 		t.Skip(err)
 	}
-	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", real+":"+link)
+	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", strings.Join([]string{real, longPath(real), link}, string(os.PathListSeparator)))
 	got := repo{dir: filepath.Join(link, "repo")}.pins(context.Background())
 	if want := map[string]string{"mise.toml yq": "4.44.1"}; !maps.Equal(got, want) {
 		t.Errorf("a repo through a link, its yq not installed: pins %v, want %v (its own, not its parent folder's jq)", got, want)

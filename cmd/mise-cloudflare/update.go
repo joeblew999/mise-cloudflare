@@ -134,13 +134,14 @@ func (r repo) exists(f string) bool {
 }
 
 // ownMise is the environment that keeps mise to the repo's own config, as in a repo on its own. mise only stops at a
-// ceiling given as the real path, so a path through a link (/tmp is /private/tmp on macOS) is resolved first.
+// ceiling given as the real path, so a path through a link (/tmp is /private/tmp on macOS) is resolved first, and on
+// Windows given in long names (C:\Users\runneradmin, not C:\Users\RUNNER~1).
 func (r repo) ownMise() []string {
 	dir := r.dir
 	if real, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = real
 	}
-	return append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(dir))
+	return append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(longPath(dir)))
 }
 
 // mise is what mise prints for args on the repo's own config, "" when it fails.

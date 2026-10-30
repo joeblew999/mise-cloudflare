@@ -67,7 +67,9 @@ func (r repo) stale(ctx context.Context) []string {
 			return err
 		}
 		want, _ := fs.ReadFile(templates.Tool, p)
-		if b, err := os.ReadFile(filepath.Join(r.dir, filepath.FromSlash(p))); err == nil && !bytes.Equal(b, want) {
+		// Line endings aside: a Windows checkout of the repo may have \r\n where init wrote \n.
+		crlf := func(b []byte) []byte { return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")) }
+		if b, err := os.ReadFile(filepath.Join(r.dir, filepath.FromSlash(p))); err == nil && !bytes.Equal(crlf(b), crlf(want)) {
 			out = append(out, p+" is out of date: run mise run cloudflare:03-init")
 		}
 		return nil
