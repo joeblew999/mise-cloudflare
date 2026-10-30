@@ -13,29 +13,40 @@ import (
 	"github.com/joeblew999/mise-cloudflare/templates"
 )
 
-// commands is every mise-cloudflare command, in the order of example.mise.toml's steps.
-var commands = []string{"init", "check", "status", "dev", "secret", "deploy", "github", "preview", "login", "delete", "logout", "wrangler", "version", "help"}
+// commands is every mise-cloudflare command, in the order of a repo's tasks: the numbered steps 03 to 14, then the rest.
+var commands = []string{"init", "check", "show", "serve", "set-secrets", "deploy", "connect-github", "set-preview-secrets", "preview", "login", "delete", "logout", "verify", "run-wrangler", "show-version", "show-help"}
 
-// TestTasks: one name all the way through. Each task cloudflare:x runs mise-cloudflare x, a command it has, and every
-// command has its task; cloudflare alone runs it with none (status).
+// taskVerb is the command a task's name names: cloudflare:08-deploy names deploy, cloudflare:verify names verify.
+var taskVerb = regexp.MustCompile(`^cloudflare:(?:\d\d-)?([a-z][a-z-]*)$`)
+
+// TestTasks: one name all the way through. Each task cloudflare:nn-x (or cloudflare:x) runs mise-cloudflare x, a
+// command it has, and every command has its task, in commands' order; cloudflare alone runs it with none (show).
 func TestTasks(t *testing.T) {
-	// mise-cloudflare, its flags, then its command: none is status.
+	// mise-cloudflare, its flags, then its command: none is show.
 	for _, m := range regexp.MustCompile(`mise-cloudflare(?: -\S+)*(?: ([a-z][\w-]*))?`).FindAllStringSubmatch(string(templates.Tasks), -1) {
 		if m[1] != "" && !slices.Contains(commands, m[1]) {
 			t.Errorf("templates/tasks.toml runs mise-cloudflare %s, which it doesn't have", m[1])
 		}
 	}
 	tasks := map[string]string{}
-	for _, m := range regexp.MustCompile(`(?m)^\["(cloudflare(?::([a-z]+))?)"\][^\[]*?^run = "mise-cloudflare ?([a-z]*)"$`).FindAllStringSubmatch(string(templates.Tasks), -1) {
-		if m[2] != m[3] {
-			t.Errorf("the task %s runs mise-cloudflare %s", m[1], m[3])
+	var order []string
+	for _, m := range regexp.MustCompile(`(?m)^\["(cloudflare:[a-z0-9-]+)"\][^\[]*?^run = "mise-cloudflare ?([a-z-]*)"$`).FindAllStringSubmatch(string(templates.Tasks), -1) {
+		v := taskVerb.FindStringSubmatch(m[1])
+		if v == nil || v[1] != m[2] {
+			t.Errorf("the task %s runs mise-cloudflare %s", m[1], m[2])
+			continue
 		}
-		tasks[m[2]] = m[1]
+		tasks[v[1]] = m[1]
+		order = append(order, v[1])
 	}
 	for _, c := range commands {
 		if _, ok := tasks[c]; !ok {
 			t.Errorf("mise-cloudflare %s has no task cloudflare:%s", c, c)
 		}
+	}
+	// In the steps' order, which commands has: a repo's tasks file reads as the steps do, after cloudflare itself.
+	if !slices.Equal(order, commands) {
+		t.Errorf("templates/tasks.toml has its tasks in the order %v, not the steps' %v", order, commands)
 	}
 	path := filepath.Join(t.TempDir(), tasksFile)
 	writeFile(path, templates.Tasks)
@@ -47,50 +58,18 @@ func TestTasks(t *testing.T) {
 // TestSkill: the skill installs where Claude Code finds it, and names its tasks right.
 func TestSkill(t *testing.T) {
 	dir := t.TempDir()
-	writeSkill(dir)
+	writeTree(templates.Skills, dir)
 	b, err := os.ReadFile(filepath.Join(dir, "cloudflare", "SKILL.md"))
 	if err != nil || !regexp.MustCompile(`(?s)^---\nname: cloudflare\ndescription: .+\n---\n`).Match(b) {
 		t.Fatalf("SKILL.md: %v\n%.200s", err, b)
 	}
-	for _, m := range regexp.MustCompile(`mise run cloudflare:([a-z][\w-]*)`).FindAllStringSubmatch(string(b), -1) {
-		if !slices.Contains(commands, m[1]) {
-			t.Errorf("the skill names cloudflare:%s, which isn't a command", m[1])
+	for _, m := range regexp.MustCompile(`mise run (cloudflare:[a-z0-9][a-z0-9-]*)`).FindAllStringSubmatch(string(b), -1) {
+		if v := taskVerb.FindStringSubmatch(m[1]); v == nil || !slices.Contains(commands, v[1]) {
+			t.Errorf("the skill names %s, which isn't a command's task", m[1])
 		}
 	}
 	if m := regexp.MustCompile(`mise run cloudflare [a-z]\w*`).FindString(string(b)); m != "" {
 		t.Errorf("the skill names %q: each command is its task, mise run cloudflare:<command>", m)
-	}
-}
-
-// TestExampleIsCurrent: example/ has what this version's init writes, as any repo would after it.
-func TestExampleIsCurrent(t *testing.T) {
-	for _, d := range []string{"example"} {
-		if b, err := os.ReadFile(filepath.Join("../..", d, tasksFile)); err != nil || string(b) != string(templates.Tasks) {
-			t.Errorf("%s/%s is stale: run mise run 03-init (%v)", d, tasksFile, err)
-		}
-	}
-	want, _ := os.ReadFile("../../templates/skills/cloudflare/SKILL.md")
-	if b, err := os.ReadFile("../../example/.claude/skills/cloudflare/SKILL.md"); err != nil || string(b) != string(want) {
-		t.Errorf("example/.claude/skills/cloudflare/SKILL.md is stale: run mise run 03-init (%v)", err)
-	}
-	if b, err := os.ReadFile("../../example/.claude/hooks/" + hookFile); err != nil || string(b) != string(templates.SessionStart) {
-		t.Errorf("example/.claude/hooks/%s is stale: run mise run 03-init (%v)", hookFile, err)
-	}
-	if _, err := os.Stat("../../example/.github/workflows/cloudflare.yml"); err != nil {
-		t.Errorf("example/.github/workflows/cloudflare.yml is missing: run mise run 03-init (%v)", err)
-	}
-}
-
-// TestExampleStaysInExample: everything init writes for example/ is in example/, a repo of its own; none of it is in
-// this repo's own .github/ or .claude/.
-func TestExampleStaysInExample(t *testing.T) {
-	for _, p := range []string{"../../.github/workflows/cloudflare-example.yml", "../../.claude/hooks/" + hookFile} {
-		if _, err := os.Stat(p); err == nil {
-			t.Errorf("%s is example/'s, in this repo: delete it, and run mise run 03-init", strings.TrimPrefix(p, "../../"))
-		}
-	}
-	if b, _ := os.ReadFile("../../.claude/settings.json"); strings.Contains(string(b), ".claude/hooks/"+hookFile) {
-		t.Errorf(".claude/settings.json runs example/'s hook: this repo's own runs templates/session-start.sh")
 	}
 }
 
@@ -108,7 +87,7 @@ func TestTokenEnvFiles(t *testing.T) {
 func TestCI(t *testing.T) {
 	for v, want := range map[string]bool{"true": true, "1": true, "": false, "false": false, "0": false} {
 		t.Setenv("CI", v)
-		if ci() != want {
+		if inCI() != want {
 			t.Errorf("CI=%q: %v", v, !want)
 		}
 	}
@@ -136,7 +115,7 @@ func TestTasksRunTheBinary(t *testing.T) {
 	if strings.Contains(string(b), "go tool") || strings.Contains(string(b), `"github:joeblew999/mise-cloudflare"`) {
 		t.Errorf("tasks run go tool or pin the tool:\n%s", b)
 	}
-	tasks, runs := len(regexp.MustCompile(`(?m)^\["cloudflare`).FindAll(b, -1)), len(regexp.MustCompile(`(?m)^run = "mise-cloudflare( \w+)?"$`).FindAll(b, -1))
+	tasks, runs := len(regexp.MustCompile(`(?m)^\["cloudflare`).FindAll(b, -1)), len(regexp.MustCompile(`(?m)^run = "mise-cloudflare( [a-z][a-z-]*)?"$`).FindAll(b, -1))
 	if tasks == 0 || runs != tasks {
 		t.Errorf("%d of %d tasks run mise-cloudflare:\n%s", runs, tasks, b)
 	}
@@ -197,25 +176,22 @@ func TestClaude(t *testing.T) {
 	}
 }
 
-// TestChain: one name all the way through, from a step to its code. Step nn-x from 04 on (example.mise.toml) runs the
-// task cloudflare:x, which runs mise-cloudflare x (TestTasks); main.go's case "x" calls r.x, which is in x.go. init,
-// which runs before there's a repo to open, is initRepo in init.go; help and version are a line each in main.go.
+// TestChain: one name all the way through, from a command to its code: main.go's case "x" calls r.x, which is in
+// x.go. init, which runs before there's a repo to open, is initRepo in init.go; help and version are a line each in
+// main.go. That the steps run the tasks in this order is root:check's.
 func TestChain(t *testing.T) {
-	steps, err := os.ReadFile("../../example.mise.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, m := range regexp.MustCompile(`(?m)^\["(\d\d)-([a-z-]+)"\]\n(?:.*\n)*?run = "([^"]*)"`).FindAllStringSubmatch(string(steps), -1) {
-		if want := "mise run cloudflare:" + m[2]; m[1] >= "04" && m[3] != want && !strings.HasPrefix(m[3], want+" ") {
-			t.Errorf("step %s-%s runs %q, not %s", m[1], m[2], m[3], want)
-		}
-	}
 	main, _ := os.ReadFile("main.go")
 	for _, c := range commands {
-		if c == "help" || c == "version" {
+		if c == "show-help" || c == "show-version" {
 			continue
 		}
-		call, def, file := "r."+c+"(", "func (r repo) "+c+"(", c+".go"
+		// set-secrets is r.setSecrets, in set_secrets.go.
+		parts := strings.Split(c, "-")
+		method := parts[0]
+		for _, p := range parts[1:] {
+			method += strings.ToUpper(p[:1]) + p[1:]
+		}
+		call, def, file := "r."+method+"(", "func (r repo) "+method+"(", strings.Join(parts, "_")+".go"
 		if c == "init" {
 			call, def = "initRepo(", "func initRepo("
 		}

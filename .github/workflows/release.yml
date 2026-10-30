@@ -1,7 +1,8 @@
 # A release on every change to what the tool is (its code, the files it writes, its skill) merged to main, so
-# `mise use github:joeblew999/mise-cloudflare` always gets what main is: the next patch version is tagged here, and
-# goreleaser builds the mise-cloudflare binary for every machine (.goreleaser.yaml) onto the tag's GitHub release, where mise's
-# github backend finds it. A v* tag pushed by hand releases that version instead. Shell steps only, as ci.yml.
+# `mise use github:joeblew999/mise-cloudflare` always gets what main is. It checks out (with the tags) and installs mise,
+# then runs mise run tool:release, the same as on any machine: the commit's v* tag or the next patch version, goreleaser's
+# binaries on the tag's GitHub release, where mise's github backend finds them, a new repo set up on the release, and the
+# version on proxy.golang.org. A v* tag pushed by hand releases that version. Shell steps only, as ci.yml.
 name: release
 
 on:
@@ -41,29 +42,5 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" MISE_TRUSTED_CONFIG_PATHS="$PWD"
           mise install
 
-      - name: The tests, as on any machine
-        run: mise run test
-
-      - name: On main, tag the next patch version once the tests pass (none if this commit has one)
-        if: github.ref_type == 'branch'
-        run: |
-          if tag=$(git describe --tags --exact-match --match 'v*' 2>/dev/null); then echo "already $tag"; else
-            last=$(git tag -l 'v*' --sort=-v:refname | head -1)
-            IFS=. read -r maj min pat <<<"${last#v}"
-            tag="v${maj:-0}.${min:-0}.$(( ${pat:-0} + 1 ))"
-            git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com tag -a "$tag" -m "$tag"
-            git push -q origin "$tag"
-            echo "tagged $tag"
-          fi
-          echo "TAG=$tag" >> "$GITHUB_ENV"
-
-      - name: The release
-        run: |
-          GORELEASER_CURRENT_TAG="${TAG:-$GITHUB_REF_NAME}" mise exec -- goreleaser release --clean
-
-      - name: A new repo on the release, as a user sets it up with mise (mise run smoke)
-        run: mise run smoke --version "${TAG:-$GITHUB_REF_NAME}"
-
-      - name: proxy.golang.org fetches the version, so go get and pkg.go.dev have it at once
-        run: |
-          GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod mise exec -- go list -m "github.com/${GITHUB_REPOSITORY}@${TAG:-$GITHUB_REF_NAME}"
+      - name: The release, from the root mise as on any machine (mise run tool:release, after tool:test)
+        run: mise run tool:release

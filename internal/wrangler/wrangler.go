@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,17 +53,27 @@ func Interactive(cmd *exec.Cmd) error {
 }
 
 // RunDeviceLogin runs a device login (wrangler's or cf's) on this terminal, adding to what it prints the link with the
-// code already in it.
-func RunDeviceLogin(cmd *exec.Cmd) error {
-	out, err := cmd.StdoutPipe()
+// code already in it. linkOnStderr is where the tool prints the link: wrangler on stdout, cf on stderr (cf prints all
+// but a command's result there).
+func RunDeviceLogin(cmd *exec.Cmd, linkOnStderr bool) error {
+	cmd.Stdin = os.Stdin
+	var out io.ReadCloser
+	var err error
+	to := os.Stdout
+	if linkOnStderr {
+		cmd.Stdout, to = os.Stdout, os.Stderr
+		out, err = cmd.StderrPipe()
+	} else {
+		cmd.Stderr = os.Stderr
+		out, err = cmd.StdoutPipe()
+	}
 	if err != nil {
 		return err
 	}
-	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	DeviceLink(out, os.Stdout)
+	DeviceLink(out, to)
 	return cmd.Wait()
 }
 
@@ -202,7 +213,7 @@ func (w W) deviceLogin(ctx context.Context, scopes []string) error {
 	fmt.Printf("Logging in %s: open the link below on any device (your phone works), click Allow and pick the account.\n", w.Profile)
 	cmd := w.Plain(ctx, append([]string{"login", "--device", "--browser=false", "--scopes"}, scopes...)...)
 	cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+tmp)
-	if err := RunDeviceLogin(cmd); err != nil {
+	if err := RunDeviceLogin(cmd, false); err != nil {
 		return fmt.Errorf("wrangler login --device: %w", err)
 	}
 	b, err := os.ReadFile(filepath.Join(tmp, ".wrangler", "config", "default.toml"))

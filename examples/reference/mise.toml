@@ -1,0 +1,16 @@
+# A Worker repo set up with mise-cloudflare as any repo is (mise run cloudflare shows the way). It pins the tool as
+# any repo does, at the version local: this checkout's build, which mise run tool:install makes in the repo above. Any
+# other repo pins a release: mise use github:joeblew999/mise-cloudflare@<version>
+
+[settings]
+# mise 2026.10 fails to install aube while it fetches its agent skill (a 404); it isn't needed.
+skills.fetch = false
+
+[tools]
+node = "26.12.1"   # runs wrangler
+aube = "2.8.1"     # installs wrangler from package.json
+"github:joeblew999/mise-cloudflare" = "local"
+
+[tasks.setup]
+description = "Install the pinned wrangler"
+run = "aube install"

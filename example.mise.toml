@@ -1,131 +1,146 @@
-# The steps on example/, in order, exactly as on any repo that uses mise-cloudflare: mise run <step>, at the top
-# (mise.toml includes this file). Each runs in example/ on example/'s own mise only (MISE_CEILING_PATHS), never this
-# repo's, and each runs the steps it needs first. A step that asks you something (06, 07, 10) runs on your terminal, and no step depends on it.
+# The steps, in order, exactly as a person does them to a repo that uses mise-cloudflare: mise run <step>, at the top
+# (mise.toml includes this file). Each runs in a repo in examples/, on that repo's own mise only (MISE_CEILING_PATHS),
+# never this repo's, and each runs the steps it needs first. A step that asks you something (06, 07, 10) runs on your
+# terminal, and no step depends on it.
 #
-# One name all the way through: each step runs one thing, and is named after it. From 04 on, step nn-x runs example/'s
-# task cloudflare:x, which runs mise-cloudflare x; steps 00 to 03 come before those tasks exist.
+# Two ways, on an existing repo or a new one:
+#   examples/reference, committed (the default):    mise run example:05-show
+#   examples/new, new (mise run example:create first):   EXAMPLE=new mise run example:05-show
+#
+# example:verify runs in the repo what its own GitHub workflow runs (mise run cloudflare:verify): CI runs it on both.
+#
+# One name all the way through: each step runs one thing, and is named after it. From 04 on, step example:nn-x runs the repo's
+# task cloudflare:x, which runs mise-cloudflare x; steps 00 to 03 come before those tasks exist. The repo's tasks file
+# (templates/tasks.toml) has them in this order too.
 #
 #   step             runs                   what
-#   00-git-init      git init               a git repo of its own (only example/ needs it: any other repo is one)
+#   00-git-init      git init               a git repo of its own (an example needs it: a person's repo is one already)
 #   01-mise-install  mise install           what it pins: node, aube, mise-cloudflare at local (this checkout's build)
 #   02-setup         setup                  its own task: aube install, the wrangler package.json pins
-#   03-init          mise-cloudflare init   writes the cloudflare tasks, the skill, the workflow, the hook
-#   04-check         cloudflare:check       its rules
-#   05-status        cloudflare:status      what's done, and what to run next
-#   06-dev           cloudflare:dev         the Worker locally, no account (Ctrl-C stops it)
-#   07-secret        cloudflare:secret      the secrets the Worker requires, before it deploys (it asks for each)
-#   08-deploy        cloudflare:deploy      on Cloudflare, on its own login (the first time, Allow)
-#   09-github        cloudflare:github      Cloudflare deploys every push: it needs the repo on GitHub, and
-#                                           example/'s own git has none, so here it stops and says so
-#   10-secret        cloudflare:secret      --previews: the secrets previews require, which they don't inherit
-#   11-preview       cloudflare:preview     a preview of what's here now, at its own URL
-#   12-login         cloudflare:login       the repo's login (the others make it when they need it)
-#   13-delete        cloudflare:delete      08-deploy and 11-preview undone: the Worker, its KV, D1 and R2, its previews'
-#   14-logout        cloudflare:logout      the logins deleted: the next 08-deploy asks for Allow again
+#   03-init          mise-cloudflare init   writes the cloudflare tasks, the skill, the workflow, the hook, the docs
+#   04-check         cloudflare:04-check       its rules
+#   05-status        cloudflare:05-show      what's done, and what to run next
+#   06-dev           cloudflare:06-serve         the Worker locally, no account (Ctrl-C stops it)
+#   07-secret        cloudflare:07-set-secrets      the secrets the Worker requires, before it deploys (it asks for each)
+#   08-deploy        cloudflare:08-deploy      on Cloudflare, on its own login (the first time, Allow)
+#   09-github        cloudflare:09-connect-github      Cloudflare deploys every push: it needs the repo on GitHub, and
+#                                           the example's own git has none, so here it stops and says so
+#   10-secret        cloudflare:07-set-secrets      --previews: the secrets previews require, which they don't inherit
+#   11-preview       cloudflare:11-preview     a preview of what's here now, at its own URL
+#   12-login         cloudflare:12-login       the repo's login (the others make it when they need it)
+#   13-delete        cloudflare:13-delete      08-deploy and 11-preview undone: the Worker, its KV, D1 and R2, its previews'
+#   14-logout        cloudflare:14-logout      the logins deleted: the next 08-deploy asks for Allow again
 
-["00-git-init"]
-description = "00. git init: example/ a git repo of its own (example/.git, local, never committed), so init writes everything inside it. Any other repo is one already"
-dir = "example"
+["example:00-git-init"]
+description = "00. git init: the repo a git repo of its own (its .git, local, never committed), so init writes everything inside it. A person's repo is one already"
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 run = "[ -d .git ] || git init -q"
 
-["01-mise-install"]
-description = "01. mise install: what the repo pins, node, aube, and mise-cloudflare at local (this checkout's build, which mise run install links)"
-depends = ["00-git-init", "install"]
-dir = "example"
+["example:01-mise-install"]
+description = "01. mise install: what the repo pins, node, aube, and mise-cloudflare at local (this checkout's build, which mise run tool:install links)"
+depends = ["example:00-git-init", "tool:install"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 run = "mise install"
 
-["02-setup"]
+["example:02-setup"]
 description = "02. setup, the repo's own task: aube install, the wrangler package.json pins"
-depends = ["01-mise-install"]
-dir = "example"
+depends = ["example:01-mise-install"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 run = "mise run setup"
 
-["03-init"]
-description = "03. mise-cloudflare init: writes the cloudflare tasks, the agent skill, the workflow and the Claude Code hook into the repo, and fixes what check asks for (when it pins wrangler, it says to run setup again)"
-depends = ["02-setup"]
-dir = "example"
+["example:03-init"]
+description = "03. mise-cloudflare init: writes everything in templates/ into the repo (the cloudflare tasks, the agent skill, the workflow, the Claude Code hook, the docs), and fixes what check asks for (when it pins wrangler, it says to run setup again)"
+depends = ["example:02-setup"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 run = "mise exec -- mise-cloudflare init"
 
-["04-check"]
-description = "04. cloudflare:check: the repo's rules (no tokens or IDs in it, secrets git-ignored, init's files current)"
-depends = ["03-init"]
-dir = "example"
+["example:04-check"]
+description = "04. cloudflare:04-check: the repo's rules (no tokens or IDs in it, secrets git-ignored, init's files current)"
+depends = ["example:03-init"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:check"
+run = "mise run cloudflare:04-check"
 
-["05-status"]
-description = "05. cloudflare:status: what's done for the Worker, and what to run next"
-depends = ["04-check"]
-dir = "example"
+["example:05-show"]
+description = "05. cloudflare:05-show: what's done for the Worker, and what to run next"
+depends = ["example:04-check"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:status"
+run = "mise run cloudflare:05-show"
 
-["06-dev"]
-description = "06. cloudflare:dev: the Worker locally, with local D1, KV and R2, no account (Ctrl-C stops it)"
-depends = ["04-check"]
-dir = "example"
+["example:06-serve"]
+description = "06. cloudflare:06-serve: the Worker locally, with local D1, KV and R2, no account (Ctrl-C stops it)"
+depends = ["example:04-check"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 raw = true # it asks you: connected to your terminal, not prefixed
-run = "mise run cloudflare:dev"
+run = "mise run cloudflare:06-serve"
 
-["07-secret"]
-description = "07. cloudflare:secret: the secrets the Worker requires that Cloudflare doesn't have yet, before it deploys (it asks for each)"
-depends = ["04-check"]
-dir = "example"
+["example:07-set-secrets"]
+description = "07. cloudflare:07-set-secrets: the secrets the Worker requires that Cloudflare doesn't have yet, before it deploys (it asks for each)"
+depends = ["example:04-check"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 raw = true # it asks you: connected to your terminal, not prefixed
-run = "mise run cloudflare:secret"
+run = "mise run cloudflare:07-set-secrets"
 
-["08-deploy"]
-description = "08. cloudflare:deploy: the Worker on Cloudflare, on the repo's own login (the first time, you click Allow)"
-depends = ["04-check"]
-dir = "example"
+["example:08-deploy"]
+description = "08. cloudflare:08-deploy: the Worker on Cloudflare, on the repo's own login (the first time, you click Allow)"
+depends = ["example:04-check"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:deploy"
+run = "mise run cloudflare:08-deploy"
 
-["09-github"]
-description = "09. cloudflare:github: Cloudflare deploys every push, a preview for every pull request. It needs the repo on GitHub: example/'s own git has none, so here it stops and says so"
-depends = ["04-check"]
-dir = "example"
+["example:09-connect-github"]
+description = "09. cloudflare:09-connect-github: Cloudflare deploys every push, a preview for every pull request. It needs the repo on GitHub: the example's own git has none, so here it stops and says so"
+depends = ["example:04-check"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:github"
+run = "mise run cloudflare:09-connect-github"
 
-["10-secret"]
-description = "10. cloudflare:secret --previews: the secrets previews require, which they don't inherit, in the Worker's Previews Base (after 08-deploy; it asks for each)"
-depends = ["08-deploy"]
-dir = "example"
+["example:10-set-preview-secrets"]
+description = "10. cloudflare:10-set-preview-secrets: the secrets previews require, which they don't inherit, in the Worker's Previews Base (after 08-deploy; it asks for each)"
+depends = ["example:08-deploy"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
 raw = true # it asks you: connected to your terminal, not prefixed
-run = "mise run cloudflare:secret --previews"
+run = "mise run cloudflare:10-set-preview-secrets"
 
-["11-preview"]
-description = "11. cloudflare:preview: a preview of what's here now, at its own URL, with its own KV, D1 and R2 (after 08-deploy; its secrets are 10-secret's, set once)"
-depends = ["08-deploy"]
-dir = "example"
+["example:11-preview"]
+description = "11. cloudflare:11-preview: a preview of what's here now, at its own URL, with its own KV, D1 and R2 (after 08-deploy; its secrets are 10-secret's, set once)"
+depends = ["example:08-deploy"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:preview --name example"
+run = "mise run cloudflare:11-preview --name example"
 
-["12-login"]
-description = "12. cloudflare:login: the repo's Cloudflare login, which the other steps make when they need it"
-depends = ["04-check"]
-dir = "example"
+["example:12-login"]
+description = "12. cloudflare:12-login: the repo's Cloudflare login, which the other steps make when they need it"
+depends = ["example:04-check"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:login"
+run = "mise run cloudflare:12-login"
 
-["13-delete"]
-description = "13. cloudflare:delete: 08-deploy and 11-preview undone, the Worker, its KV, D1 and R2 and its previews' own"
-depends = ["04-check"]
-dir = "example"
+["example:13-delete"]
+description = "13. cloudflare:13-delete: 08-deploy and 11-preview undone, the Worker, its KV, D1 and R2 and its previews' own"
+depends = ["example:04-check"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:delete --yes"
+run = "mise run cloudflare:13-delete --yes"
 
-["14-logout"]
-description = "14. cloudflare:logout: the repo's logins logged out and deleted; the next 08-deploy asks for Allow again"
-depends = ["03-init"]
-dir = "example"
+["example:14-logout"]
+description = "14. cloudflare:14-logout: the repo's logins logged out and deleted; the next 08-deploy asks for Allow again"
+depends = ["example:03-init"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
 env = { MISE_CEILING_PATHS = "{{config_root}}" }
-run = "mise run cloudflare:logout"
+run = "mise run cloudflare:14-logout"
+
+["example:verify"]
+description = "ci: what the repo's own GitHub workflow runs, here: its task cloudflare:verify (its setup and test tasks, then check). The workflow does only that, after it checks out and installs mise"
+depends = ["example:03-init"]
+dir = "{{config_root}}/examples/{{ env.EXAMPLE | default(value='reference') }}"
+env = { MISE_CEILING_PATHS = "{{config_root}}" }
+run = "mise run cloudflare:verify"

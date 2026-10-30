@@ -1,0 +1,76 @@
+# This repo's Cloudflare Worker. Start with: mise run cloudflare (what's done, and what to run next).
+# One task per command, numbered in the order a repo meets them: mise run cloudflare:<nn>-<command> runs
+# mise-cloudflare <command>. Steps 00 to 02 come before these tasks: the repo's git, mise install, its own setup.
+# Written by mise-cloudflare (github.com/joeblew999/mise-cloudflare): don't edit it. The repo's mise.toml pins its version.
+
+["cloudflare"]
+description = "Start here: what's done for this Worker, and what to run next (mise run cloudflare:show-help: every command)"
+tools = { "npm:cf" = "1.0.0-beta.26", gh = "2.103.0" }
+run = "mise-cloudflare"
+
+["cloudflare:03-init"]
+description = "03. mise-cloudflare's files written into the repo again, after upgrading it (the first time, before these tasks: mise exec -- mise-cloudflare init)"
+run = "mise-cloudflare init"
+
+["cloudflare:04-check"]
+description = "04. The repo's rules: no tokens or account IDs in it, secrets git-ignored, init's files current"
+run = "mise-cloudflare check"
+
+["cloudflare:05-show"]
+description = "05. What's done for this Worker, and what to run next"
+tools = { "npm:cf" = "1.0.0-beta.26", gh = "2.103.0" }
+run = "mise-cloudflare show"
+
+["cloudflare:06-serve"]
+description = "06. The Worker locally, with local D1, KV and R2: no Cloudflare account needed"
+run = "mise-cloudflare serve"
+
+["cloudflare:07-set-secrets"]
+description = "07. The secrets the Worker requires that Cloudflare doesn't have yet: it asks for each"
+run = "mise-cloudflare set-secrets"
+
+["cloudflare:08-deploy"]
+description = "08. The Worker on Cloudflare, on the repo's own login: the first time, you click Allow"
+run = "mise-cloudflare deploy"
+
+["cloudflare:09-connect-github"]
+description = "09. Cloudflare deploys every push: a preview for every pull request, then production (--staging main for staging, --off to stop)"
+tools = { "npm:cf" = "1.0.0-beta.26", gh = "2.103.0" }
+run = "mise-cloudflare connect-github"
+
+["cloudflare:10-set-preview-secrets"]
+description = "10. The secrets the Worker's previews require, which they don't inherit, in its Previews Base: it asks for each"
+run = "mise-cloudflare set-preview-secrets"
+
+["cloudflare:11-preview"]
+description = "11. A preview of what's here now, at its own URL, with its own KV, D1 and R2 (--name my-test)"
+run = "mise-cloudflare preview"
+
+["cloudflare:12-login"]
+description = "12. The repo's Cloudflare login (the others make it when they need it)"
+run = "mise-cloudflare login"
+
+["cloudflare:13-delete"]
+description = "13. Deploy undone: the Worker deleted, then its own KV, D1 and R2 and its previews' own (it asks first; --yes doesn't)"
+run = "mise-cloudflare delete"
+
+["cloudflare:14-logout"]
+description = "14. The repo's Cloudflare logins logged out and deleted: wrangler's, and cf's for Workers Builds"
+tools = { "npm:cf" = "1.0.0-beta.26" }
+run = "mise-cloudflare logout"
+
+["cloudflare:verify"]
+description = "What the repo's GitHub workflow runs: its own setup and test tasks, if it has them, then check. The same here as on GitHub"
+run = "mise-cloudflare verify"
+
+["cloudflare:run-wrangler"]
+description = "Any other wrangler command, on the repo's login: mise run cloudflare:run-wrangler d1 list"
+run = "mise-cloudflare run-wrangler"
+
+["cloudflare:show-version"]
+description = "This mise-cloudflare's version"
+run = "mise-cloudflare show-version"
+
+["cloudflare:show-help"]
+description = "Every command"
+run = "mise-cloudflare show-help"

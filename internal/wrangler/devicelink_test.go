@@ -1,6 +1,8 @@
 package wrangler
 
 import (
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -15,5 +17,24 @@ func TestDeviceLink(t *testing.T) {
 	}
 	if strings.Count(out.String(), "user_code=") != 1 {
 		t.Error("the link is added once")
+	}
+}
+
+// TestDeviceLinkOnStderr: cf prints its device login on stderr, and nothing on stdout (cf 1.0.0-beta.26).
+func TestDeviceLinkOnStderr(t *testing.T) {
+	in := "To authorize cf, please visit:\n\n  https://dash.cloudflare.com/oauth2/device/verify\n\nand enter the code:\n\n  yQD3UaPT\n\n"
+	f, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr := os.Stderr
+	os.Stderr = f
+	err = RunDeviceLogin(exec.Command("sh", "-c", `printf '%s' "$0" >&2`, in), true)
+	os.Stderr = stderr
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(f.Name()); !strings.Contains(string(b), "device/verify?user_code=yQD3UaPT") {
+		t.Errorf("got:\n%s", b)
 	}
 }

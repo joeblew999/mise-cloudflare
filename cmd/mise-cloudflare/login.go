@@ -69,7 +69,7 @@ func (r repo) ensureLogin(ctx context.Context) wrangler.Who {
 
 // refuseStrayTokens: a CLOUDFLARE_API_TOKEN beats every login, so outside CI one in the shell or in a .env is refused.
 func (r repo) refuseStrayTokens() {
-	if ci() {
+	if inCI() {
 		return
 	}
 	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" {

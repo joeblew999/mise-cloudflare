@@ -20,12 +20,15 @@ import (
 )
 
 const (
-	hookFile = "mise-cloudflare-session-start.sh"
+	hookFile = templates.HookFile
 	toolName = "github:joeblew999/mise-cloudflare"
 )
 
 // tasksFile is where init writes the mise tasks; mise finds files in .mise/tasks/ by itself.
 var tasksFile = filepath.Join(".mise", "tasks", "mise-cloudflare.toml")
+
+// docsDir is where init writes the repo's docs, a folder of mise-cloudflare's own beside the repo's.
+var docsDir = filepath.Join("docs", "mise-cloudflare")
 
 // initRepo writes the files mise-cloudflare owns into the repo (again, after an upgrade), then fixes what it can for check.
 func initRepo(ctx context.Context, dir string) {
@@ -38,7 +41,8 @@ func initRepo(ctx context.Context, dir string) {
 		must(os.Remove(old))
 		fmt.Println("removed", old)
 	}
-	writeSkill(filepath.Join(".claude", "skills"))
+	writeTree(templates.Skills, filepath.Join(".claude", "skills"))
+	writeTree(templates.Docs, docsDir)
 	if path, b, err := workflowFor(ctx, dir); err == nil {
 		writeFile(path, b)
 	}
@@ -81,6 +85,13 @@ func (r repo) stale(ctx context.Context) []string {
 	if want, err := fs.ReadFile(templates.Skills, "cloudflare/SKILL.md"); err == nil {
 		check(filepath.Join(r.dir, ".claude", "skills", "cloudflare", "SKILL.md"), ".claude/skills/cloudflare/SKILL.md", want)
 	}
+	fs.WalkDir(templates.Docs, ".", func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			want, _ := fs.ReadFile(templates.Docs, path)
+			check(filepath.Join(r.dir, docsDir, path), filepath.ToSlash(filepath.Join(docsDir, path)), want)
+		}
+		return nil
+	})
 	if top, _, err := gitTop(ctx, r.dir); err == nil {
 		check(filepath.Join(top, ".claude", "hooks", hookFile), ".claude/hooks/"+hookFile, templates.SessionStart)
 	}
@@ -159,12 +170,13 @@ func claude(ctx context.Context, dir string) {
 	writeFile(path, append(b, '\n'))
 }
 
-func writeSkill(dir string) {
-	must(fs.WalkDir(templates.Skills, ".", func(path string, d fs.DirEntry, err error) error {
+// writeTree writes every file of fsys into dir, at the same paths.
+func writeTree(fsys fs.FS, dir string) {
+	must(fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		b, err := fs.ReadFile(templates.Skills, path)
+		b, err := fs.ReadFile(fsys, path)
 		if err == nil {
 			writeFile(filepath.Join(dir, path), b)
 		}
@@ -234,7 +246,7 @@ func fixRepo(ctx context.Context, dir string) {
 	if _, err := os.Stat(filepath.Join(dir, ".dev.vars.example")); os.IsNotExist(err) && (wrangler.W{Dir: dir}).Installed() {
 		if wc, err := wconfig.Read(ctx, dir); err == nil && len(wc.Secrets) > 0 {
 			var b strings.Builder
-			b.WriteString("# The Worker's secrets.required, for wrangler dev: cloudflare dev copies this to .dev.vars (git-ignored), where you fill them in.\n")
+			b.WriteString("# The Worker's secrets.required, for running it locally: mise run cloudflare:06-serve copies this to .dev.vars (git-ignored), where you fill them in.\n")
 			for _, s := range wc.Secrets {
 				b.WriteString(s + "=\n")
 			}

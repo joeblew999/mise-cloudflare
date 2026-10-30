@@ -1,47 +1,35 @@
 ---
 name: cloudflare
-description: Use when working on this repo's Cloudflare Worker (run it, deploy it, previews, staging, production, D1, KV, R2, secrets, logs) or its Cloudflare login, with github.com/joeblew999/mise-cloudflare (mise run cloudflare:*). Never create or ask for a Cloudflare API token.
+description: Use when working on this repo's Cloudflare Worker (run it, deploy it, previews, staging, production, D1, KV, R2, secrets, logs, CI) or its Cloudflare login. The repo uses mise-cloudflare, at the version its mise.toml pins; every command is a task, mise run cloudflare:<command>. Never create or ask for a Cloudflare API token.
 ---
 
-# Cloudflare from this repo
+# This repo's Cloudflare Worker
 
-Everything is a task, one per command: `mise run cloudflare:<command>`. Start with `mise run cloudflare:status` (or
-just `mise run cloudflare`): it shows the steps, which are done, and what to run next.
+This repo runs its Worker with mise-cloudflare, at the version its `mise.toml` pins. Everything about it, every
+command, the logins, previews, staging and production, and what to do when something is refused, is in this repo's
+[docs/mise-cloudflare/README.md](../../../docs/mise-cloudflare/README.md): read it first.
 
-| Step | Task |
-|---|---|
-| 1. Run the Worker locally (no account) | `mise run cloudflare:dev` |
-| 2. Deploy it | `mise run cloudflare:deploy` |
-| 3. Have Cloudflare deploy every push: a preview for every pull request, then production | `mise run cloudflare:github` (`-- --staging main` for staging) |
-| A preview of what's here now | `mise run cloudflare:preview --name my-test` |
-| Any other wrangler command | `mise run cloudflare:wrangler d1 list` (secret put, kv, r2, tail, …) |
-| Check the repo | `mise run cloudflare:check` |
-| Set the secrets the Worker requires (status names them) | `mise run cloudflare:secret` (`--previews` for its previews) |
-| Deploy undone: the Worker, its KV, D1 and R2, its previews' own | `mise run cloudflare:delete` (it asks first) |
-| After upgrading mise-cloudflare | `mise run cloudflare:init` |
+Start with `mise run cloudflare`: it shows the steps, which are done, and what to run next.
 
-Never run `npx wrangler`, `wrangler login` or a global wrangler: they use another login than the repo's. Never use a
-Cloudflare API token.
+The tasks are numbered in the order a repo meets them, and each runs the command of its name
+(`mise run cloudflare:08-deploy` runs `mise-cloudflare deploy`): `03-init`, `04-check`, `05-show`, `06-serve`,
+`07-set-secrets`, `08-deploy`, `09-connect-github`, `10-set-preview-secrets`, `11-preview`, `12-login`, `13-delete`,
+`14-logout`, each `mise run cloudflare:<it>`. Steps 00 to 02 come before them: the repo's git, `mise install`, its own
+`setup`. And `mise run cloudflare:verify` (what GitHub runs), `mise run cloudflare:run-wrangler <...>` (any other
+wrangler command on the repo's login: `d1 list`, `secret put`, `tail`, …), `mise run cloudflare:show-help`.
 
-## Logging in
+What GitHub runs on every push is `.github/workflows/cloudflare.yml`, which checks out, installs mise, then runs
+`mise run cloudflare:verify`. Run that task here and you see what GitHub sees.
 
-A task that needs the repo's login makes it the first time. In a Claude Code cloud session it prints a link with the
-code already in it: give the person that link as the first line of a message, so they open it on any device, click
-Allow and pick the account. Never try to click Allow for them. `mise run cloudflare:github` also needs Cloudflare's own
-CLI (cf) logged in the first time, the same way.
+## Never
 
-## Previews
-
-`mise run cloudflare:github` and `preview` give previews their own KV, D1 and R2: leave those out of the wrangler
-config's `previews` block. Every other binding a preview uses (vars, Queues, Workers AI, …) goes in that block;
-`mise run cloudflare:check` names any that are missing.
-
-## When something is refused
-
-| Message | What to do |
-|---|---|
-| `refusing: CLOUDFLARE_API_TOKEN is set in this shell` | Unset it: a token overrides every login, and the repo uses none |
-| `refusing: .env sets CLOUDFLARE_API_TOKEN` | Remove that line from the file |
-| `wrangler isn't installed here` | Install the repo's dependencies: package.json pins wrangler |
-| `… still don't match the repo's` | The person approved other permissions or another account: `mise run cloudflare:logout`, then log in again |
-| A `mise run cloudflare:check` problem | Fix the repo; never weaken the rule |
+- Never run `npx wrangler`, `wrangler login` or a global wrangler: they use another login than the repo's. Run
+  wrangler through `mise run cloudflare:run-wrangler`.
+- Never create, ask for or store a Cloudflare API token.
+- Never click Allow for the person. When a task prints a login link (in a Claude Code cloud session it has the code
+  already in it), give them that link as the first line of a message, so they open it on any device, click Allow and
+  pick the account.
+- Never edit what `mise run cloudflare:03-init` writes: `.mise/tasks/mise-cloudflare.toml`, `docs/mise-cloudflare/`,
+  this skill, `.github/workflows/cloudflare.yml` and the Claude Code hook. After upgrading mise-cloudflare, run
+  `mise run cloudflare:03-init`, which writes them again.
+- Never weaken a rule `mise run cloudflare:04-check` reports: fix the repo.

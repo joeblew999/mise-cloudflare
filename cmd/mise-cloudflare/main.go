@@ -1,6 +1,6 @@
 // Command mise-cloudflare gives a repo its own Cloudflare login and runs the repo's own wrangler on it: no API tokens
 // to make, nothing machine-wide, the same on a Mac and in a Claude Code cloud session. The login is a wrangler auth
-// profile named after the Worker. `mise-cloudflare help` lists the commands.
+// profile named after the Worker. `mise-cloudflare show-help` lists the commands.
 package main
 
 import (
@@ -18,45 +18,46 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-const help = `This repo's Cloudflare Worker, with mise-cloudflare. Each command is a task:
-mise run cloudflare:<command> runs mise-cloudflare <command>.
+const help = `This repo's Cloudflare Worker, with mise-cloudflare. Each command is a task, numbered in the order a repo
+meets them: mise run cloudflare:<nn>-<command> runs mise-cloudflare <command>.
 
-The steps, in order (mise run cloudflare:status says which is next):
-  mise run cloudflare:dev      1. run it locally, with local D1, KV and R2: no account needed
-  mise run cloudflare:deploy   2. deploy it yourself: the first time, you click Allow
-  mise run cloudflare:github   3. have Cloudflare deploy every push: a preview for every pull request,
-                                  then production (--staging main for staging; --off to stop)
+The steps, in order (mise run cloudflare says which is next):
+  mise run cloudflare:03-init                  mise-cloudflare's files written into the repo (again, after upgrading)
+  mise run cloudflare:04-check                 the repo's rules: no tokens or account IDs in it, secrets git-ignored, files current
+  mise run cloudflare:05-show                  what's done, and what to run next (mise run cloudflare, too)
+  mise run cloudflare:06-serve                 the Worker locally, with local D1, KV and R2: no account needed
+  mise run cloudflare:07-set-secrets           the secrets the Worker requires that Cloudflare doesn't have yet
+  mise run cloudflare:08-deploy                the Worker on Cloudflare, on the repo's login: the first time, you click Allow
+  mise run cloudflare:09-connect-github        Cloudflare deploys every push: a preview for every pull request, then
+                                               production (--staging main for staging; --off to stop)
+  mise run cloudflare:10-set-preview-secrets   the secrets its previews require, which they don't inherit
+  mise run cloudflare:11-preview               a preview of what's here now, at its own URL (--name my-test)
+  mise run cloudflare:12-login                 the repo's Cloudflare login (the others make it when they need it)
+  mise run cloudflare:13-delete                deploy undone: the Worker, its KV, D1 and R2, its previews' own (--yes: don't ask)
+  mise run cloudflare:14-logout                the repo's logins logged out and deleted
 
-Now and then:
-  mise run cloudflare:status     what's done, and what to run next (mise run cloudflare, too)
-  mise run cloudflare:check      the repo's rules: no tokens or account IDs in it, secrets git-ignored, files current
-  mise run cloudflare:secret     the secrets the Worker requires that Cloudflare doesn't have yet (--previews: its previews')
-  mise run cloudflare:preview    a preview of what's here now, at its own URL (--name my-test)
-  mise run cloudflare:wrangler   any other wrangler command on the repo's login: wrangler d1 list
-  mise run cloudflare:login      the repo's Cloudflare login (the others make it when they need it)
-  mise run cloudflare:delete     deploy undone: the Worker, its KV, D1 and R2, its previews' own (--yes: don't ask)
-  mise run cloudflare:logout     the repo's logins logged out and deleted
-  mise run cloudflare:init       after upgrading mise-cloudflare: its files written into the repo again
-  mise run cloudflare:version    this build's version
-  mise run cloudflare:help       this
+And:
+  mise run cloudflare:verify         what the repo's GitHub workflow runs: its setup and test tasks, then check
+  mise run cloudflare:run-wrangler   any other wrangler command, on the repo's login: d1 list
+  mise run cloudflare:show-version   this build's version
+  mise run cloudflare:show-help      this
 `
 
 func main() {
-	// The command first, then its flags. dev, deploy, preview and wrangler pass everything after them to wrangler.
+	// The command first, then its flags. serve, deploy, preview and run-wrangler pass everything after them to wrangler.
 	args := os.Args[1:]
 	command := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		command, args = args[0], args[1:]
 	}
-	passes := map[string]bool{"dev": true, "deploy": true, "preview": true, "wrangler": true}
+	passes := map[string]bool{"serve": true, "deploy": true, "preview": true, "run-wrangler": true}
 	flags := flag.NewFlagSet("mise-cloudflare "+command, flag.ExitOnError)
 	jsonOut := flags.Bool("json", false, "print one JSON document on stdout instead of text")
-	off := flags.Bool("off", false, "github: turn it off")
-	branch := flags.String("branch", "", "github: the branch whose pushes deploy production (default the repository's default branch, or production with --staging)")
-	staging := flags.String("staging", "", "github: a staging branch, whose pushes deploy the wrangler environment env.staging")
-	build := flags.String("build", "", "github: the build command (default installing from the lockfile: npm ci, …)")
+	off := flags.Bool("off", false, "connect-github: turn it off")
+	branch := flags.String("branch", "", "connect-github: the branch whose pushes deploy production (default the repository's default branch, or production with --staging)")
+	staging := flags.String("staging", "", "connect-github: a staging branch, whose pushes deploy the wrangler environment env.staging")
+	build := flags.String("build", "", "connect-github: the build command (default installing from the lockfile: npm ci, …)")
 	yes := flags.Bool("yes", false, "delete: don't ask first")
-	previews := flags.Bool("previews", false, "secret: the previews' secrets, in the Worker's Previews Base")
 	flags.Usage = func() { fmt.Fprint(os.Stderr, help) }
 	if !passes[command] {
 		flags.Parse(args)
@@ -70,10 +71,10 @@ func main() {
 	dir, err := os.Getwd()
 	must(err)
 	switch command {
-	case "version":
+	case "show-version":
 		fmt.Println(buildVersion())
 		return
-	case "help":
+	case "show-help":
 		fmt.Print(help)
 		return
 	case "init", "update": // update: what the tasks of repos set up before init was its one name still run
@@ -81,27 +82,31 @@ func main() {
 		return
 	}
 	// CI only checks the repo; Cloudflare's Workers Builds deploys. No one is there to click Allow.
-	if ci() && command != "" && command != "status" && command != "check" && command != "dev" {
-		fail(errors.New("in CI there's no one to log in: CI runs mise run cloudflare:check, and Cloudflare's Workers Builds deploys (mise run cloudflare:github)"))
+	if inCI() && command != "" && command != "show" && command != "check" && command != "verify" && command != "serve" {
+		fail(errors.New("in CI there's no one to log in: CI runs mise run cloudflare:verify, and Cloudflare's Workers Builds deploys (mise run cloudflare:09-connect-github)"))
 	}
 	r := openRepo(ctx, dir)
 	switch command {
-	case "", "status":
-		r.status(ctx, *jsonOut)
+	case "", "show":
+		r.show(ctx, *jsonOut)
 	case "check":
 		r.check(ctx, *jsonOut)
-	case "dev":
-		r.dev(ctx, args)
-	case "secret":
-		r.secret(ctx, *previews)
+	case "verify":
+		r.verify(ctx)
+	case "serve":
+		r.serve(ctx, args)
+	case "set-secrets":
+		r.setSecrets(ctx, false)
+	case "set-preview-secrets":
+		r.setPreviewSecrets(ctx)
 	case "deploy":
 		r.deploy(ctx, args)
-	case "github":
-		r.github(ctx, builds{Branch: *branch, Staging: *staging, Build: *build}, *off, *jsonOut)
+	case "connect-github":
+		r.connectGithub(ctx, builds{Branch: *branch, Staging: *staging, Build: *build}, *off, *jsonOut)
 	case "preview":
 		r.preview(ctx, args)
-	case "wrangler":
-		r.wrangler(ctx, args)
+	case "run-wrangler":
+		r.runWrangler(ctx, args)
 	case "login":
 		r.login(ctx, *jsonOut)
 	case "delete":
@@ -132,8 +137,10 @@ func openRepo(ctx context.Context, dir string) repo {
 	return repo{dir: dir, wc: wc, w: w}
 }
 
-// ci reports whether this runs in CI (CI=true, as GitHub Actions and every other CI set it).
-func ci() bool { return os.Getenv("CI") != "" && os.Getenv("CI") != "false" && os.Getenv("CI") != "0" }
+// inCI reports whether this runs in CI (CI=true, as GitHub Actions and every other CI set it).
+func inCI() bool {
+	return os.Getenv("CI") != "" && os.Getenv("CI") != "false" && os.Getenv("CI") != "0"
+}
 
 func exitCode(err error) int {
 	var e *exec.ExitError

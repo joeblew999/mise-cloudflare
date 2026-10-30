@@ -16,7 +16,7 @@ import (
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-// Scopes is what cloudflare github needs: the account and Workers Builds.
+// Scopes is what connect-github needs: the account and Workers Builds.
 var Scopes = []string{"account:read", "user:read", "workers:write", "workers_scripts:write", "workers_builds:write"}
 
 // CF is cf on one profile, in one folder, on one account (once known).
@@ -26,7 +26,7 @@ type CF struct {
 	Account string
 }
 
-// Installed reports whether cf is on the PATH (the cloudflare github task brings it).
+// Installed reports whether cf is on the PATH (the cloudflare:09-connect-github task brings it).
 func Installed() bool {
 	_, err := exec.LookPath("cf")
 	return err == nil
@@ -95,14 +95,14 @@ type Who struct {
 func (c CF) Whoami(ctx context.Context) (Who, error) {
 	var who Who
 	cmd := c.cmd(ctx, "auth", "whoami")
-	out, _ := cmd.Output() // it exits 1 when not logged in, and still prints JSON
+	out, _ := cmd.Output() // not logged in, it still prints JSON, whatever it exits with (1 before cf 1.0.0-beta.26, 0 now)
 	if err := json.Unmarshal(out, &who); err != nil {
 		return who, fmt.Errorf("cf auth whoami printed %.300s: %w", out, err)
 	}
 	return who, nil
 }
 
-// HasScopes reports whether the login holds every scope cloudflare github needs.
+// HasScopes reports whether the login holds every scope connect-github needs.
 func (w Who) HasScopes() bool {
 	for _, s := range Scopes {
 		if !slices.Contains(w.Scopes, s) {
@@ -122,7 +122,7 @@ func (c CF) Login(ctx context.Context, browser bool) error {
 	cmd := exec.CommandContext(ctx, "cf", args...)
 	cmd.Dir, cmd.Env = c.Dir, os.Environ()
 	fmt.Printf("Logging %s in to Cloudflare's cf, for Workers Builds: approve it on any device (your phone works).\n", c.Profile)
-	if err := wrangler.RunDeviceLogin(cmd); err != nil {
+	if err := wrangler.RunDeviceLogin(cmd, true); err != nil {
 		return fmt.Errorf("cf auth create %s: %w", c.Profile, err)
 	}
 	return nil
