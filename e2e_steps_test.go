@@ -38,8 +38,12 @@ var steps = []step{
 			w.t.Fatalf("cloudflare:04-check: %s", out)
 		}
 		w.pass("cloudflare:04-check: the rules pass")
+		// As on GitHub, from a fresh checkout: nothing installed, so verify's own setup has to install wrangler.
+		if err := os.RemoveAll(filepath.Join(w.dir, "node_modules")); err != nil {
+			w.t.Fatal(err)
+		}
 		w.mustRunMiseTask(nil, "cloudflare:verify")
-		w.pass("cloudflare:verify: what the repo's GitHub workflow runs passes (its setup and test tasks, then 04-check's)")
+		w.pass("cloudflare:verify: what the repo's GitHub workflow runs passes, from nothing installed, as a fresh checkout is (its setup and test tasks, then 04-check's)")
 	}},
 	{task: "05-show", stage: serve, check: func(w *walk) { w.miseShowSaysNext("mise run cloudflare:07-set-secrets") }},
 	{task: "06-serve", stage: serve, check: func(w *walk) {

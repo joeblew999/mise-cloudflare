@@ -89,6 +89,9 @@ func main() {
 			setUpWorker(ctx, dir)
 		}
 		return
+	case "verify": // before the repo is opened: its setup installs the wrangler that needs
+		verify(ctx, dir)
+		return
 	case "update": // any folder with pins of its own, a Worker or not
 		if inCI() {
 			fail(errors.New("in CI update doesn't run: CI only checks the repo, and update changes its pins; run mise run cloudflare:update on your machine, then the steps"))
@@ -106,8 +109,6 @@ func main() {
 		r.show(ctx, *jsonOut)
 	case "check":
 		r.check(ctx, *jsonOut)
-	case "verify":
-		r.verify(ctx)
 	case "serve":
 		r.serve(ctx, args)
 	case "set-secrets":
