@@ -105,12 +105,19 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 		workers = append(workers, githubWorker{Env: "staging", Worker: sc.Name, Branch: b.Staging, Deploy: "npx wrangler deploy --env staging"})
 	}
 	for i := range workers {
-		workers[i].ScriptTag = workerTag(ctx, c, workers[i].Worker, workers[i].Env)
+		if off {
+			workers[i].ScriptTag = findWorker(ctx, c, workers[i].Worker) // "" if it isn't deployed: then nothing builds it
+		} else {
+			workers[i].ScriptTag = workerTag(ctx, c, workers[i].Worker, workers[i].Env)
+		}
 	}
 	rep := githubReport{Workers: workers}
 
 	if off {
 		for _, w := range workers {
+			if w.ScriptTag == "" {
+				continue
+			}
 			if err := c.JSON(ctx, nil, "builds", "workers", "delete", w.ScriptTag, "--force"); err != nil && !cf.NotFound(err) {
 				fail(err)
 			}
