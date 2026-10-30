@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -21,7 +23,8 @@ var workerConfigs = []string{"wrangler.jsonc", "wrangler.json", "wrangler.toml",
 // installs its wrangler (node, aube, mise run setup). It never writes over a file. The Worker's files go in all
 // together or not at all, so a repo with a Worker of its own (any of them, or a wrangler config or lockfile of
 // another kind) gets none of the template's, and a mise.toml of the repo's own is left as it is, with what to add.
-func templateRepo(dir string) {
+// It reports whether it wrote the Worker.
+func templateRepo(dir string) bool {
 	name, err := workerName(filepath.Base(dir))
 	if err != nil {
 		fail(err)
@@ -41,7 +44,7 @@ func templateRepo(dir string) {
 	}
 	if len(own) > 0 {
 		fmt.Printf("✓ the repo has a Worker of its own (%s): none of the template's written, its mise.toml included\n", strings.Join(own, ", "))
-		return
+		return false
 	}
 	for _, f := range files {
 		b, _ := fs.ReadFile(templates.Worker, f)
@@ -56,7 +59,41 @@ func templateRepo(dir string) {
 	} else {
 		writeFile(filepath.Join(dir, "mise.toml"), tools)
 	}
-	fmt.Printf("✓ the template's Worker, %s: next, mise install, mise run setup, then mise run cloudflare\n", name)
+	fmt.Printf("✓ the template's Worker, %s\n", name)
+	return true
+}
+
+// setUpWorker installs the Worker template wrote: mise trusts its mise.toml, then the repo's own setup task installs
+// its wrangler (mise installs node and aube for it first). Without a setup task, it says how instead.
+func setUpWorker(ctx context.Context, dir string) {
+	trustConfig(dir, "mise.toml")
+	has := exec.CommandContext(ctx, "mise", "tasks", "info", "setup")
+	has.Dir = dir
+	if has.Run() != nil {
+		fmt.Println("the repo's mise.toml has no setup task: install the Worker's wrangler its own way (package.json pins it), then mise run cloudflare")
+		return
+	}
+	fmt.Println("$ mise run setup")
+	cmd := exec.CommandContext(ctx, "mise", "run", "setup")
+	cmd.Dir, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		fail(fmt.Errorf("mise run setup: %w", err))
+	}
+	fmt.Println("✓ next: mise run cloudflare")
+}
+
+// trustConfig has mise trust a config file mise-cloudflare wrote into the repo, so its tasks run straight away: mise
+// asks first about a config file it hasn't seen. Without mise on PATH, it says what to run.
+func trustConfig(dir, file string) {
+	path := filepath.Join(dir, filepath.FromSlash(file))
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+	if out, err := exec.Command("mise", "trust", "-q", path).CombinedOutput(); err != nil {
+		fmt.Printf("mise didn't trust %s (%v %s): run mise trust %s\n", file, err, strings.TrimSpace(string(out)), file)
+		return
+	}
+	fmt.Printf("✓ %s trusted by mise\n", file)
 }
 
 // workerName is a folder's name as a Worker's: lowercase letters, digits and dashes, at most 63 characters.

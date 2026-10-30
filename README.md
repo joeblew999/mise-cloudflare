@@ -28,27 +28,31 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
 
 1. **Install mise**, once on each machine: [mise's getting started](https://mise.jdx.dev/getting-started.html)
    (`curl https://mise.run | sh`, or `brew install mise`).
-2. **mise-cloudflare's files, always.** Name the release: the newest is on
-   [its releases](https://github.com/joeblew999/mise-cloudflare/releases).
+2. **mise-cloudflare's files, always**, at a release (the newest is on
+   [its releases](https://github.com/joeblew999/mise-cloudflare/releases)):
 
    ```sh
    mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
-   mise trust --all && mise install
    ```
 
-   `init` writes the repo's `.mise/` folder (its tasks, and mise-cloudflare pinned at the release that ran it, which
-   `mise install` gets from GitHub), its GitHub workflow, its Claude Code hook and skill, its docs and its `.gitignore`.
-3. **The template's Worker, only in a repo with none yet.**
+   It writes the repo's `.mise/` folder (its tasks, and mise-cloudflare pinned at that release, which mise gets from
+   GitHub), its GitHub workflow, its Claude Code hook and skill, its docs and its `.gitignore`.
+3. **The template's Worker, only in a repo with none yet:**
 
    ```sh
    mise run cloudflare:template
-   mise install && mise run setup
    ```
 
-   It writes the template's Worker, named for the repo's folder, and the `mise.toml` that installs its wrangler. It never
-   writes over a file: a repo with a Worker of its own gets none of it, and skips this step (it installs its wrangler its
-   own way).
-4. **Then `mise run cloudflare`:** what's done, and what to run next.
+   It writes the template's Worker, named for the repo's folder, with the `mise.toml` that installs its wrangler, and
+   installs it. It never writes over a file: a repo with a Worker of its own gets none of it, and installs its wrangler
+   its own way.
+4. **Then:**
+
+   ```sh
+   mise run cloudflare
+   ```
+
+   It shows what's done, and what to run next.
 
 Commit what steps 2 and 3 wrote.
 

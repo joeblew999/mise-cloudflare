@@ -82,9 +82,12 @@ func main() {
 		return
 	case "init":
 		initRepo(dir)
+		trustConfig(dir, ".mise/config.toml")
 		return
 	case "template": // a repo with no Worker yet; it never writes over a file, so it runs in CI too (the walk there makes a new repo with it)
-		templateRepo(dir)
+		if templateRepo(dir) {
+			setUpWorker(ctx, dir)
+		}
 		return
 	case "update": // any folder with pins of its own, a Worker or not
 		if inCI() {
@@ -146,7 +149,7 @@ func openRepo(ctx context.Context, dir string) repo {
 		fail(errNoWorker)
 	}
 	if !w.Installed() {
-		fail(errors.New("wrangler isn't installed here: install the repo's dependencies (its package.json pins wrangler)"))
+		fail(errors.New("wrangler isn't installed here: mise run setup installs it (or the repo's own way: its package.json pins wrangler)"))
 	}
 	wc, err := wconfig.Read(ctx, dir)
 	must(err)
