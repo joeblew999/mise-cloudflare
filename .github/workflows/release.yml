@@ -8,7 +8,8 @@ name: release
 on:
   push:
     branches: [main]
-    paths: ["cmd/**", "internal/**", "templates/**", "go.mod", "go.sum", ".goreleaser.yaml", ".github/workflows/release.yml"]
+    # Not the template's own pin of mise-cloudflare: moving it to a release changes nothing in the tool.
+    paths: ["cmd/**", "internal/**", "templates/**", "!templates/.mise/config.toml", "go.mod", "go.sum", ".goreleaser.yaml", ".github/workflows/release.yml"]
     tags: ["v*"]
 
 concurrency:

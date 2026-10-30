@@ -1,7 +1,7 @@
 # This repo's Cloudflare Worker. Start with: mise run cloudflare (what's done, and what to run next).
 # One task per command, numbered in the order a repo meets them: mise run cloudflare:<nn>-<command> runs
 # mise-cloudflare <command>. Steps 00 to 02 come before these tasks: the repo's git, mise install, its own setup.
-# Written by mise-cloudflare (github.com/joeblew999/mise-cloudflare): don't edit it. The repo's mise.toml pins its version.
+# Written by mise-cloudflare (github.com/joeblew999/mise-cloudflare): don't edit it. .mise/config.toml pins its version.
 
 ["cloudflare"]
 description = "Start here: what's done for this Worker, and what to run next (mise run cloudflare:show-help: every command)"
@@ -10,7 +10,7 @@ usage = 'flag "--json" help="one JSON document on stdout, instead of text"'
 run = "mise-cloudflare ${usage_json:+--json}"
 
 ["cloudflare:03-init"]
-description = "03. mise-cloudflare's files written into the repo again, after upgrading it (the first time, before these tasks: mise exec -- mise-cloudflare init)"
+description = "03. mise-cloudflare's files written into the repo again, after upgrading it (the first time, before these tasks: mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init)"
 run = "mise-cloudflare init"
 
 ["cloudflare:04-check"]
@@ -78,7 +78,7 @@ description = "What the repo's GitHub workflow runs: its own setup and test task
 run = "mise-cloudflare verify"
 
 ["cloudflare:update"]
-description = "The repo's own pins at their newest releases: its mise tools, its packages (with aube, whichever lockfile it has) and Go modules, then init's files again if mise-cloudflare moved (at local it stays). What changed is in git: the steps prove it"
+description = "The repo's own pins at their newest releases: its mise tools, its packages (with aube, whichever lockfile it has) and Go modules, mise-cloudflare's pin among them (at local it stays; moved, 03-init writes its files again). What changed is in git: the steps prove it"
 run = "mise-cloudflare update"
 
 ["cloudflare:run-wrangler"]

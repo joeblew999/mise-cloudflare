@@ -17,7 +17,7 @@ cd "$CLAUDE_PROJECT_DIR"
 for dir in "$@"; do
   (
     cd "$dir"
-    mise trust -q mise.toml
+    mise trust -q --all # mise.toml, and .mise/config.toml with mise-cloudflare's pin
     mise install
     if mise tasks info setup > /dev/null 2>&1; then mise run setup; fi
   )

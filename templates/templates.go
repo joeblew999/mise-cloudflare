@@ -1,9 +1,10 @@
 // Package templates is the template: a whole repo with mise-cloudflare, which runs wherever it is put. It has
 // two halves. The tool's half, listed below, is what mise-cloudflare init writes into any repo, at the same paths: the
-// mise tasks, the GitHub workflow, the Claude Code hook and its settings, the agent skill, the docs and the
-// .gitignore. The rest is a sample Worker, the repo's own (src/, wrangler.jsonc, package.json and its lockfile,
-// mise.toml, .dev.vars.example), there so the template runs: init never writes it. What is for this repo itself (its
-// own mise.toml, tests, CI and README) is never here.
+// .mise folder (the tasks, and mise-cloudflare's pin, which mise install gets from its GitHub releases), the GitHub
+// workflow, the Claude Code hook and its settings, the agent skill, the docs and the .gitignore. The rest is a sample
+// Worker, the repo's own (src/, wrangler.jsonc, package.json and its lockfile, mise.toml with what installs its
+// wrangler, .dev.vars.example), there so the template runs: init never writes it. What is for this repo itself (its
+// own mise.toml, tests, CI and README) is never here, and neither is the machine's own .mise/config.local.toml.
 package templates
 
 import (
@@ -11,7 +12,7 @@ import (
 	"io/fs"
 )
 
-//go:embed .mise/tasks/mise-cloudflare.toml
+//go:embed .mise/tasks/mise-cloudflare.toml .mise/config.toml
 //go:embed .github/workflows/cloudflare.yml
 //go:embed .claude/hooks/mise-cloudflare-session-start.sh .claude/settings.json .claude/skills
 //go:embed docs/mise-cloudflare

@@ -65,7 +65,15 @@ func (r repo) checkoutOfHead() repo {
 	}
 	top := r.top
 	r.t.Cleanup(func() { exec.Command("git", "-C", top, "worktree", "remove", "--force", checkout).Run() })
+	from := r.dir
 	r.top, r.dir = checkout, filepath.Join(checkout, r.name)
+	// The machine's own override isn't committed (mise run tool:install writes it): without it the checkout would run
+	// the release the repo pins, not this checkout's build.
+	if b, err := os.ReadFile(filepath.Join(from, ".mise", "config.local.toml")); err == nil {
+		if err := os.WriteFile(filepath.Join(r.dir, ".mise", "config.local.toml"), b, 0o644); err != nil {
+			r.t.Fatal(err)
+		}
+	}
 	return r
 }
 
@@ -76,10 +84,11 @@ const templateWorker, stampedWorker = "mise-cloudflare-template", "mise-cloudfla
 // repo's mise.toml.
 var brought = []string{"mise.toml", "package.json", "pnpm-lock.yaml", "wrangler.jsonc", ".dev.vars.example", "src"}
 
-// stampedCopy is a new repo made from only what a user brings, copied from this one under a Worker name of its own,
-// pinning mise-cloudflare at version, a release from GitHub as mise use does, or this checkout's build (local) when
-// it is "". Then, as a person adding mise-cloudflare does, its own git and mise-cloudflare init. It is in a folder of
-// its own that goes when the test ends; its logins are wrangler's and cf's on this machine, so they stay.
+// stampedCopy is a new repo made from only what a user brings, copied from this one under a Worker name of its own.
+// Then, as a person adding mise-cloudflare does, its own git and mise-cloudflare init, run at version, a release from
+// GitHub, or this checkout's build (local) when it is "": init pins mise-cloudflare at itself (.mise/config.toml). It
+// is in a folder of its own that goes when the test ends; its logins are wrangler's and cf's on this machine, so they
+// stay.
 func (r repo) stampedCopy(version string) repo {
 	r.t.Helper()
 	version = strings.TrimPrefix(version, "v")
@@ -103,13 +112,6 @@ func (r repo) stampedCopy(version string) repo {
 				renamed = renamed || rel == "wrangler.jsonc" && bytes.Contains(data, []byte(`"`+templateWorker+`"`))
 				data = bytes.ReplaceAll(data, []byte(`"`+templateWorker+`"`), []byte(`"`+stampedWorker+`"`))
 			}
-			if rel == "mise.toml" && version != "" {
-				pinned := []byte(`"github:joeblew999/mise-cloudflare" = "local"`)
-				if !bytes.Contains(data, pinned) {
-					return fmt.Errorf("%s/mise.toml doesn't pin mise-cloudflare at local", r.name)
-				}
-				data = bytes.ReplaceAll(data, pinned, []byte(`"github:joeblew999/mise-cloudflare" = "`+version+`"`))
-			}
 			dst := filepath.Join(to, rel)
 			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 				return err
@@ -132,6 +134,10 @@ func (r repo) stampedCopy(version string) repo {
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		r.t.Fatalf("mise-cloudflare init: %v", err)
+	}
+	want := `"github:joeblew999/mise-cloudflare" = "` + cmp.Or(version, "local") + `"`
+	if b, _ := os.ReadFile(filepath.Join(to, ".mise", "config.toml")); !bytes.Contains(b, []byte(want)) {
+		r.t.Fatalf("mise-cloudflare %s's init didn't pin itself in .mise/config.toml (%s): a release from before it did can't be stamped out", cmp.Or(version, "local"), want)
 	}
 	from := r.name
 	r.name, r.dir = "a copy of "+from, to

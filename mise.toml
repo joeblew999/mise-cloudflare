@@ -14,7 +14,7 @@
 #     mise run example:e2e-deploy      TestWalk on a stamped copy, as far as the stage deploy, on Cloudflare (E2E_STAGE=deploy)
 #   tool: mise-cloudflare itself
 #     mise run tool:build              its build, bin/mise-cloudflare
-#     mise run tool:install            that build as the mise version local, which the template pins (and any repo can)
+#     mise run tool:install            that build as the mise version local, the template's on this machine (and any repo's)
 #     mise run tool:test               its own checks: go vet, its Go tests, the release config (no account needed)
 #     mise run tool:release            a release from the commit checked out, as release.yml runs it (--dry-run)
 #   root: this repo itself
@@ -53,10 +53,10 @@ depends = ["tool:install"]
 run = "REPO_PATH=templates E2E_STAGE=connect-github go test . -run '^TestWalk$' -count=1 -v -timeout 90m"
 
 [tasks."template:update"]
-description = "The template's own pins at their newest releases, by its own task, cloudflare:update, run in templates/ as in a repo on its own (MISE_CEILING_PATHS): node, aube, wrangler; mise-cloudflare stays at local. It ends with every pin, the moved ones before → after. Then the walks prove it. After tool:install"
+description = "The template's own pins at their newest releases, by its own task, cloudflare:update, run in templates/ as in a repo on its own (MISE_CEILING_PATHS): node, aube, wrangler, and mise-cloudflare's release pin in .mise/config.toml (the machine's .mise/config.local.toml ignored). It ends with every pin, the moved ones before → after. Then the walks prove it. After tool:install"
 depends = ["tool:install"]
 dir = "{{config_root}}/templates"
-env = { MISE_CEILING_PATHS = "{{config_root}}" }
+env = { MISE_CEILING_PATHS = "{{config_root}}", MISE_IGNORED_CONFIG_PATHS = "{{config_root}}/templates/.mise/config.local.toml" }
 run = "mise run cloudflare:update"
 
 [tasks."root:update"]
@@ -80,9 +80,9 @@ description = "This repo's build, bin/mise-cloudflare"
 run = "go build -o bin/mise-cloudflare ./cmd/mise-cloudflare"
 
 [tasks."tool:install"]
-description = "This repo's build as the mise version local, for any repo on this machine, no release: mise use github:joeblew999/mise-cloudflare@local there. The template pins it"
+description = "This repo's build as the mise version local, for any repo on this machine, no release: mise use github:joeblew999/mise-cloudflare@local there. The template pins a release in .mise/config.toml; this writes templates/.mise/config.local.toml, never committed, so the template runs this build here"
 depends = ["tool:build"]
-run = "mise link -f github:joeblew999/mise-cloudflare@local {{config_root}}/bin"
+run = "mise link -f github:joeblew999/mise-cloudflare@local {{config_root}}/bin && mise use -q --path {{config_root}}/templates/.mise/config.local.toml github:joeblew999/mise-cloudflare@local"
 
 [tasks."tool:test"]
 description = "The tool's own checks, run for real (no cached results): go vet, its Go tests, the release config. They need no repo to walk and no Cloudflare account. After every change"

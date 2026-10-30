@@ -26,10 +26,14 @@ the root's tasks run.
 In a repo that has a Worker (a `wrangler.jsonc`, and wrangler in its `package.json`):
 
 ```sh
-mise use github:joeblew999/mise-cloudflare
-mise-cloudflare init
+mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
+mise trust --all && mise install
 mise run cloudflare
 ```
+
+`init` pins mise-cloudflare in the repo's `.mise/config.toml`, at the release that ran it, so `mise install` gets that
+release from GitHub. In this checkout the template pins a release the same way, and `mise run tool:install` overrides
+it on this machine only, with this checkout's build (`templates/.mise/config.local.toml`, never committed).
 
 `init` writes everything your repo gets, its own docs among them: `docs/mise-cloudflare/README.md`, with every
 command, the logins, previews, staging and production. That page is [templates/docs/mise-cloudflare/README.md](templates/docs/mise-cloudflare/README.md)
@@ -62,8 +66,9 @@ It walks two repos:
   Cloudflare builds it from GitHub.
 - **A copy stamped out from it**, as a person's repo is: only what a user brings (the Worker's code, its `package.json`
   and lockfile, its `mise.toml`), a Worker of its own (`mise-cloudflare-new`), its own git, then `mise-cloudflare init`.
-  The walk makes it in a folder of its own, and it goes when the walk ends. It pins this checkout's build (`local`), or
-  a release with `--version`, as the release tries it. Not `connect-github`: it has no GitHub.
+  The walk makes it in a folder of its own, and it goes when the walk ends. Its `init` runs at this checkout's build
+  (`local`), or at a release with `--version`, as the release tries it, and pins itself in `.mise/config.toml`. Not
+  `connect-github`: it has no GitHub.
 
 Each walk first says what it runs: the repo's mise tools, mise-cloudflare's build, the installed wrangler. It runs in
 the repo on that repo's own mise only (`MISE_CEILING_PATHS`). A walk that deploys starts by deleting whatever a stopped
@@ -87,7 +92,7 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 | `mise run template:update` | The template's own pins at their newest releases, by its own `cloudflare:update`: every pin listed, the moved ones before → after | To move its pins; then the walks | No |
 | `mise run root:update` | This repo's own pins (this `mise.toml`'s tools, `go.mod`'s modules) at their newest, by the tool's own update | To move its pins; then `tool:test` and the walks | No |
 | `mise run tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
-| `mise run tool:install` | That build as the mise version `local`, which the template pins, for any repo on this machine: `mise use github:joeblew999/mise-cloudflare@local` there | To try a change in another repo, never by waiting on a release | No |
+| `mise run tool:install` | That build as the mise version `local`, for any repo on this machine (`mise use github:joeblew999/mise-cloudflare@local` there), and the template's here: `templates/.mise/config.local.toml`, never committed, overrides the release its `.mise/config.toml` pins | To try a change in another repo, never by waiting on a release | No |
 | `mise run tool:test` | The tool's own checks: `go vet`, its Go tests, the release config | After every change | No |
 | `mise run tool:release` | A release from the commit checked out, as `release.yml` runs it: the commit's `v*` tag or the next patch version, goreleaser's binaries on the tag's release, a copy stamped out pinning it and walked (`example:e2e-serve --version`), the version on proxy.golang.org. `--dry-run` tags and publishes nothing | Never by hand: a merge to main runs it | GitHub |
 

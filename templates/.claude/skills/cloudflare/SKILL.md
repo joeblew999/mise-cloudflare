@@ -1,11 +1,11 @@
 ---
 name: cloudflare
-description: Use when working on this repo's Cloudflare Worker (run it, deploy it, previews, staging, production, D1, KV, R2, secrets, logs, CI) or its Cloudflare login. The repo uses mise-cloudflare, at the version its mise.toml pins; every command is a task, mise run cloudflare:<command>. Never create or ask for a Cloudflare API token.
+description: Use when working on this repo's Cloudflare Worker (run it, deploy it, previews, staging, production, D1, KV, R2, secrets, logs, CI) or its Cloudflare login. The repo uses mise-cloudflare, at the version its .mise/config.toml pins; every command is a task, mise run cloudflare:<command>. Never create or ask for a Cloudflare API token.
 ---
 
 # This repo's Cloudflare Worker
 
-This repo runs its Worker with mise-cloudflare, at the version its `mise.toml` pins. Everything about it, every
+This repo runs its Worker with mise-cloudflare, at the version its `.mise/config.toml` pins. Everything about it, every
 command, the logins, previews, staging and production, and what to do when something is refused, is in this repo's
 [docs/mise-cloudflare/README.md](../../../docs/mise-cloudflare/README.md): read it first.
 

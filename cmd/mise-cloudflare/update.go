@@ -14,14 +14,16 @@ import (
 	"strings"
 )
 
-// self is mise-cloudflare as a repo's mise.toml pins it.
+// self is mise-cloudflare as a repo's mise pins it (.mise/config.toml, which init writes).
 const self = "github:joeblew999/mise-cloudflare"
 
 // update moves the repo's own pins to their newest releases, each with its own tool (mise reads no parent folder's
 // config, so nothing outside the repo moves): its mise tools (mise upgrade --bump), its packages (aube, which writes
 // whichever lockfile the repo has) and its Go modules (go get -u, go mod tidy) when it has them. mise-cloudflare at
-// local, a checkout's build, stays there; moved to a newer release, it writes init's files again (03-init). mise and
-// aube both skip a release younger than their minimum age. It ends with what moved; git diff shows it, the steps prove it.
+// local, a checkout's build, stays there; moved to a newer release, it says to write init's files again (03-init),
+// which it doesn't do itself: in the template, a release's init would write its own older files over the template's.
+// mise and aube both skip a release younger than their minimum age. It ends with what moved; git diff shows it, the
+// steps prove it.
 func (r repo) update(ctx context.Context) {
 	if r.exists("package.json") && r.mise(ctx, "which", "aube") == "" {
 		fail(errors.New("the packages update with aube, which writes whichever lockfile the repo has, and the repo's mise doesn't pin it: mise use aube"))
@@ -41,8 +43,7 @@ func (r repo) update(ctx context.Context) {
 	}
 	after := r.pins(ctx)
 	if b, a := selfPin(before), selfPin(after); a != b {
-		fmt.Printf("mise-cloudflare moved from %s to %s: its files written again\n", b, a)
-		r.runOwnMise(ctx, "run", "cloudflare:03-init")
+		fmt.Printf("mise-cloudflare moved from %s to %s: mise run cloudflare:03-init writes its files again (04-check fails until it has)\n", b, a)
 	}
 	lines, n := moved(before, after)
 	if len(lines) == 0 {

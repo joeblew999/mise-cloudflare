@@ -116,7 +116,8 @@ func TestOwnMise(t *testing.T) {
 }
 
 // TestInit: init writes the template's tool half into a repo exactly as the template has it, at the same paths, the
-// hook executable; a .gitignore of the repo's own it leaves as it is. Then nothing is stale.
+// hook executable; a .gitignore of the repo's own it leaves as it is. Then nothing is stale. mise-cloudflare's pin it
+// writes once, for the build that ran it.
 func TestInit(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("dist/\n"), 0o644)
@@ -142,5 +143,17 @@ func TestInit(t *testing.T) {
 	}
 	if got := (repo{dir: dir}).stale(context.Background()); len(got) > 0 {
 		t.Errorf("stale right after init: %q", got)
+	}
+	// .mise/config.toml pins the build that ran init (this test's, a checkout's: local), and is the repo's from then on.
+	config := filepath.Join(dir, ".mise", "config.toml")
+	want, _ := fs.ReadFile(templates.Tool, ".mise/config.toml")
+	want = pinLine.ReplaceAll(want, []byte(`"`+self+`" = "local"`))
+	if b, _ := os.ReadFile(config); !bytes.Equal(b, want) || !bytes.Contains(b, []byte(`"`+self+`" = "local"`)) {
+		t.Errorf(".mise/config.toml doesn't pin this build, local:\n%s", b)
+	}
+	os.WriteFile(config, []byte("[tools]\n\"github:joeblew999/mise-cloudflare\" = \"0.0.1\"\n"), 0o644)
+	initRepo(dir)
+	if b, _ := os.ReadFile(config); !bytes.Contains(b, []byte(`= "0.0.1"`)) {
+		t.Errorf("init wrote over the repo's own pin:\n%s", b)
 	}
 }

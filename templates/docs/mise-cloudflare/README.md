@@ -4,7 +4,7 @@ This repo's Cloudflare Worker, with [mise-cloudflare](https://github.com/joeblew
 locally, deploy it, then a preview for every pull request, staging and production. The same on your machine and in
 Claude Code. No API tokens to make; the first time, you click **Allow**.
 
-Written by `mise-cloudflare init`, for the version this repo's `mise.toml` pins: don't edit it. After upgrading,
+Written by `mise-cloudflare init`, for the version this repo's `.mise/config.toml` pins: don't edit it. After upgrading,
 `mise run cloudflare:03-init` writes it again, and `mise run cloudflare:04-check` fails until it has.
 
 ## Set up and upgrade
@@ -13,17 +13,22 @@ In a repo that has a Worker (a `wrangler.jsonc`, and wrangler in its `package.js
 (GitHub and Claude Code read `.github/` and `.claude/` only there):
 
 ```sh
-mise use github:joeblew999/mise-cloudflare
-mise-cloudflare init
+mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init
+mise trust --all && mise install
+mise run cloudflare
 ```
 
-Commit what `init` wrote and the pin in `mise.toml`. There's nothing to edit, then or ever. `init` writes only its
+`init` writes everything, mise-cloudflare's pin among it: `.mise/config.toml`, at the release that ran `init`, so
+`mise install` gets that release from GitHub, here and on GitHub's machines alike. Commit what `init` wrote. There's
+nothing to edit, then or ever. `init` writes only its
 own files: a `.gitignore` or `.claude/settings.json` the repo has already it leaves as it is, and `check` names what
 they lack (the secrets git-ignored, the hook's entry). Pin wrangler to an exact version in `package.json` and list the
 Worker's secrets in `.dev.vars.example` with local values: `check` and `serve` ask for them.
 
-To upgrade: `mise use github:joeblew999/mise-cloudflare@<version>`, then `mise run cloudflare:03-init`. mise holds back a
-release for a while after it's published (its minimum release age), so name the version to get one at once.
+To upgrade: `mise run cloudflare:update` moves the pin (with every other), then `mise run cloudflare:03-init` writes
+`init`'s files again; or name the release: `mise use --path .mise/config.toml github:joeblew999/mise-cloudflare@<version>`.
+mise holds back a release for a while after it's published (its minimum release age), so name the version to get one
+at once.
 
 ## Use it
 
@@ -73,7 +78,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:12-login` / `cloudflare:14-logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
 | `cloudflare:15-clean` | The local state undone, as `13-delete` undoes Cloudflare's: `.wrangler/` (the local D1, KV and R2, and what deploys wrote) and `.dev.vars`, so the next `06-serve` starts from nothing. It asks first; `--yes` doesn't | y, to be sure |
 | `cloudflare:update` | The repo's own pins at their newest releases, nothing outside it: its mise tools (`mise upgrade --bump`), its packages (aube, which writes whichever lockfile the repo has) and Go modules (`go get -u`, `go mod tidy`), then `03-init` if mise-cloudflare moved (at `local` it stays). mise and aube skip a release younger than their minimum age. What changed is in git: the steps prove it | Nothing |
-| `cloudflare:03-init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec -- mise-cloudflare init` | Nothing |
+| `cloudflare:03-init` | After upgrading mise-cloudflare: init's files written again. The first time, before there are tasks: `mise exec github:joeblew999/mise-cloudflare@<version> -- mise-cloudflare init` | Nothing |
 | `cloudflare:show-version` | This build's version | Nothing |
 | `cloudflare:show-help` | Every command | Nothing |
 
@@ -82,13 +87,14 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | File | What |
 |---|---|
 | `.mise/tasks/mise-cloudflare.toml` | The tasks, `mise run cloudflare` and `cloudflare:<command>` (mise finds them there by itself) |
+| `.mise/config.toml` | mise-cloudflare's pin, at the release that ran `init`: written once, then the repo's (`cloudflare:update` moves it) |
 | `docs/mise-cloudflare/README.md` | This page |
 | `.github/workflows/cloudflare.yml` | Checks the repo on every push and pull request |
 | `.claude/skills/cloudflare/SKILL.md` | The agent skill: how Claude works on the Worker |
 | `.claude/hooks/mise-cloudflare-session-start.sh`, and `.claude/settings.json` that runs it | Sets a Claude Code cloud session up when it starts |
 | `.gitignore` | The Worker's local secrets, a stray token, cf's login cache, installed packages and wrangler's local data, never committed |
 
-None is for editing. They come from inside mise-cloudflare, for the version `mise.toml` pins. There's no settings
+None is for editing. They come from inside mise-cloudflare, for the version `.mise/config.toml` pins. There's no settings
 file: each choice is a command's flag, kept by Cloudflare's Workers Builds setup.
 
 ## The rules (`check`)

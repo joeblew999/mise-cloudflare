@@ -7,13 +7,31 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/joeblew999/mise-cloudflare/templates"
 )
 
 // theirs are the template's files a repo may have of its own already: init writes them only when it has none.
-var theirs = map[string]bool{".gitignore": true, ".claude/settings.json": true}
+// .mise/config.toml is mise-cloudflare's pin: written once, then the repo's (cloudflare:update moves it).
+var theirs = map[string]bool{".gitignore": true, ".claude/settings.json": true, ".mise/config.toml": true}
+
+// pinLine is mise-cloudflare's pin in .mise/config.toml.
+var pinLine = regexp.MustCompile(regexp.QuoteMeta(`"`+self+`" = "`) + `[^"]*"`)
+
+// pinned is the template's .mise/config.toml pinning this build: a release pins itself, a build of a checkout local
+// (mise run tool:install there links it), so a repo runs exactly what set it up.
+func pinned(b []byte) []byte {
+	pin := "local"
+	if version != "" {
+		pin = strings.TrimPrefix(version, "v")
+	}
+	if !pinLine.Match(b) {
+		fail(fmt.Errorf("the template's .mise/config.toml doesn't pin %s", self))
+	}
+	return pinLine.ReplaceAll(b, []byte(`"`+self+`" = "`+pin+`"`))
+}
 
 // initRepo writes the template's tool half into the repo, each file at its path there.
 func initRepo(dir string) {
@@ -28,6 +46,9 @@ func initRepo(dir string) {
 		}
 		b, err := fs.ReadFile(templates.Tool, p)
 		if err == nil {
+			if p == ".mise/config.toml" {
+				b = pinned(b)
+			}
 			writeFile(to, b)
 		}
 		if strings.HasSuffix(p, ".sh") {
@@ -47,7 +68,7 @@ func (r repo) stale(ctx context.Context) []string {
 		}
 		want, _ := fs.ReadFile(templates.Tool, p)
 		if b, err := os.ReadFile(filepath.Join(r.dir, filepath.FromSlash(p))); err == nil && !bytes.Equal(b, want) {
-			out = append(out, p+" is out of date: run mise exec -- mise-cloudflare init")
+			out = append(out, p+" is out of date: run mise run cloudflare:03-init")
 		}
 		return nil
 	})

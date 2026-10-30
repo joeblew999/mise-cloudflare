@@ -5,3 +5,5 @@
 # Installed packages, and wrangler's local data: its local D1, KV and R2, and what each deploy wrote
 node_modules/
 .wrangler/
+# mise's override for one machine: mise-cloudflare's own checkout pins its build there (local)
+.mise/config.local.toml
