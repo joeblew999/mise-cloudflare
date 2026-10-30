@@ -83,8 +83,14 @@ func walkSteps(t *testing.T, r repo, upTo stage) {
 		w.before = w.snapshot()
 	}
 	if upTo >= connectGithub {
-		stamp := time.Now().Unix()
-		w.prod, w.prev = fmt.Sprintf("e2e-prod-%d", stamp), fmt.Sprintf("e2e-preview-%d", stamp)
+		// The throwaway branches say whose they are and when (MMDD-HHMM).
+		when := time.Now().Format("0102-1504")
+		w.prod = "e2e-" + filepath.Base(w.name) + "-prod-" + when    // e2e-templates-prod-1030-1525
+		w.prev = "e2e-" + filepath.Base(w.name) + "-preview-" + when // e2e-templates-preview-1030-1525
+		// Cloudflare names the preview <branch>-<worker>, and that part of its address can't pass 63 characters.
+		if label := previewAlias(w.prev) + "-" + w.worker; len(label) > 63 {
+			t.Fatalf("the preview's address would start %s, %d characters: Cloudflare allows 63", label, len(label))
+		}
 	}
 	for _, s := range steps {
 		switch {

@@ -134,6 +134,8 @@ var steps = []step{
 		if w.upTo >= connectGithub {
 			w.mustRunMiseTask(nil, "cloudflare:09-connect-github", "--off")
 			w.pass("Workers Builds is off")
+			w.mustIn(w.top, "git", "push", "-q", "origin", "--delete", w.prod)
+			w.pass("the branch %s is deleted from GitHub", w.prod)
 		}
 		w.mustRunMiseTask(nil, "cloudflare:13-delete", "--yes")
 		if !gone(w.url, time.Minute) {

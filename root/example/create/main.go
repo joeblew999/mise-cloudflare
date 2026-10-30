@@ -24,7 +24,7 @@ const (
 
 // brought is what a user's repo has before mise-cloudflare. newRepo then gives it its own git and runs init, as a person
 // adding mise-cloudflare does; what setup installs is the end-to-end's (mise run example:e2e).
-var brought = []string{"mise.toml", "package.json", "aube-lock.yaml", "wrangler.jsonc", ".dev.vars.example", "src"}
+var brought = []string{"mise.toml", "package.json", "pnpm-lock.yaml", "wrangler.jsonc", ".dev.vars.example", "src"}
 
 func main() {
 	version := flag.String("version", "", "pin this release of mise-cloudflare from GitHub (v0.1.8), not this checkout's build")
