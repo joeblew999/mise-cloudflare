@@ -9,11 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -68,6 +70,52 @@ func (r *repo) miseSetUp() {
 	}
 	r.worker = c.Name
 	r.pass("%s is set up: mise install, mise run setup; its Worker is %s", r.name, r.worker)
+	r.pass("%s runs %s", r.name, r.versions())
+}
+
+// versions is what the repo runs, each as its own tool reports it: its mise tools (mise ls --local --json), the build
+// of mise-cloudflare (cloudflare:show-version) and the wrangler mise run setup installed (its package.json).
+func (r repo) versions() string {
+	r.t.Helper()
+	var tools map[string][]struct {
+		Version string
+		Active  bool
+	}
+	if err := json.Unmarshal(r.stdoutOf("mise", "ls", "--local", "--json"), &tools); err != nil || len(tools) == 0 {
+		r.t.Fatalf("the repo's mise tools, mise ls --local --json: %v (%d read)", err, len(tools))
+	}
+	var v []string
+	for _, name := range slices.Sorted(maps.Keys(tools)) {
+		for _, t := range tools[name] {
+			if t.Active {
+				v = append(v, name+" "+t.Version)
+			}
+		}
+	}
+	build := strings.TrimSpace(string(r.stdoutOf("mise", "run", "cloudflare:show-version")))
+	var w struct{ Version string }
+	b, err := os.ReadFile(filepath.Join(r.dir, "node_modules", "wrangler", "package.json"))
+	if err == nil {
+		err = json.Unmarshal(b, &w)
+	}
+	if err != nil || w.Version == "" || build == "" {
+		r.t.Fatalf("the installed wrangler (%q, %v) or mise-cloudflare's build (%q)", w.Version, err, build)
+	}
+	return fmt.Sprintf("%s (mise.toml); mise-cloudflare's build %s; wrangler %s, installed", strings.Join(v, ", "), build, w.Version)
+}
+
+// stdoutOf is what a command prints on stdout in the repo, on its own mise only, without showing it; its stderr shows.
+func (r repo) stdoutOf(name string, args ...string) []byte {
+	r.t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = r.dir
+	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(r.dir), "MISE_TRUSTED_CONFIG_PATHS="+r.dir, "MISE_TASK_OUTPUT=interleave")
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	if err != nil {
+		r.t.Fatalf("%s %s: %v", name, strings.Join(args, " "), err)
+	}
+	return out
 }
 
 func (r repo) heading(format string, a ...any) { fmt.Printf("\n=== %s\n", fmt.Sprintf(format, a...)) }
