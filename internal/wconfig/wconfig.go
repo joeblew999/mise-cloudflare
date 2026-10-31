@@ -31,6 +31,9 @@ type Config struct {
 	Named        []string `json:"named"`
 	PreviewNamed []string `json:"previewNamed"`
 	Previews     bool     `json:"previews"` // it has a previews block
+	// Remote is the bindings wrangler dev runs on Cloudflare even locally (one with no local simulator, as Workers AI,
+	// or marked "remote": true), as wrangler itself picks them: they need the repo's login, and their resource there.
+	Remote []string `json:"remote"`
 	// CompatibilityDate is the config's compatibility_date; DevDate the one this wrangler's dev uses when a config gives
 	// none (its runtime's own date in recent wranglers, today's in older ones).
 	CompatibilityDate string `json:"compatibilityDate"`
@@ -53,10 +56,15 @@ try {
   // given no value for are there too, undefined.
   const given = (v) => Object.entries(v).some(([k, x]) => k !== 'type' && x !== undefined && x !== null && x !== '');
   const named = (b) => Object.entries(conv(b)).filter(([, v]) => given(v)).map(([n]) => n);
+  // wrangler's own pick of the bindings dev runs remotely: asked to update a session of ours, its remote proxy session
+  // call hands that session those bindings and starts nothing.
+  const session = { ready: Promise.resolve(), updateBindings: async () => {}, dispose: async () => {} };
+  const picked = await w.maybeStartOrUpdateRemoteProxySession({ name: c.name ?? 'worker', bindings: conv(c) }, { session, remoteBindings: {} });
   console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [],
     envs: Object.keys(r.rawConfig.env ?? {}), previews: c.previews !== undefined,
     compatibilityDate: c.compatibility_date ?? '', devDate: w.unstable_getDevCompatibilityDate?.() ?? '',
-    bindings: types(c), previewBindings: types(c.previews), named: named(c), previewNamed: named(c.previews) }));
+    bindings: types(c), previewBindings: types(c.previews), named: named(c), previewNamed: named(c.previews),
+    remote: Object.keys(picked?.remoteBindings ?? {}).sort() }));
 } catch (e) {
   console.log('WCONFIG_ERROR ' + JSON.stringify(String(e?.message ?? e)));
 }`

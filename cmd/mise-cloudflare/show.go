@@ -32,6 +32,7 @@ type statusReport struct {
 	// The config's compatibility_date, and the one this wrangler's dev uses when a config gives none.
 	CompatibilityDate string   `json:"compatibilityDate"`
 	DevDate           string   `json:"devDate"`
+	Remote            []string `json:"remote"` // the bindings wrangler runs on Cloudflare even locally: 06-serve needs the login
 	StrayTokens       []string `json:"strayTokens"`
 	Problems          []string `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
 	Next              string   `json:"next"`
@@ -40,7 +41,7 @@ type statusReport struct {
 // show is mise-cloudflare with no command or show (mise run cloudflare, cloudflare:05-show): the steps in order, which are done for this repo, and the
 // next one. It never logs in.
 func (r repo) show(ctx context.Context, jsonOut bool) {
-	rep := statusReport{Worker: r.wc.Name, Profile: r.w.Profile, CompatibilityDate: r.wc.CompatibilityDate, DevDate: r.wc.DevDate, Accounts: []wrangler.Account{}, Scopes: []string{},
+	rep := statusReport{Worker: r.wc.Name, Profile: r.w.Profile, CompatibilityDate: r.wc.CompatibilityDate, DevDate: r.wc.DevDate, Remote: append([]string{}, r.wc.Remote...), Accounts: []wrangler.Account{}, Scopes: []string{},
 		Needs: r.wanted(ctx), StrayTokens: tokenEnvFiles(r.dir), Problems: []string{}}
 	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" {
 		rep.StrayTokens = append([]string{"this shell"}, rep.StrayTokens...)
@@ -135,7 +136,11 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 	if len(rep.Problems) > 0 {
 		fmt.Printf("  ✗ the repo has %d problem(s) to fix first (mise run cloudflare:04-check lists them)\n", len(rep.Problems))
 	}
-	fmt.Printf("  ✓ 06. Run it locally     mise run cloudflare:06-serve\n")
+	run := ""
+	if len(rep.Remote) > 0 {
+		run = "   " + strings.Join(rep.Remote, ", ") + " on Cloudflare even here, on the repo's login" + map[bool]string{true: "", false: ", which it makes first (you click Allow)"}[rep.LoggedIn]
+	}
+	fmt.Printf("  ✓ 06. Run it locally     mise run cloudflare:06-serve%s\n", run)
 	fmt.Printf("  %s 08. Deploy it          mise run cloudflare:08-deploy   %s\n", mark[rep.Deployed], cmp.Or(rep.URL, map[bool]string{true: "deployed", false: "not deployed yet"}[rep.Deployed]))
 	if len(rep.Secrets) > 0 {
 		fmt.Printf("    first, its secrets: %s (mise run cloudflare:07-set-secrets)\n", strings.Join(rep.Secrets, ", "))

@@ -115,8 +115,8 @@ It walks two repos:
 - **A new repo with extras** (`new-repo:e2e-extras`): the same new repo, whose developer first adds bindings beyond the
   template's KV, D1 and R2 ([e2e_bindings_test.go](e2e_bindings_test.go), one row a kind: a Queue, a Flagship app,
   and Workers AI; it says why other kinds aren't rows). wrangler deploy makes each one and `13-delete` must delete it,
-  all checked on Cloudflare. Workers AI runs on Cloudflare even locally: with no login `06-serve` must stop and say to
-  log in, and after `08-deploy` it must run on the repo's login. The template itself stays as minimal as it is.
+  all checked on Cloudflare. Workers AI runs on Cloudflare even locally: with no login, in CI, `06-serve` must stop
+  before `wrangler dev` and say it needs the repo's login, and after `08-deploy` run on it. The template itself stays as minimal as it is.
 
 Each walk first says what it runs: the repo's mise tools, mise-cloudflare's build, the installed wrangler. It runs in
 the repo on that repo's own mise only (`MISE_CEILING_PATHS`). A walk that deploys starts by deleting whatever a stopped

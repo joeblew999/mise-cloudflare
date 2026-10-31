@@ -76,7 +76,7 @@ next: mise run cloudflare:09-connect-github
 
 | Step | Run | You're asked |
 |---|---|---|
-| 06. Run it locally, with local D1, KV and R2 | `mise run cloudflare:06-serve` | Nothing: no account needed, unless a binding runs on Cloudflare even here (wrangler's table marks it remote: Workers AI, an AI Search namespace, …). That one needs the repo's login, which it makes when there's none (in a terminal wrangler asks for it; otherwise it logs in as `08-deploy` does, then runs again), and its resource on Cloudflare, which `08-deploy` makes |
+| 06. Run it locally, with local D1, KV and R2 | `mise run cloudflare:06-serve` | Nothing: no account needed, unless a binding runs on Cloudflare even here (wrangler's table marks it remote: Workers AI, an AI Search namespace, …). That one needs the repo's login, which it makes first when there's none, as `08-deploy` does (in CI it stops: no one is there to click Allow), and its resource on Cloudflare: `08-deploy` makes the ones wrangler makes (an AI Search namespace, …) |
 | 08. Deploy it yourself | `mise run cloudflare:08-deploy` | **Allow**, the first time |
 | 09. Have Cloudflare deploy every push, once | `mise run cloudflare:09-connect-github` | **Allow** for Cloudflare's own CLI, the first time |
 

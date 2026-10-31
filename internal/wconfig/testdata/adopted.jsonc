@@ -9,9 +9,11 @@
   "hyperdrive": [
     { "binding": "DB", "id": "0123456789abcdef0123456789abcdef", "localConnectionString": "postgresql://localhost:5432/app" },
   ],
-  "kv_namespaces": [{ "binding": "CACHE", "id": "fedcba9876543210fedcba9876543210" }],
+  // Development uses production's cache, on Cloudflare even locally.
+  "kv_namespaces": [{ "binding": "CACHE", "id": "fedcba9876543210fedcba9876543210", "remote": true }],
   "durable_objects": { "bindings": [{ "name": "LIMITER", "class_name": "Limiter" }] },
   "workflows": [{ "name": "index-workflow", "binding": "INDEX", "class_name": "IndexWorkflow" }],
+  "ai": { "binding": "AI" },
   "secrets": { "required": ["API_KEY", "SIGNING_KEY"] },
   "env": {
     "production": {
@@ -21,6 +23,7 @@
       "kv_namespaces": [{ "binding": "CACHE", "id": "fedcba9876543210fedcba9876543210" }],
       "durable_objects": { "bindings": [{ "name": "LIMITER", "class_name": "Limiter" }] },
       "workflows": [{ "name": "index-workflow", "binding": "INDEX", "class_name": "IndexWorkflow" }],
+      "ai": { "binding": "AI" },
       "triggers": { "crons": ["0 */12 * * *"] },
       "secrets": { "required": ["API_KEY", "SIGNING_KEY"] },
     },

@@ -58,7 +58,10 @@ func link(t *testing.T, target, at string) {
 // TestAdopted: a project mise-cloudflare didn't make, read as wrangler reads it: production in env.production under its
 // own name, its resources named by ID (the developer's), a Durable Object and a Workflow, and no warnings.
 func TestAdopted(t *testing.T) {
-	for _, c := range []struct{ env, name string }{{"", "adopted-dev"}, {"production", "adopted"}} {
+	for _, c := range []struct {
+		env, name string
+		remote    []string
+	}{{"", "adopted-dev", []string{"AI", "CACHE"}}, {"production", "adopted", []string{"AI"}}} {
 		w, err := read(t, filepath.Join("testdata", "adopted.jsonc"), c.env)
 		if err != nil {
 			t.Fatal(err)
@@ -75,6 +78,10 @@ func TestAdopted(t *testing.T) {
 		if !w.Names("CACHE") || !w.Names("DB") || !slices.Equal(w.Secrets, []string{"API_KEY", "SIGNING_KEY"}) {
 			t.Errorf("env %q: named %q, secrets %q", c.env, w.Named, w.Secrets)
 		}
+		// Workers AI has no local simulator; development's CACHE is marked remote, production's isn't.
+		if !slices.Equal(w.Remote, c.remote) {
+			t.Errorf("env %q: remote %q, want %q", c.env, w.Remote, c.remote)
+		}
 	}
 }
 
@@ -84,8 +91,8 @@ func TestTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Name != "mise-cloudflare-template" || len(w.Named) != 0 || !w.Previews || len(w.Envs) != 0 || w.Warnings != "" {
-		t.Errorf("name %q, named %q, previews %v, envs %q, warnings %q", w.Name, w.Named, w.Previews, w.Envs, w.Warnings)
+	if w.Name != "mise-cloudflare-template" || len(w.Named) != 0 || !w.Previews || len(w.Envs) != 0 || len(w.Remote) != 0 || w.Warnings != "" {
+		t.Errorf("name %q, named %q, previews %v, envs %q, remote %q, warnings %q", w.Name, w.Named, w.Previews, w.Envs, w.Remote, w.Warnings)
 	}
 	for n, typ := range map[string]string{"DB": "d1", "KV": "kv_namespace", "BUCKET": "r2_bucket"} {
 		if w.Bindings[n] != typ {
@@ -214,6 +221,9 @@ func report(t *testing.T, path, clone, bin string) {
 			b := n + ":" + w.Bindings[n]
 			if _, own := PreviewsOwn[w.Bindings[n]]; own && w.Names(n) {
 				b += "(named)"
+			}
+			if slices.Contains(w.Remote, n) {
+				b += "(remote)"
 			}
 			bindings = append(bindings, b)
 		}

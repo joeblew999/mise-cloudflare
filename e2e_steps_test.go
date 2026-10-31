@@ -49,10 +49,10 @@ var steps = []step{
 	{task: "06-serve", stage: serve, check: func(w *walk) {
 		body, stopped := w.miseServeLocally(false)
 		if remoteExtras() {
-			if body != nil || !strings.Contains(stopped, "mise run cloudflare:12-login") {
+			if body != nil || !strings.Contains(stopped, "AI: wrangler runs it on Cloudflare even locally, which needs the repo's login") {
 				w.t.Fatalf("cloudflare:06-serve with no Cloudflare login and an extra wrangler runs on Cloudflare even locally: %s%s", body, stopped)
 			}
-			w.pass("cloudflare:06-serve with no Cloudflare login stops at the extra wrangler runs on Cloudflare even locally, and says to log in first")
+			w.pass("cloudflare:06-serve with no Cloudflare login, in CI, stops before wrangler dev at the extra wrangler runs on Cloudflare even locally, and says it needs the repo's login")
 			return
 		}
 		if !allWork(body) {
