@@ -28,8 +28,9 @@ var (
 func Check(dir string, w wconfig.Config) ([]string, error) {
 	problems := Previews(w, false)
 	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
-	for _, p := range IDs(w.Raw) {
-		bad("%s holds %s: remove it, and deploy finds or creates the resource by its name, on the login's account", filepath.Base(w.Path), p)
+	// wrangler's own validation of the config: what it warned about reading it (an unexpected field, …).
+	if w.Warnings != "" {
+		bad("wrangler warns about %s:\n%s", filepath.Base(w.Path), w.Warnings)
 	}
 
 	files, err := gitFiles(dir)
@@ -79,37 +80,10 @@ func Check(dir string, w wconfig.Config) ([]string, error) {
 	return problems, nil
 }
 
-// IDs names every account or resource ID in a raw wrangler config, at the top level and in each environment.
-func IDs(raw map[string]any) []string {
-	var out []string
-	section := func(where string, s map[string]any) {
-		if v, _ := s["account_id"].(string); v != "" {
-			out = append(out, where+"an account ID (account_id)")
-		}
-		for _, typ := range slices.Sorted(maps.Keys(wconfig.Created)) {
-			c := wconfig.Created[typ]
-			for _, b := range list(s[c.Key]) {
-				if slices.ContainsFunc(c.IDs, func(f string) bool { return b[f] != nil }) {
-					out = append(out, fmt.Sprintf("%sa resource ID (%s %v)", where, c.What, b["binding"]))
-				}
-			}
-		}
-	}
-	section("", raw)
-	envs, _ := raw["env"].(map[string]any)
-	for _, name := range slices.Sorted(maps.Keys(envs)) {
-		if e, ok := envs[name].(map[string]any); ok {
-			section("env."+name+": ", e)
-		}
-	}
-	return out
-}
-
 // Previews returns the problems with the previews block (none without one, unless need): every binding but KV, D1 and
 // R2 must be in it, and a KV, D1 or R2 in it must name an existing resource.
 func Previews(w wconfig.Config, need bool) []string {
-	previews, ok := w.Raw["previews"].(map[string]any)
-	if !ok {
+	if !w.Previews {
 		if need {
 			return []string{fmt.Sprintf("add \"previews\": {} to %s: a preview needs it (its KV, D1 and R2 it gets of its own)", filepath.Base(w.Path))}
 		}
@@ -119,22 +93,19 @@ func Previews(w wconfig.Config, need bool) []string {
 	if missing := previewBindings(w); len(missing) > 0 {
 		problems = append(problems, fmt.Sprintf("%s's previews block lacks the bindings %s: a preview inherits none from production (only KV, D1 and R2 come from its Previews Base), so it would fail on its first use of one; add them there, pointed at preview-safe resources (vars with preview values)", filepath.Base(w.Path), strings.Join(missing, ", ")))
 	}
-	if unnamed := unnamedResources(previews); len(unnamed) > 0 {
+	if unnamed := unnamedResources(w); len(unnamed) > 0 {
 		problems = append(problems, fmt.Sprintf("%s's previews block has %s with no resource named, which wrangler preview sends as it is and Cloudflare refuses: leave it out, and mise run cloudflare:08-deploy gives previews their own, or name an existing one (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
 	}
 	return problems
 }
 
-// unnamedResources names the previews block's bindings of the kinds wrangler deploy creates (KV, D1, R2) that don't say
-// which resource they use: wrangler deploy creates those for production, wrangler preview doesn't.
-func unnamedResources(previews map[string]any) []string {
+// unnamedResources names the previews block's KV, D1 and R2 (wconfig.PreviewsOwn) that don't name the resource they use:
+// wrangler deploy makes those for production, wrangler preview makes none.
+func unnamedResources(w wconfig.Config) []string {
 	var out []string
-	for _, typ := range slices.Sorted(maps.Keys(wconfig.Created)) {
-		c := wconfig.Created[typ]
-		for _, b := range list(previews[c.Key]) {
-			if v, _ := b[c.Names].(string); v == "" {
-				out = append(out, fmt.Sprintf("%s %v", c.What, b["binding"]))
-			}
+	for _, n := range slices.Sorted(maps.Keys(w.PreviewBindings)) {
+		if kind, own := wconfig.PreviewsOwn[w.PreviewBindings[n]]; own && !slices.Contains(w.PreviewNamed, n) {
+			out = append(out, kind+" "+n)
 		}
 	}
 	return out
@@ -144,24 +115,13 @@ func unnamedResources(previews map[string]any) []string {
 func previewBindings(w wconfig.Config) []string {
 	var missing []string
 	for name, typ := range w.Bindings {
-		_, created := wconfig.Created[typ]
-		if _, ok := w.PreviewBindings[name]; !ok && !created && typ != "assets" {
+		_, own := wconfig.PreviewsOwn[typ]
+		if _, ok := w.PreviewBindings[name]; !ok && !own && typ != "assets" {
 			missing = append(missing, name)
 		}
 	}
 	slices.Sort(missing)
 	return missing
-}
-
-func list(v any) []map[string]any {
-	items, _ := v.([]any)
-	var out []map[string]any
-	for _, it := range items {
-		if m, ok := it.(map[string]any); ok {
-			out = append(out, m)
-		}
-	}
-	return out
 }
 
 // gitFiles is the repo's files under dir, tracked or not, without the git-ignored ones.

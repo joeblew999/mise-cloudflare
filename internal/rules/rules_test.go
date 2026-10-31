@@ -34,18 +34,12 @@ func good() map[string]string {
 	}
 }
 
-// cfg is what wrangler reads from a config with one D1 and one KV, no IDs, needing GREETING.
+// cfg is what wrangler reads from a config with one D1 and one KV that name no resource, and a previews block whose
+// D1 and KV name staging's, needing GREETING.
 func cfg() wconfig.Config {
 	return wconfig.Config{Path: "/r/wrangler.jsonc", Name: "w", Secrets: []string{"GREETING"},
-		Bindings: map[string]string{"DB": "d1", "KV": "kv_namespace"}, PreviewBindings: map[string]string{"DB": "d1", "KV": "kv_namespace"}, Raw: map[string]any{
-			"name": "w",
-			"previews": map[string]any{
-				"d1_databases":  []any{map[string]any{"binding": "DB", "database_id": "staging-db"}},
-				"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "staging-kv"}},
-			},
-			"d1_databases":  []any{map[string]any{"binding": "DB"}},
-			"kv_namespaces": []any{map[string]any{"binding": "KV"}},
-		}}
+		Bindings: map[string]string{"DB": "d1", "KV": "kv_namespace"}, PreviewBindings: map[string]string{"DB": "d1", "KV": "kv_namespace"},
+		PreviewNamed: []string{"DB", "KV"}, Previews: true}
 }
 
 func TestCheckPasses(t *testing.T) {
@@ -62,16 +56,15 @@ func TestCheckFinds(t *testing.T) {
 	files[".gitignore"] = "node_modules/\n"
 	c := cfg()
 	c.Secrets = []string{"GREETING", "KEY"}
-	c.Raw["account_id"] = "a"
-	delete(c.Raw, "previews")
-	c.Raw["d1_databases"] = []any{map[string]any{"binding": "DB", "database_id": "x"}}
-	c.Raw["env"] = map[string]any{"production": map[string]any{"kv_namespaces": []any{map[string]any{"binding": "KV", "id": "y"}}}}
+	c.Previews, c.PreviewBindings, c.PreviewNamed = false, nil, nil
+	c.Warnings = `▲ [WARNING] Processing wrangler.jsonc configuration:
+    - Unexpected fields found in top-level field: "kv_namespacez"`
 	p, err := Check(repo(t, files), c)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := strings.Join(p, "\n")
-	for _, want := range []string{"an account ID", "(D1 DB)", "env.production: a resource ID (KV KV)", "deploy.sh calls",
+	for _, want := range []string{"wrangler warns about wrangler.jsonc:", `"kv_namespacez"`, "deploy.sh calls",
 		"notes.txt holds a Cloudflare token", ".dev.vars isn't", ".env isn't", ".cloudflare/ isn't", "secrets.required lists [GREETING KEY]", "isn't pinned"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -98,14 +91,11 @@ func TestPreviewBindings(t *testing.T) {
 // creates none.
 func TestPreviewResources(t *testing.T) {
 	c := cfg()
-	c.Raw["r2_buckets"] = []any{map[string]any{"binding": "BUCKET"}}
-	c.Raw["previews"] = map[string]any{
-		"d1_databases":  []any{map[string]any{"binding": "DB", "database_id": "staging-db"}},
-		"kv_namespaces": []any{map[string]any{"binding": "KV", "id": ""}},
-		"r2_buckets":    []any{map[string]any{"binding": "BUCKET"}},
-	}
+	c.Bindings["BUCKET"] = "r2_bucket"
+	c.PreviewBindings["BUCKET"] = "r2_bucket"
+	c.PreviewNamed = []string{"DB"}
 	p := Previews(c, false)
-	if len(p) != 1 || !strings.Contains(p[0], "has KV KV, R2 BUCKET with no resource named") {
+	if len(p) != 1 || !strings.Contains(p[0], "has R2 BUCKET, KV KV with no resource named") {
 		t.Errorf("problems %q", p)
 	}
 }
@@ -113,7 +103,7 @@ func TestPreviewResources(t *testing.T) {
 // TestPreviewsNeeded: no previews block is fine for a repo that runs no Worker Previews, a problem for one that does.
 func TestPreviewsNeeded(t *testing.T) {
 	c := cfg()
-	delete(c.Raw, "previews")
+	c.Previews = false
 	if p := Previews(c, false); len(p) != 0 {
 		t.Errorf("problems %q", p)
 	}

@@ -114,6 +114,13 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 	}
 	mark := map[bool]string{true: "✓", false: "·"}
 	fmt.Printf("%s\n", rep.Worker)
+	// The environment is chosen as wrangler chooses it: the top level, unless CLOUDFLARE_ENV names one.
+	if env := os.Getenv("CLOUDFLARE_ENV"); env != "" {
+		fmt.Printf("  wrangler environment %s (CLOUDFLARE_ENV)\n", env)
+	} else if len(r.wc.Envs) > 0 {
+		fmt.Printf("  %s's top level; it also has %s: CLOUDFLARE_ENV=%s mise run cloudflare shows that one, and the steps deploy it\n",
+			filepath.Base(r.wc.Path), "env."+strings.Join(r.wc.Envs, ", env."), r.wc.Envs[0])
+	}
 	if len(rep.Problems) > 0 {
 		fmt.Printf("  ✗ the repo has %d problem(s) to fix first (mise run cloudflare:04-check lists them)\n", len(rep.Problems))
 	}

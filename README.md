@@ -132,6 +132,7 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 | `mise run template:e2e-connect-github` | The walk on the template as far as `connect-github`, about 7 minutes (it waits on Cloudflare's builds) | After a change to `connect-github` | Yes, and GitHub |
 | `mise run template:check-mise` | `TestMise` on the template's mise file and the tool's Go (below) | After a change to a task or a command | No |
 | `mise run root:check-mise` | `TestMise` on this repo's own `mise.toml`, its mise side: one line each, the Go it runs there, its `usage` passed by name, no POSIX shell syntax, so every task here runs on Windows too | After a change to this repo's tasks | No |
+| `mise run template:setup` | The template's own setup (`mise run setup` in `templates/`): its pinned wrangler, which `tool:test` reads wrangler configs with (`internal/wconfig`'s tests: the template's, and configs mise-cloudflare didn't make). `tool:test` skips those tests without it | Before `tool:test`, once | No |
 | `mise run template:update` | The template's own pins at their newest releases, by its own `cloudflare:update`: every pin listed, the moved ones before → after | To move its pins; then the walks | No |
 | `mise run root:update` | This repo's own pins (this `mise.toml`'s tools, `go.mod`'s modules) at their newest, by the tool's own update | To move its pins; then `tool:test` and the walks | No |
 | `mise run tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
@@ -164,7 +165,8 @@ then only runs the root mise, as on any machine:
 
 - [ci.yml](.github/workflows/ci.yml), on every push and pull request (not the walk's throwaway `e2e-*` branches), on
   Linux, macOS and Windows:
-  `mise run tool:test`, `mise run template:check-mise`, `mise run root:check-mise`, then the walk as far as `serve` on the template
+  `mise run template:setup` (the template's wrangler, which the tool's tests read configs with), `mise run tool:test`,
+  `mise run template:check-mise`, `mise run root:check-mise`, then the walk as far as `serve` on the template
   (`mise run template:e2e-serve`) and on a stamped copy (`mise run example:e2e-serve`).
 - [release.yml](.github/workflows/release.yml), on every change to the tool merged to main: `mise run tool:release`. It
   tags the next patch version, [goreleaser](.goreleaser.yaml) puts the `mise-cloudflare` binary for macOS, Linux and

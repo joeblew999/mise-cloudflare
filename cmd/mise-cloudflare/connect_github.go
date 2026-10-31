@@ -95,7 +95,7 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	}
 	workers := []githubWorker{{Env: env, Worker: r.wc.Name}}
 	if b.Staging != "" {
-		if !slices.Contains(r.wc.Envs(), "staging") {
+		if !r.wc.HasEnv("staging") {
 			fail(fmt.Errorf("a staging branch needs the wrangler environment staging in %s (env.staging, with its own bindings)", filepath.Base(r.wc.Path)))
 		}
 		sc, err := wconfig.ReadEnv(ctx, r.dir, "staging")
@@ -291,7 +291,7 @@ func (r repo) currentBuilds(ctx context.Context, c cf.CF) builds {
 		return "", ""
 	}
 	b.Branch, b.Build = get(r.wc.Name)
-	if slices.Contains(r.wc.Envs(), "staging") {
+	if r.wc.HasEnv("staging") {
 		if sc, err := wconfig.ReadEnv(ctx, r.dir, "staging"); err == nil {
 			b.Staging, _ = get(sc.Name)
 		}

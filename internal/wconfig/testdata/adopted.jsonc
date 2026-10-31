@@ -1,0 +1,28 @@
+{
+  // A project mise-cloudflare didn't make: the top level is development, env.production is production, and its
+  // resources are its own, named by ID. Comments and trailing commas, as real configs have them.
+  "name": "adopted-dev",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Limiter"] }],
+  "vars": { "MODE": "development" },
+  "hyperdrive": [
+    { "binding": "DB", "id": "0123456789abcdef0123456789abcdef", "localConnectionString": "postgresql://localhost:5432/app" },
+  ],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "fedcba9876543210fedcba9876543210" }],
+  "durable_objects": { "bindings": [{ "name": "LIMITER", "class_name": "Limiter" }] },
+  "workflows": [{ "name": "index-workflow", "binding": "INDEX", "class_name": "IndexWorkflow" }],
+  "secrets": { "required": ["API_KEY", "SIGNING_KEY"] },
+  "env": {
+    "production": {
+      "name": "adopted",
+      "vars": { "MODE": "production" },
+      "hyperdrive": [{ "binding": "DB", "id": "0123456789abcdef0123456789abcdef" }],
+      "kv_namespaces": [{ "binding": "CACHE", "id": "fedcba9876543210fedcba9876543210" }],
+      "durable_objects": { "bindings": [{ "name": "LIMITER", "class_name": "Limiter" }] },
+      "workflows": [{ "name": "index-workflow", "binding": "INDEX", "class_name": "IndexWorkflow" }],
+      "triggers": { "crons": ["0 */12 * * *"] },
+      "secrets": { "required": ["API_KEY", "SIGNING_KEY"] },
+    },
+  },
+}

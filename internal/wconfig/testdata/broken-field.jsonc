@@ -1,0 +1,7 @@
+{
+  // An unexpected field: wrangler reads it, and warns.
+  "name": "broken-field",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "kv_namespacez": [{ "binding": "KV" }],
+}

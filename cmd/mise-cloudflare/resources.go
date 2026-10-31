@@ -54,7 +54,7 @@ func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resourc
 		if id == "" {
 			id = p.Name
 		}
-		env[p.Binding] = map[string]string{"type": p.Type, wconfig.Created[p.Type].BaseKey: id}
+		env[p.Binding] = map[string]string{"type": p.Type, previewsBaseField[p.Type]: id}
 	}
 	// Off, a Worker already deleted has no Previews Base left to take them out of: its resources still go.
 	if err := patchPreviewsBase(ctx, token, account, r.wc.Name, env); err != nil && !(off && errors.Is(err, errNotOnCloudflare)) {
@@ -76,15 +76,18 @@ func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resourc
 	return out
 }
 
-// previewNeeds is the previews' own KV, D1 and R2 the Worker needs: one for each of its bindings of the kinds wrangler
-// deploy creates (wconfig.Created) that its previews block leaves out, by wrangler's own types for them.
+// previewsBaseField is the field a binding names its resource by in the Previews Base, as Cloudflare's API takes it.
+var previewsBaseField = map[string]string{"kv_namespace": "namespace_id", "d1": "database_id", "r2_bucket": "bucket_name"}
+
+// previewNeeds is the previews' own KV, D1 and R2 the Worker needs: one for each of its bindings of those kinds
+// (wconfig.PreviewsOwn, by wrangler's own types) that its previews block leaves out.
 func (r repo) previewNeeds() []resource {
 	var out []resource
 	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
 		typ := r.wc.Bindings[n]
-		c, created := wconfig.Created[typ]
-		if _, declared := r.wc.PreviewBindings[n]; created && !declared {
-			out = append(out, resource{Binding: n, Type: typ, Kind: c.What, Name: previewName(r.wc.Name, n)})
+		kind, own := wconfig.PreviewsOwn[typ]
+		if _, declared := r.wc.PreviewBindings[n]; own && !declared {
+			out = append(out, resource{Binding: n, Type: typ, Kind: kind, Name: previewName(r.wc.Name, n)})
 		}
 	}
 	return out
@@ -248,29 +251,20 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 	}
 }
 
-// ownResources is the Worker's own KV, D1 and R2: one for each of its bindings of the kinds wrangler deploy creates,
-// by the name its config gives it (a D1's database_name, an R2 bucket's bucket_name), else the one deploy gives it,
-// <worker>-<binding>.
-func (r repo) ownResources() []resource {
-	var out []resource
+// ownResources is the KV, D1 and R2 wrangler deploy made for the Worker: its bindings of those kinds that name no
+// resource, which deploy makes as <worker>-<binding>. kept is the ones the config names (an id, a database_name, a
+// bucket_name): the developer's, which nothing here deletes.
+func (r repo) ownResources() (own []resource, kept []string) {
 	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
 		typ := r.wc.Bindings[n]
-		c, created := wconfig.Created[typ]
-		if !created {
-			continue
+		kind, ok := wconfig.PreviewsOwn[typ]
+		switch {
+		case !ok:
+		case r.wc.Names(n):
+			kept = append(kept, kind+" "+n)
+		default:
+			own = append(own, resource{Binding: n, Type: typ, Kind: kind, Name: r.wc.Name + "-" + slug(n)})
 		}
-		name := r.wc.Name + "-" + slug(n)
-		if typ != "kv_namespace" { // a KV namespace's binding names it by its id, never by a name
-			items, _ := r.wc.Raw[c.Key].([]any)
-			for _, it := range items {
-				if b, _ := it.(map[string]any); b["binding"] == n {
-					if v, _ := b[c.Names].(string); v != "" {
-						name = v
-					}
-				}
-			}
-		}
-		out = append(out, resource{Binding: n, Type: typ, Kind: c.What, Name: name})
 	}
-	return out
+	return own, kept
 }

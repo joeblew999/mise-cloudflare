@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/templates"
 )
 
@@ -178,6 +179,21 @@ func TestBeyondBuildToken(t *testing.T) {
 	}
 	if got := beyondBuildToken(map[string]string{"KV": "kv_namespace"}); got != nil {
 		t.Errorf("a Worker with only KV: %q, want no warning", got)
+	}
+}
+
+// TestOwnResources: delete's list is only the KV, D1 and R2 that name no resource (wrangler deploy made them, as
+// <worker>-<binding>); one the config names is the developer's, kept; other kinds aren't resources deploy makes.
+func TestOwnResources(t *testing.T) {
+	r := repo{wc: wconfig.Config{Name: "w", Named: []string{"CACHE", "HYPERDRIVE"},
+		Bindings: map[string]string{"CACHE": "kv_namespace", "KV": "kv_namespace", "DB": "d1", "HYPERDRIVE": "hyperdrive", "LIMITER": "durable_object_namespace"}}}
+	own, kept := r.ownResources()
+	var names []string
+	for _, p := range own {
+		names = append(names, p.Name)
+	}
+	if !slices.Equal(names, []string{"w-db", "w-kv"}) || !slices.Equal(kept, []string{"KV CACHE"}) {
+		t.Errorf("own %q, kept %q", names, kept)
 	}
 }
 

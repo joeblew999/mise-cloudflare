@@ -1,0 +1,7 @@
+{
+  // A field of the wrong type: wrangler refuses to read it.
+  "name": "broken-type",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "minify": "yes",
+}
