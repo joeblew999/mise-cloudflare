@@ -44,9 +44,12 @@ that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `
 Commit what steps 2 and 3 wrote.
 
 mise-cloudflare's pin, `.mise/config.toml`, is the release that ran `init`, so `mise install` gets that release from
-GitHub, here and on GitHub's machines alike. There's nothing to edit, then or ever. `init` writes only its own files: a `.gitignore` or `.claude/settings.json` the repo has already it leaves as it is, and `check` names what
-they lack (the secrets git-ignored, the hook's entry). Pin wrangler to an exact version in `package.json` and list the
-Worker's secrets in `.dev.vars.example` with local values: `check` and `serve` ask for them.
+GitHub, here and on GitHub's machines alike. There's nothing to edit, then or ever. `init` writes only its own files: a
+`.gitignore` or `.claude/settings.json` the repo has already it leaves as it is, and `check` names what they lack (the
+hook's entry). The repo's wrangler config is the repo's, read by its own wrangler: nothing here changes it, refuses what
+it names, or deletes a resource it names. The steps that write a file holding secrets git-ignore it first (`serve` its
+`.dev.vars`, made from a `.dev.vars.example` if there is one; `09` cf's `.cloudflare/`), and wrangler itself names a
+required secret it has no value for.
 
 To upgrade: `mise run cloudflare:update` moves the pin (with every other), then `mise run cloudflare:03-init` writes
 `init`'s files again; or name the release: `mise use --path .mise/config.toml github:joeblew999/mise-cloudflare@<version>`.
@@ -125,11 +128,10 @@ file: each choice is a command's flag, kept by Cloudflare's Workers Builds setup
 
 | The repo needs | Because |
 |---|---|
-| No account or resource IDs in its wrangler config, in any environment | The login picks the account; wrangler finds or creates KV, D1 and R2 by name |
+| A wrangler config its own wrangler reads without a warning | It's wrangler's own validation: an unexpected field, a wrong type |
 | No Cloudflare token in its files, and nothing calling `wrangler login` | A token in the repo leaks; `wrangler login` is the machine's, not the repo's |
-| `.dev.vars`, `.env` and `.cloudflare/` git-ignored (init does it) | Secrets, and Cloudflare's `cf` caches the account it logged into in `.cloudflare/` |
-| `.dev.vars.example` listing exactly the config's `secrets.required` | So `wrangler dev` has every secret |
-| wrangler pinned to an exact version in `package.json` (init does it) | So everyone, CI and Cloudflare's builds run the same wrangler |
+| No `.dev.vars`, `.env` or `.cloudflare/` that git would commit | They hold local secrets, and the account cf logged into; the steps that write them git-ignore them first |
+| wrangler pinned: exactly in `package.json`, or by the lockfile committed with it (a workspace's above it counts) | So everyone, CI and Cloudflare's builds run the same wrangler |
 | A `previews` block, if there is one, with every binding a preview uses but KV, D1 and R2 | A preview inherits nothing from production; KV, D1 and R2 it gets its own (below) |
 
 ## Logins and tokens

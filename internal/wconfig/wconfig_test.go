@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -33,10 +35,24 @@ func read(t *testing.T, config, env string) (Config, error) {
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
 	os.WriteFile(filepath.Join(dir, "src", "index.js"), []byte("export default {}\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "wrangler"+filepath.Ext(config)), b, 0o644)
-	if err := os.Symlink(modules, filepath.Join(dir, "node_modules")); err != nil {
-		t.Skipf("no symlink to the template's node_modules here: %v", err)
-	}
+	link(t, modules, filepath.Join(dir, "node_modules"))
 	return ReadEnv(context.Background(), dir, env)
+}
+
+// link makes at point to the folder target: a symlink, or on Windows without the right to make one (no Developer Mode,
+// no admin), a directory junction, which anyone may make.
+func link(t *testing.T, target, at string) {
+	t.Helper()
+	err := os.Symlink(target, at)
+	if err != nil && runtime.GOOS == "windows" {
+		var out []byte
+		if out, err = exec.Command("cmd", "/c", "mklink", "/J", at, target).CombinedOutput(); err != nil {
+			err = fmt.Errorf("%v: %s", err, out)
+		}
+	}
+	if err != nil {
+		t.Skipf("no link to the template's node_modules here: %v", err)
+	}
 }
 
 // TestAdopted: a project mise-cloudflare didn't make, read as wrangler reads it: production in env.production under its
@@ -102,9 +118,11 @@ func TestRepos(t *testing.T) {
 		t.Skip("mise run repos:check runs it: it clones")
 	}
 	root, _ := filepath.Abs(filepath.Join("..", ".."))
-	// The tool itself, built from here, for its own check in each config's folder.
-	bin := filepath.Join(t.TempDir(), "mise-cloudflare")
-	if out, err := exec.Command("go", "build", "-o", bin, filepath.Join(root, "cmd", "mise-cloudflare")).CombinedOutput(); err != nil {
+	// The tool itself, built from here, for its own check in each config's folder: into a folder, so go names it for
+	// the OS (.exe on Windows), and exec finds it by its name alone there too.
+	tmp := t.TempDir()
+	bin := filepath.Join(tmp, "mise-cloudflare")
+	if out, err := exec.Command("go", "build", "-o", tmp+string(filepath.Separator), filepath.Join(root, "cmd", "mise-cloudflare")).CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	list := flag.Args()
@@ -154,14 +172,12 @@ func TestRepos(t *testing.T) {
 func linked(t *testing.T, dir string) {
 	t.Helper()
 	modules, _ := filepath.Abs(filepath.Join("..", "..", "templates", "node_modules"))
-	link := filepath.Join(dir, "node_modules")
-	if _, err := os.Lstat(link); err == nil {
+	at := filepath.Join(dir, "node_modules")
+	if _, err := os.Lstat(at); err == nil {
 		return
 	}
-	if err := os.Symlink(modules, link); err != nil {
-		t.Skipf("no symlink to the template's node_modules here: %v", err)
-	}
-	t.Cleanup(func() { os.Remove(link) })
+	link(t, modules, at)
+	t.Cleanup(func() { os.Remove(at) })
 }
 
 // report reads one config of the repo cloned in clone where it is, at its top level and in each environment, one line
@@ -241,7 +257,8 @@ func pinned(path, clone string) string {
 
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	// Long paths: a repo's deep folders, under repos/ here, can pass Windows' 260 characters.
+	cmd := exec.Command("git", append([]string{"-c", "core.longpaths=true"}, args...)...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
