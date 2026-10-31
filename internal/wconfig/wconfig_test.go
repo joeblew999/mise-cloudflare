@@ -200,8 +200,8 @@ func report(t *testing.T, path, clone, bin string) {
 		switch {
 		case date == "":
 			verdict, date = "WARN", "none"
-		case date > w.RuntimeDate:
-			verdict, date = "WARN", date+" (later than our wrangler's "+w.RuntimeDate+")"
+		case date > w.DevDate:
+			verdict, date = "WARN", date+" (later than our wrangler dev's default, "+w.DevDate+", its runtime's)"
 		}
 		if name == "" {
 			verdict, name = "WARN", "none (wrangler deploy needs one)"

@@ -31,10 +31,10 @@ type Config struct {
 	Named        []string `json:"named"`
 	PreviewNamed []string `json:"previewNamed"`
 	Previews     bool     `json:"previews"` // it has a previews block
-	// CompatibilityDate is the config's compatibility_date; RuntimeDate the newest one this wrangler's own runtime has
-	// (wrangler dev falls back to it for a later one; Cloudflare's runtime, which deploys run on, is always newer).
+	// CompatibilityDate is the config's compatibility_date; DevDate the one this wrangler's dev uses when a config gives
+	// none (its runtime's own date in recent wranglers, today's in older ones).
 	CompatibilityDate string `json:"compatibilityDate"`
-	RuntimeDate       string `json:"runtimeDate"`
+	DevDate           string `json:"devDate"`
 	Warnings          string `json:"-"` // what wrangler said about the config reading it, its own validation
 }
 
@@ -55,7 +55,7 @@ try {
   const named = (b) => Object.entries(conv(b)).filter(([, v]) => given(v)).map(([n]) => n);
   console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [],
     envs: Object.keys(r.rawConfig.env ?? {}), previews: c.previews !== undefined,
-    compatibilityDate: c.compatibility_date ?? '', runtimeDate: w.unstable_getDevCompatibilityDate?.() ?? '',
+    compatibilityDate: c.compatibility_date ?? '', devDate: w.unstable_getDevCompatibilityDate?.() ?? '',
     bindings: types(c), previewBindings: types(c.previews), named: named(c), previewNamed: named(c.previews) }));
 } catch (e) {
   console.log('WCONFIG_ERROR ' + JSON.stringify(String(e?.message ?? e)));

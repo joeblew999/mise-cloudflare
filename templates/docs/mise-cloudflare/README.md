@@ -66,6 +66,7 @@ mise run cloudflare
 
 ```
 my-worker
+  compatibility date 2026-10-01
   ✓ 06. Run it locally     mise run cloudflare:06-serve
   ✓ 08. Deploy it          mise run cloudflare:08-deploy   https://my-worker.example.workers.dev
   · 09. Deploy every push  mise run cloudflare:09-connect-github   a preview for every pull request, then staging and production

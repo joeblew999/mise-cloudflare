@@ -28,15 +28,18 @@ type statusReport struct {
 	URL            string             `json:"url,omitempty"`
 	GitHub         string             `json:"github"`                   // "Workers Builds" when it deploys every push, else ""
 	GitHubCantTell string             `json:"githubCantTell,omitempty"` // why this machine can't tell whether it does
-	StrayTokens    []string           `json:"strayTokens"`
-	Problems       []string           `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
-	Next           string             `json:"next"`
+	// The config's compatibility_date, and the one this wrangler's dev uses when a config gives none.
+	CompatibilityDate string   `json:"compatibilityDate"`
+	DevDate           string   `json:"devDate"`
+	StrayTokens       []string `json:"strayTokens"`
+	Problems          []string `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
+	Next              string   `json:"next"`
 }
 
 // show is mise-cloudflare with no command or show (mise run cloudflare, cloudflare:05-show): the steps in order, which are done for this repo, and the
 // next one. It never logs in.
 func (r repo) show(ctx context.Context, jsonOut bool) {
-	rep := statusReport{Worker: r.wc.Name, Profile: r.w.Profile, Accounts: []wrangler.Account{}, Scopes: []string{},
+	rep := statusReport{Worker: r.wc.Name, Profile: r.w.Profile, CompatibilityDate: r.wc.CompatibilityDate, DevDate: r.wc.DevDate, Accounts: []wrangler.Account{}, Scopes: []string{},
 		Needs: r.wanted(ctx), StrayTokens: tokenEnvFiles(r.dir), Problems: []string{}}
 	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" {
 		rep.StrayTokens = append([]string{"this shell"}, rep.StrayTokens...)
@@ -120,6 +123,13 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 	} else if len(r.wc.Envs) > 0 {
 		fmt.Printf("  %s's top level; it also has %s: CLOUDFLARE_ENV=%s mise run cloudflare shows that one, and the steps deploy it\n",
 			filepath.Base(r.wc.Path), "env."+strings.Join(r.wc.Envs, ", env."), r.wc.Envs[0])
+	}
+	file := filepath.Base(r.wc.Path)
+	// wrangler itself says when the date is later than its local runtime has (wrangler dev falls back, and says so).
+	if rep.CompatibilityDate == "" {
+		fmt.Printf("  ✗ no compatibility_date in %s: wrangler won't deploy without one (wrangler dev uses %s)\n", file, rep.DevDate)
+	} else {
+		fmt.Printf("  compatibility date %s\n", rep.CompatibilityDate)
 	}
 	if len(rep.Problems) > 0 {
 		fmt.Printf("  ✗ the repo has %d problem(s) to fix first (mise run cloudflare:04-check lists them)\n", len(rep.Problems))
