@@ -60,22 +60,6 @@ func TestCI(t *testing.T) {
 	}
 }
 
-// TestInstallCommand: only a lockfile committed to git counts, since Workers Builds checks the repository out.
-func TestInstallCommand(t *testing.T) {
-	dir := t.TempDir()
-	if exec.Command("git", "-C", dir, "init", "-q").Run() != nil {
-		t.Skip("no git")
-	}
-	os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte("{}"), 0o644)
-	if got := installCommand(dir); got != "npm install" {
-		t.Errorf("an uncommitted package-lock.json: %q", got)
-	}
-	exec.Command("git", "-C", dir, "add", "package-lock.json").Run()
-	if got := installCommand(dir); got != "npm ci" {
-		t.Errorf("a committed package-lock.json: %q", got)
-	}
-}
-
 // TestMoved: update ends with every pin it read, the moved ones before → after, in the order of their file and name.
 func TestMoved(t *testing.T) {
 	before := map[string]string{"mise.toml node": "26.12.1", "mise.toml aube": "2.8.4", "package.json wrangler": "4.151.3", "go.mod example.com/old": "v1.0.0"}

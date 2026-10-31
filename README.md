@@ -133,6 +133,7 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 | `mise run template:check-mise` | `TestMise` on the template's mise file and the tool's Go (below) | After a change to a task or a command | No |
 | `mise run root:check-mise` | `TestMise` on this repo's own `mise.toml`, its mise side: one line each, the Go it runs there, its `usage` passed by name, no POSIX shell syntax, so every task here runs on Windows too | After a change to this repo's tasks | No |
 | `mise run template:setup` | The template's own setup (`mise run setup` in `templates/`): its pinned wrangler, which `tool:test` reads wrangler configs with (`internal/wconfig`'s tests: the template's, and configs mise-cloudflare didn't make). `tool:test` skips those tests without it | Before `tool:test`, once | No |
+| `mise run repos:check`, `mise run repos:check owner/repo` | Every wrangler config in third-party repos read as the tasks read one, with our wrangler, then the tool's own `check` run where each one is: one line per config and environment (name, compatibility date, bindings, secrets, previews, the wrangler its repo pins, wrangler's warnings) and what `check` finds. The repos named, else [repos.txt](repos.txt)'s, cloned into `repos/` (git-ignored). Here, never in CI | After a change to how the tool reads a config or what `check` asks of a repo | No |
 | `mise run template:update` | The template's own pins at their newest releases, by its own `cloudflare:update`: every pin listed, the moved ones before → after | To move its pins; then the walks | No |
 | `mise run root:update` | This repo's own pins (this `mise.toml`'s tools, `go.mod`'s modules) at their newest, by the tool's own update | To move its pins; then `tool:test` and the walks | No |
 | `mise run tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
@@ -155,6 +156,7 @@ mise side only: the root runs Go, it isn't a binary's tasks.
 | [internal/](internal/) | other repos' | the login (`wrangler`), Cloudflare's cf (`cf`), the Worker's config as wrangler reads it (`wconfig`), the rules (`rules`) |
 | [e2e_walk_test.go](e2e_walk_test.go), [e2e_steps_test.go](e2e_steps_test.go), [e2e_mise_test.go](e2e_mise_test.go), [e2e_cloudflare_test.go](e2e_cloudflare_test.go) | this repo's | the walk: `TestWalk` and its stages; the steps, each with its check; the repo and the calls into its own mise file (the stamped copy and the checkout made here); what it looks at on Cloudflare |
 | [tool_test.go](tool_test.go) | this repo's | `TestToolRelease`, the release: only `mise run tool:release` runs it |
+| [repos.txt](repos.txt), `repos/` | this repo's | the third-party repos `repos:check` reads every wrangler config of, and their clones (git-ignored) |
 | [mise_test.go](mise_test.go) | this repo's, for now | the mise ↔ Go checker, `TestMise` |
 | [.claude/](.claude/), [.github/workflows/](.github/workflows/) | this repo's | its own Claude Code hook and its own workflows (`ci`, `release`); other repos get theirs from `templates/` |
 

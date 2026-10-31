@@ -1,0 +1,5 @@
+# Third-party repos with wrangler configs, which mise run repos:check reads every one of, with our wrangler, as the
+# tasks would: owner/repo, or owner/repo@commit. Each is cloned into repos/ (git-ignored).
+cloudflare/realtime-examples
+coldter/slopnote-rag
+cloudflare/realtimekit-web-examples

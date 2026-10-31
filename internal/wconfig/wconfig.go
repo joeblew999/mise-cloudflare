@@ -31,7 +31,11 @@ type Config struct {
 	Named        []string `json:"named"`
 	PreviewNamed []string `json:"previewNamed"`
 	Previews     bool     `json:"previews"` // it has a previews block
-	Warnings     string   `json:"-"`        // what wrangler said about the config reading it, its own validation
+	// CompatibilityDate is the config's compatibility_date; RuntimeDate the newest one this wrangler's own runtime has
+	// (wrangler dev falls back to it for a later one; Cloudflare's runtime, which deploys run on, is always newer).
+	CompatibilityDate string `json:"compatibilityDate"`
+	RuntimeDate       string `json:"runtimeDate"`
+	Warnings          string `json:"-"` // what wrangler said about the config reading it, its own validation
 }
 
 // PreviewsOwn is the binding kinds, by wrangler's own types, whose resources previews get of their own from mise-cloudflare
@@ -51,6 +55,7 @@ try {
   const named = (b) => Object.entries(conv(b)).filter(([, v]) => given(v)).map(([n]) => n);
   console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [],
     envs: Object.keys(r.rawConfig.env ?? {}), previews: c.previews !== undefined,
+    compatibilityDate: c.compatibility_date ?? '', runtimeDate: w.unstable_getDevCompatibilityDate?.() ?? '',
     bindings: types(c), previewBindings: types(c.previews), named: named(c), previewNamed: named(c.previews) }));
 } catch (e) {
   console.log('WCONFIG_ERROR ' + JSON.stringify(String(e?.message ?? e)));
@@ -97,9 +102,6 @@ func ReadEnv(ctx context.Context, dir, env string) (Config, error) {
 	}
 	if !found {
 		return c, fmt.Errorf("wrangler printed no config here:\n%s", strings.Join(said, "\n"))
-	}
-	if c.Name == "" {
-		return c, fmt.Errorf("%s has no name", c.Path)
 	}
 	c.Warnings = strings.Join(said, "\n")
 	return c, nil

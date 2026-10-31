@@ -9,6 +9,8 @@
 #     mise run template:e2e-connect-github  TestWalk on it, as far as connect-github, through GitHub (about 7 minutes)
 #     mise run template:update         its own pins at their newest releases, by its own task (cloudflare:update)
 #     mise run template:setup          its own setup (mise run setup there): its pinned wrangler, which tool:test reads configs with
+#   repos: third-party repos with wrangler configs, repos.txt's, cloned into repos/ (git-ignored)
+#     mise run repos:check             every wrangler config in them read by the bridge, with our wrangler (or the repos named)
 #     mise run template:check-mise     TestMise on its mise file and the tool's Go (MISE_FILE, GO_CMD, GO_LAYOUT=file, GO_CALLERS=.)
 #   example: a new repo, made as a person makes one (init, then cloudflare:template), by the walk and gone after it
 #     mise run example:e2e-serve       TestWalk on a new repo, as far as the stage serve (E2E_STAMPED=true; --version runs a release, -args -version)
@@ -102,6 +104,12 @@ description = "The template's own setup, by its own task (mise run setup, in tem
 dir = "{{config_root}}/templates"
 env = { MISE_CEILING_PATHS = "{{config_root}}", MISE_IGNORED_CONFIG_PATHS = "{{config_root}}/templates/.mise/config.local.toml" }
 run = "mise run setup"
+
+[tasks."repos:check"]
+description = "Every wrangler config in third-party repos read as the tasks read one (internal/wconfig, with the template's wrangler), at the top level and in each environment, one line each: its name, compatibility date (flagged when later than our wrangler's runtime has), bindings (the ones naming their own resource marked), secrets, previews block, the wrangler its repo pins, and what wrangler warns about it. The repos named (owner/repo, or owner/repo@commit), else repos.txt's, each cloned into repos/ (git-ignored). Fails on a config it can't read. After template:setup"
+usage = 'arg "[repos]..." help="owner/repo or owner/repo@commit, else every repo in repos.txt"'
+depends = ["template:setup"]
+run = 'go test ./internal/wconfig -run "^TestRepos$" -count=1 -v -args -repos{% for a in usage.repos %} "{{a}}"{% endfor %}'
 
 [tasks."tool:test"]
 description = "The tool's own checks, run for real (no cached results): go vet, its Go tests, the release config. They need no repo to walk and no Cloudflare account; the ones that read wrangler configs need the template's wrangler (template:setup), and skip without it. After every change"

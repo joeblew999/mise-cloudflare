@@ -23,14 +23,28 @@ type W struct {
 	Profile string
 }
 
-// Installed reports whether the repo's pinned wrangler is installed (the repo's setup task).
+// Installed reports whether the repo's pinned wrangler is installed (the repo's own install).
 func (w W) Installed() bool {
 	_, err := os.Stat(w.bin())
 	return err == nil
 }
 
+// bin is the repo's wrangler, found as node finds it: in node_modules in the repo folder or a folder above it (a
+// workspace installs it at its root).
 func (w W) bin() string {
-	return filepath.Join(w.Dir, "node_modules", "wrangler", "bin", "wrangler.js")
+	first := ""
+	for d := w.Dir; ; d = filepath.Dir(d) {
+		p := filepath.Join(d, "node_modules", "wrangler", "bin", "wrangler.js")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+		if first == "" {
+			first = p
+		}
+		if d == filepath.Dir(d) {
+			return first
+		}
+	}
 }
 
 // Plain is a wrangler command with no profile: local dev, and the auth commands, which name the profile themselves.

@@ -63,6 +63,7 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 			fail(err)
 		}
 	}
+	must(rules.EnsureIgnored(r.dir, ".cloudflare/")) // cf caches the account it logs into there
 	c := cf.CF{Dir: r.dir, Profile: r.w.Profile}
 	who, err := c.Whoami(ctx)
 	if err != nil {
@@ -148,7 +149,8 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	}
 	rep.Repository = gh.Owner.Login + "/" + gh.Name
 	rep.Root = gh.root
-	rep.Build = orDefault(b.Build, installCommand(r.dir))
+	_, install := rules.Lockfile(r.dir)
+	rep.Build = orDefault(b.Build, install)
 	prodBranch := gh.DefaultBranch
 	if b.Staging != "" {
 		prodBranch = "production"
@@ -297,25 +299,6 @@ func (r repo) currentBuilds(ctx context.Context, c cf.CF) builds {
 		}
 	}
 	return b
-}
-
-// installCommand is how Workers Builds installs dependencies: from the lockfile committed in dir, else npm.
-func installCommand(dir string) string {
-	tracked := func(f string) bool {
-		return exec.Command("git", "-C", dir, "ls-files", "--error-unmatch", f).Run() == nil
-	}
-	for _, l := range []struct{ file, cmd string }{
-		{"pnpm-lock.yaml", "pnpm install --frozen-lockfile"},
-		{"bun.lock", "bun install --frozen-lockfile"},
-		{"bun.lockb", "bun install --frozen-lockfile"},
-		{"yarn.lock", "yarn install --frozen-lockfile"},
-		{"package-lock.json", "npm ci"},
-	} {
-		if tracked(l.file) {
-			return l.cmd
-		}
-	}
-	return "npm install"
 }
 
 func orDefault(v, def string) string {

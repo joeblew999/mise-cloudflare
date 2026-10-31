@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 
+	"github.com/joeblew999/mise-cloudflare/internal/rules"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
@@ -150,7 +152,11 @@ func openRepo(ctx context.Context, dir string) repo {
 		fail(errNoWorker)
 	}
 	if !w.Installed() {
-		fail(errors.New("wrangler isn't installed here: mise run setup installs it (or the repo's own way: its package.json pins wrangler)"))
+		install := "mise run setup"
+		if has := exec.CommandContext(ctx, "mise", "tasks", "info", "setup"); has.Run() != nil {
+			_, install = rules.Lockfile(dir)
+		}
+		fail(errors.New("wrangler isn't installed here: install the repo's dependencies, " + install))
 	}
 	// wrangler runs on node. The repo's mise.toml pins it (the template's does), and a mise task puts it on the PATH.
 	if exec.Command("node", "--version").Run() != nil {
@@ -158,6 +164,9 @@ func openRepo(ctx context.Context, dir string) repo {
 	}
 	wc, err := wconfig.Read(ctx, dir)
 	must(err)
+	if wc.Name == "" {
+		fail(fmt.Errorf("%s has no name: add one (\"name\"), which wrangler deploy needs and the repo's login is named after", filepath.Base(wc.Path)))
+	}
 	w.Profile = wc.Name // the login is named after the Worker
 	return repo{dir: dir, wc: wc, w: w}
 }

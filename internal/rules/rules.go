@@ -20,7 +20,6 @@ import (
 var (
 	token    = regexp.MustCompile(`CLOUDFLARE_API_TOKEN\s*[=:]\s*["']?[A-Za-z0-9_-]{30,}`)
 	login    = regexp.MustCompile(`\bwrangler\s+login\b`)
-	varName  = regexp.MustCompile(`(?m)^([A-Z_][A-Z0-9_]*)=`)
 	exactPin = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 )
 
@@ -49,33 +48,21 @@ func Check(dir string, w wconfig.Config) ([]string, error) {
 			bad("%s calls the machine-wide wrangler login", f)
 		}
 	}
-	// Only the repo's own ignore files count: another developer doesn't have this machine's global gitignore.
-	// .cloudflare/ is where Cloudflare's cf CLI caches the account it logged into (its ID and name).
-	for _, f := range []string{".dev.vars", ".env", ".cloudflare/"} {
-		if exec.Command("git", "-C", dir, "-c", "core.excludesFile=", "check-ignore", "-q", f).Run() != nil {
-			bad("%s isn't git-ignored", f)
+	// What holds local secrets or cf's login cache must not be committed, by the repo's own ignore files only (another
+	// developer doesn't have this machine's global gitignore). Only one that's there counts: the steps that write one
+	// (serve, connect-github) git-ignore it first.
+	for _, f := range secretFiles {
+		if _, err := os.Stat(filepath.Join(dir, f)); err == nil && !ignored(dir, f) {
+			bad("%s would be committed: git-ignore it (%s)", f, "it holds local secrets, or cf's login")
 		}
 	}
 
-	want := slices.Sorted(slices.Values(w.Secrets))
-	var have []string
-	if b, err := os.ReadFile(filepath.Join(dir, ".dev.vars.example")); err == nil {
-		for _, m := range varName.FindAllSubmatch(b, -1) {
-			have = append(have, string(m[1]))
-		}
-	}
-	slices.Sort(have)
-	if !slices.Equal(want, have) {
-		bad(".dev.vars.example lists %v, secrets.required lists %v", have, want)
-	}
-
-	var pkg struct{ Dependencies, DevDependencies map[string]string }
-	pin := "missing"
-	if b, err := os.ReadFile(filepath.Join(dir, "package.json")); err == nil && json.Unmarshal(b, &pkg) == nil {
-		pin = cmpOr(pkg.DevDependencies["wrangler"], pkg.Dependencies["wrangler"], "missing")
-	}
-	if !exactPin.MatchString(pin) {
-		bad("wrangler isn't pinned to an exact version in package.json (%s)", pin)
+	// Everyone runs the same wrangler: the one package.json pins exactly, or the one its committed lockfile does.
+	pin := wranglerPin(dir)
+	if lock, install := Lockfile(dir); pin == "" {
+		bad("no package.json here or above it depends on wrangler: add it (the tasks run the repo's own), then %s", install)
+	} else if lock == "" && !exactPin.MatchString(pin) {
+		bad("wrangler is %s in package.json, and no lockfile is committed to pin it: commit the one %s makes, or pin it exactly", pin, install)
 	}
 	return problems, nil
 }
@@ -122,6 +109,80 @@ func previewBindings(w wconfig.Config) []string {
 	}
 	slices.Sort(missing)
 	return missing
+}
+
+// secretFiles is what holds local secrets (.dev.vars, .env) or cf's login cache (.cloudflare/: the account it logged
+// into, its ID and name).
+var secretFiles = []string{".dev.vars", ".env", ".cloudflare/"}
+
+func ignored(dir, f string) bool {
+	return exec.Command("git", "-C", dir, "-c", "core.excludesFile=", "check-ignore", "-q", f).Run() == nil
+}
+
+// EnsureIgnored git-ignores f in dir's own .gitignore, before a step writes it, unless the repo already does.
+func EnsureIgnored(dir, f string) error {
+	if ignored(dir, f) {
+		return nil
+	}
+	path := filepath.Join(dir, ".gitignore")
+	b, _ := os.ReadFile(path)
+	if len(b) > 0 && !bytes.HasSuffix(b, []byte("\n")) {
+		b = append(b, '\n')
+	}
+	if err := os.WriteFile(path, append(b, f+"\n"...), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("✓ %s is git-ignored now (added to .gitignore): it holds local secrets, or cf's login\n", f)
+	return nil
+}
+
+// lockfiles is each package manager's lockfile and how Workers Builds installs from it.
+var lockfiles = []struct{ file, install string }{
+	{"pnpm-lock.yaml", "pnpm install --frozen-lockfile"},
+	{"bun.lock", "bun install --frozen-lockfile"},
+	{"bun.lockb", "bun install --frozen-lockfile"},
+	{"yarn.lock", "yarn install --frozen-lockfile"},
+	{"package-lock.json", "npm ci"},
+}
+
+// Lockfile is the lockfile committed for dir, in it or in a folder above it in its git repo (a workspace's), and the
+// command that installs from it: "" and npm install when there's none.
+func Lockfile(dir string) (file, install string) {
+	for d := range upward(dir) {
+		for _, l := range lockfiles {
+			if exec.Command("git", "-C", d, "ls-files", "--error-unmatch", l.file).Run() == nil {
+				return filepath.Join(d, l.file), l.install
+			}
+		}
+	}
+	return "", "npm install"
+}
+
+// wranglerPin is the wrangler version the nearest package.json at or above dir, in its git repo, depends on, or "".
+func wranglerPin(dir string) string {
+	for d := range upward(dir) {
+		var pkg struct{ Dependencies, DevDependencies map[string]string }
+		if b, err := os.ReadFile(filepath.Join(d, "package.json")); err == nil && json.Unmarshal(b, &pkg) == nil {
+			if v := cmpOr(pkg.DevDependencies["wrangler"], pkg.Dependencies["wrangler"]); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+// upward is dir and each folder above it, up to its git repo's top (dir alone outside one).
+func upward(dir string) func(func(string) bool) {
+	return func(yield func(string) bool) {
+		top, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+		real := func(p string) string { r, _ := filepath.EvalSymlinks(p); return filepath.Clean(r) }
+		stop := real(strings.TrimSpace(string(top)))
+		for d := dir; ; d = filepath.Dir(d) {
+			if !yield(d) || err != nil || real(d) == stop || d == filepath.Dir(d) {
+				return
+			}
+		}
+	}
 }
 
 // gitFiles is the repo's files under dir, tracked or not, without the git-ignored ones.

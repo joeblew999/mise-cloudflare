@@ -54,6 +54,8 @@ func TestCheckFinds(t *testing.T) {
 	files["notes.txt"] = "CLOUDFLARE_API_TOKEN=abcdefghijklmnopqrstuvwxyz0123456789\n"
 	files["package.json"] = `{ "devDependencies": { "wrangler": "^4.0.0" } }`
 	files[".gitignore"] = "node_modules/\n"
+	files[".dev.vars"] = "GREETING=local\n"
+	files[".cloudflare/account.json"] = "{}\n"
 	c := cfg()
 	c.Secrets = []string{"GREETING", "KEY"}
 	c.Previews, c.PreviewBindings, c.PreviewNamed = false, nil, nil
@@ -65,10 +67,13 @@ func TestCheckFinds(t *testing.T) {
 	}
 	got := strings.Join(p, "\n")
 	for _, want := range []string{"wrangler warns about wrangler.jsonc:", `"kv_namespacez"`, "deploy.sh calls",
-		"notes.txt holds a Cloudflare token", ".dev.vars isn't", ".env isn't", ".cloudflare/ isn't", "secrets.required lists [GREETING KEY]", "isn't pinned"} {
+		"notes.txt holds a Cloudflare token", ".dev.vars would be committed", ".cloudflare/ would be committed", "no lockfile is committed"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, ".env would") {
+		t.Errorf("a .env that isn't there isn't a problem:\n%s", got)
 	}
 	if strings.Contains(got, "README.md") {
 		t.Errorf("a .md file may mention wrangler login:\n%s", got)
@@ -109,5 +114,22 @@ func TestPreviewsNeeded(t *testing.T) {
 	}
 	if p := Previews(c, true); len(p) != 1 || !strings.Contains(p[0], "add \"previews\": {}") {
 		t.Errorf("problems %q", p)
+	}
+}
+
+// TestLockfile: a committed lockfile pins wrangler, in the folder or a workspace's above it; an uncommitted one doesn't
+// (Workers Builds checks the repository out), and the install is then npm install.
+func TestLockfile(t *testing.T) {
+	dir := repo(t, map[string]string{"package-lock.json": "{}", "worker/package.json": `{ "devDependencies": { "wrangler": "^4.0.0" } }`})
+	worker := filepath.Join(dir, "worker")
+	if f, install := Lockfile(worker); f != "" || install != "npm install" {
+		t.Errorf("an uncommitted package-lock.json: %q, %q", f, install)
+	}
+	exec.Command("git", "-C", dir, "add", "package-lock.json").Run()
+	if f, install := Lockfile(worker); filepath.Base(f) != "package-lock.json" || install != "npm ci" {
+		t.Errorf("a workspace's committed package-lock.json: %q, %q", f, install)
+	}
+	if p, err := Check(worker, cfg()); err != nil || strings.Contains(strings.Join(p, "\n"), "wrangler is") {
+		t.Errorf("a ^ range with a committed lockfile is pinned: %q, %v", p, err)
 	}
 }

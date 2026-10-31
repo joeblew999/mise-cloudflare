@@ -9,3 +9,5 @@ dist/
 bin/
 # A go build of the tool at the root: mise run tool:build writes bin/.
 /mise-cloudflare
+# Third-party repos cloned by mise run repos:check (repos.txt lists them).
+/repos/
