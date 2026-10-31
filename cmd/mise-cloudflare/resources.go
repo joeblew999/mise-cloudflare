@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +11,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
@@ -46,7 +44,7 @@ func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resourc
 			env[p.Binding] = nil // a JSON merge patch's null takes the key out
 			continue
 		}
-		if out[i].ID, out[i].Done, err = r.makeResource(ctx, p); err != nil {
+		if out[i].ID, out[i].Done, err = r.makeResource(ctx, p, token, account); err != nil {
 			fail(err)
 		}
 		// In a preview's bindings, as wrangler sends them: R2 by its bucket's name, KV and D1 by id.
@@ -62,7 +60,7 @@ func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resourc
 	}
 	if off {
 		for i, p := range out {
-			out[i].Done = r.deleteResource(ctx, p)
+			out[i].Done = r.deleteResource(ctx, p, token, account)
 		}
 	}
 	if !jsonOut {
@@ -96,32 +94,22 @@ func (r repo) previewNeeds() []resource {
 // previewsMissing is what the Previews Base lacks: KV, D1 or R2 added since, and the Worker's required secrets. Nil if
 // it can't tell.
 func (r repo) previewsMissing(ctx context.Context, token, account string) (resources, secrets []string) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://api.cloudflare.com/client/v4/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		return nil, nil
-	}
-	defer resp.Body.Close()
+	got, err := callAPI(ctx, token, http.MethodGet, "/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil, "")
 	var res struct {
-		Success bool
-		Result  struct {
-			Base struct {
-				Env map[string]any `json:"env"`
-			} `json:"previews_base_config"`
-		}
+		Base struct {
+			Env map[string]any `json:"env"`
+		} `json:"previews_base_config"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&res) != nil || !res.Success {
+	if err != nil || !got.OK() || json.Unmarshal(got.Result, &res) != nil {
 		return nil, nil
 	}
 	for _, p := range r.previewNeeds() {
-		if _, ok := res.Result.Base.Env[p.Binding]; !ok {
+		if _, ok := res.Base.Env[p.Binding]; !ok {
 			resources = append(resources, p.Kind+" "+p.Binding)
 		}
 	}
 	for _, s := range r.wc.Secrets {
-		if _, ok := res.Result.Base.Env[s]; !ok {
+		if _, ok := res.Base.Env[s]; !ok {
 			secrets = append(secrets, s)
 		}
 	}
@@ -137,9 +125,10 @@ func slug(s string) string {
 	return strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
-// findResource finds a KV namespace, D1 or R2 bucket by its name with the repo's wrangler: whether it's there, and
-// its id (a KV namespace's or a D1's; an R2 bucket has none but its name).
-func (r repo) findResource(ctx context.Context, p resource) (bool, string, error) {
+// findResource finds a KV namespace, D1 or R2 bucket by its name, KV and D1 in the repo's wrangler's lists, an R2
+// bucket by Cloudflare's API (200 there, 404 not): whether it's there, and its id (a KV namespace's or a D1's; an R2
+// bucket has none but its name).
+func (r repo) findResource(ctx context.Context, p resource, token, account string) (bool, string, error) {
 	switch p.Type {
 	case "kv_namespace":
 		var list []struct{ ID, Title string }
@@ -162,46 +151,63 @@ func (r repo) findResource(ctx context.Context, p resource) (bool, string, error
 			}
 		}
 	case "r2_bucket":
-		_, err := wrangler.Output(r.w.Cmd(ctx, "r2", "bucket", "info", p.Name))
-		return err == nil, "", nil
+		got, err := callAPI(ctx, token, http.MethodGet, "/accounts/"+account+"/r2/buckets/"+url.PathEscape(p.Name), nil, "")
+		switch {
+		case err != nil:
+			return false, "", err
+		case got.Status == http.StatusNotFound:
+			return false, "", nil
+		case !got.OK():
+			return false, "", fmt.Errorf("R2 bucket %s: %s", p.Name, got.Said())
+		}
+		return true, "", nil
 	}
 	return false, "", nil
 }
 
 // makeResource finds or makes the previews' own KV namespace, D1 or R2 bucket, and returns its id and what it did.
-func (r repo) makeResource(ctx context.Context, p resource) (string, string, error) {
-	if there, id, err := r.findResource(ctx, p); err != nil || there {
+func (r repo) makeResource(ctx context.Context, p resource, token, account string) (string, string, error) {
+	if there, id, err := r.findResource(ctx, p, token, account); err != nil || there {
 		return id, "there already", err
 	}
 	create := map[string][]string{"kv_namespace": {"kv", "namespace", "create", p.Name}, "d1": {"d1", "create", p.Name}, "r2_bucket": {"r2", "bucket", "create", p.Name}}
 	if _, err := wrangler.Output(r.w.Cmd(ctx, create[p.Type]...)); err != nil {
 		return "", "", fmt.Errorf("making the previews' %s %s: %w", p.Kind, p.Name, err)
 	}
-	there, id, err := r.findResource(ctx, p)
+	there, id, err := r.findResource(ctx, p, token, account)
 	if err == nil && !there {
 		err = fmt.Errorf("made the previews' %s %s, then couldn't find it", p.Kind, p.Name)
 	}
 	return id, "made", err
 }
 
-// deleteResource deletes a KV namespace, D1 or R2 bucket, and says how it went.
-func (r repo) deleteResource(ctx context.Context, p resource) string {
-	there, id, err := r.findResource(ctx, p)
-	if err != nil || !there {
+// deleteResource deletes a KV namespace, D1 or R2 bucket with Cloudflare's API, and says how it went, by the API's
+// status: deleted (2xx), not there (404), still holding objects (409, an R2 bucket's), else Cloudflare's own words.
+func (r repo) deleteResource(ctx context.Context, p resource, token, account string) string {
+	there, id, err := r.findResource(ctx, p, token, account)
+	switch {
+	case err != nil:
+		return "not deleted: " + err.Error()
+	case !there:
 		return "not there"
 	}
-	args := map[string][]string{
-		"kv_namespace": {"kv", "namespace", "delete", "--namespace-id", id, "--skip-confirmation"},
-		"d1":           {"d1", "delete", p.Name, "--skip-confirmation"},
-		"r2_bucket":    {"r2", "bucket", "delete", p.Name},
+	path := map[string]string{
+		"kv_namespace": "/storage/kv/namespaces/" + url.PathEscape(id),
+		"d1":           "/d1/database/" + url.PathEscape(id),
+		"r2_bucket":    "/r2/buckets/" + url.PathEscape(p.Name),
 	}[p.Type]
-	if _, err := wrangler.Output(r.w.Cmd(ctx, args...)); err != nil {
-		if p.Type == "r2_bucket" && strings.Contains(err.Error(), "not empty") {
-			return "not deleted: it still holds objects; delete them, then this again"
-		}
+	got, err := callAPI(ctx, token, http.MethodDelete, "/accounts/"+account+path, nil, "")
+	switch {
+	case err != nil:
 		return "not deleted: " + err.Error()
+	case got.OK():
+		return "deleted"
+	case got.Status == http.StatusNotFound:
+		return "not there"
+	case got.Status == http.StatusConflict:
+		return "not deleted: it still holds objects; delete them, then this again"
 	}
-	return "deleted"
+	return "not deleted: " + got.Said()
 }
 
 // cloudflareAPI is the repo's login's OAuth token (wrangler renews it) and its account, for Cloudflare's API.
@@ -224,31 +230,16 @@ var errNotOnCloudflare = errors.New("isn't on Cloudflare yet")
 // merge patch of the Worker, so the base's other bindings and secrets stay).
 func patchPreviewsBase(ctx context.Context, token, account, worker string, env map[string]any) error {
 	body, _ := json.Marshal(map[string]any{"previews_base_config": map[string]any{"env": env}})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPatch,
-		"https://api.cloudflare.com/client/v4/accounts/"+account+"/workers/workers/"+url.PathEscape(worker), bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/merge-patch+json")
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	var res struct {
-		Success bool
-		Errors  []struct {
-			Code    int
-			Message string
-		}
-	}
-	json.NewDecoder(resp.Body).Decode(&res)
+	got, err := callAPI(ctx, token, http.MethodPatch, "/accounts/"+account+"/workers/workers/"+url.PathEscape(worker), body, "application/merge-patch+json")
 	switch {
-	case res.Success:
+	case err != nil:
+		return err
+	case got.OK():
 		return nil
-	case resp.StatusCode == http.StatusNotFound:
+	case got.Status == http.StatusNotFound:
 		return fmt.Errorf("%s %w: deploy it once first (mise run cloudflare:08-deploy), then this again", worker, errNotOnCloudflare)
-	default:
-		return fmt.Errorf("Cloudflare refused %s's Previews Base (HTTP %d): %v", worker, resp.StatusCode, res.Errors)
 	}
+	return fmt.Errorf("Cloudflare refused %s's Previews Base: %s", worker, got.Said())
 }
 
 // ownResources is the KV, D1 and R2 wrangler deploy made for the Worker: its bindings of those kinds that name no

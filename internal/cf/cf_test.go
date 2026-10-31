@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -49,5 +50,25 @@ func TestInstalled(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	if Installed() {
 		t.Error("no cf on the PATH: Installed() = true")
+	}
+}
+
+// TestStatus: a failed call's HTTP status is read off cf's error box, its line for the call, as cf 1.0.0-beta.26
+// printed it for a Worker tag with no Workers Builds; the box's words decide nothing.
+func TestStatus(t *testing.T) {
+	box := `┌ APIError
+│ [12040] No build configuration associated with that script tag was found for this account
+│ 404 Not Found · HTTP /accounts/0123456789abcdef0123456789abcdef/builds/workers/0123456789abcdef0123456789abcdef
+└`
+	err := &Error{Args: []string{"builds", "workers", "get", "x"}, Output: box}
+	if Status(err) != 404 || !NotFound(err) {
+		t.Errorf("Status %d, NotFound %v", Status(err), NotFound(err))
+	}
+	other := &Error{Output: strings.Replace(box, "404 Not Found", "403 Forbidden", 1)}
+	if Status(other) != 403 || NotFound(other) {
+		t.Errorf("a 403: Status %d, NotFound %v", Status(other), NotFound(other))
+	}
+	if words := (&Error{Output: "the thing was not found"}); Status(words) != 0 || NotFound(words) {
+		t.Errorf("words alone: Status %d, NotFound %v", Status(words), NotFound(words))
 	}
 }

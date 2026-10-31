@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
@@ -60,11 +63,27 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("cf %s: %s", strings.Join(e.Args, " "), out)
 }
 
-// NotFound reports whether a cf command failed because the thing doesn't exist.
-func NotFound(err error) bool {
+// statusLine is the line cf's error box gives a failed call to Cloudflare's API: its HTTP status as a number, its
+// reason, then the call ("│ 404 Not Found · HTTP /accounts/…").
+var statusLine = regexp.MustCompile(`(?m)^\W*([1-5][0-9][0-9]) [A-Za-z][A-Za-z ]* · HTTP `)
+
+// Status is the HTTP status a cf command that failed got from Cloudflare's API, the number cf prints in its error box
+// (cf has no other way to give it), or 0: what's decided on, never the box's words.
+func Status(err error) int {
 	var e *Error
-	return errors.As(err, &e) && (strings.Contains(e.Output, "404") || strings.Contains(strings.ToLower(e.Output), "not found"))
+	if !errors.As(err, &e) {
+		return 0
+	}
+	m := statusLine.FindStringSubmatch(e.Output)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
 }
+
+// NotFound reports whether a cf command failed because the thing doesn't exist: Cloudflare's API answered 404.
+func NotFound(err error) bool { return Status(err) == http.StatusNotFound }
 
 // JSON runs a cf command and decodes what it prints into out; an API envelope's result is unwrapped.
 func (c CF) JSON(ctx context.Context, out any, args ...string) error {
