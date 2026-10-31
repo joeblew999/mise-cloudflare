@@ -38,23 +38,27 @@ func (r repo) delete(ctx context.Context, yes bool) {
 	there := got.OK()
 	var classes []string
 	goneWith := map[string]bool{} // the bindings to its own Durable Objects, which go with it
+	own, kept := r.ownResources()
+	previews := r.previewNeeds()
 	if there {
 		var ids map[string]bool
 		if classes, ids, err = r.durableObjects(ctx, token, account); err != nil {
 			fail(err)
 		}
 		var s struct {
-			Bindings []struct {
-				Name        string `json:"name"`
-				NamespaceID string `json:"namespace_id"`
-			} `json:"bindings"`
+			Bindings []map[string]any `json:"bindings"`
 		}
 		json.Unmarshal(got.Result, &s)
+		bindings := map[string]map[string]any{}
 		for _, b := range s.Bindings {
-			if ids[b.NamespaceID] {
-				goneWith[b.Name] = true
+			name, _ := b["name"].(string)
+			bindings[name] = b
+			if id, _ := b["namespace_id"].(string); ids[id] {
+				goneWith[name] = true
 			}
 		}
+		// What its bindings and its Previews Base use, by id, before wrangler delete takes them with the Worker.
+		own, previews = withIDs(own, bindings), withIDs(previews, r.previewsBase(ctx, token, account))
 	}
 	if !yes {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
@@ -88,8 +92,7 @@ func (r repo) delete(ctx context.Context, yes bool) {
 			}
 		}
 	}
-	own, kept := r.ownResources()
-	for _, p := range append(own, r.previewNeeds()...) {
+	for _, p := range append(own, previews...) {
 		done, gone := r.deleteResource(ctx, p, token, account)
 		mark := "✓"
 		if !gone {

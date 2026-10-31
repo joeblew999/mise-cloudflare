@@ -92,8 +92,12 @@ makes what a binding uses when the config names nothing. A binding wrangler runs
 an AI Search namespace, one marked `remote`, …) needs the repo's login, which `06-serve` makes first, and its resource
 there. `13-delete` deletes what deploy made (KV, D1, R2, Queues, Flagship apps), never what the config names, and names
 every binding it leaves, and deletes the Worker's own Durable Objects with it, all their data too. Previews get their
-own KV, D1 and R2. A Worker that has to be built first (Cloudflare's Vite plugin, a Python Worker) isn't handled yet:
-`08-deploy` runs `wrangler deploy` alone. What's proven, kind by kind:
+own KV, D1, R2, Queues and Flagship apps. When `package.json` has a `build` script, `06-serve`, `08-deploy`,
+`11-preview` and Cloudflare's builds run it first, with your lockfile's package manager (`npm run build`), and wrangler
+runs what it wrote: Cloudflare's Vite plugin writes the config wrangler deploys. A Python Worker, which deploys with
+pywrangler, isn't handled yet. A wrangler environment is the one `CLOUDFLARE_ENV` names (`CLOUDFLARE_ENV=staging mise
+run cloudflare:08-deploy`), on the repo's one login, named after the Worker at the config's top level. What's proven,
+kind by kind:
 [mise-cloudflare's README](https://github.com/joeblew999/mise-cloudflare#what-it-does-with-your-workers-bindings).
 
 ## The commands
@@ -110,7 +114,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:06-serve` | `wrangler dev`: the Worker locally, with local D1, KV and R2 and `.dev.vars` | Nothing |
 | `cloudflare:08-deploy` | `wrangler deploy` on the repo's login (wrangler's flags follow: `--env staging`) | Allow, the first time |
 | `cloudflare:09-connect-github` | Cloudflare deploys every push (Workers Builds): production from the repository's default branch, a preview for every other; `--staging main` for staging; `--branch`, `--build` to change those; `--off` to stop. Run again with no flags, it keeps what's set | Allow for cf, the first time |
-| `cloudflare:11-preview` | A preview of what's here now (`wrangler preview`: `--name my-test`), with its own KV, D1 and R2 | Allow, the first time |
+| `cloudflare:11-preview` | A preview of what's here now (`wrangler preview`: `--name my-test`), with its own KV, D1, R2, Queues and Flagship apps | Allow, the first time |
 | `cloudflare:run-wrangler <...>` | Any wrangler command on the repo's login: `wrangler d1 list`, `secret put`, `tail`, … | Allow, the first time |
 | `cloudflare:13-delete` | Deploy undone: the Worker deleted, and with it its own Durable Objects and all their data (wrangler deletes them; it names them when it asks, and checks they went), then the KV, D1, R2, Queues and Flagship apps deploy made for it (a binding that names none) and its previews' own. One the config names is yours: it stays (an AI Search or Agent Memory namespace always is: wrangler requires its name). An R2 bucket that still holds objects stays: it never deletes what's in one. Every other binding it names as left as it is. One it can't delete it marks ✗, with Cloudflare's own words, and it then fails, naming what's still there. It asks first; `--yes` doesn't | The Worker's name, to be sure |
 | `cloudflare:12-login` / `cloudflare:14-logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
@@ -193,13 +197,15 @@ a Worker using more (D1, say) has that permission added to it in the dashboard. 
 wrangler's login can have, so `connect-github` uses Cloudflare's own CLI, [cf](https://github.com/cloudflare/cf), on its own
 login; the task brings cf.
 
-### The previews' own KV, D1 and R2
+### The previews' own KV, D1, R2, Queues and Flagship apps
 
-Cloudflare makes previews no KV, D1 or R2 (only Durable Objects and Containers), and `wrangler preview` creates none.
-So `connect-github` and `preview` make `<worker>-previews-<binding>` for each KV, D1 and R2 binding, once, and put them in the
-Worker's Previews Base on Cloudflare, the settings every new preview starts from. Nothing goes into the repo. All
-previews share them; production's and staging's stay theirs. After adding a KV, D1 or R2 binding, `mise run cloudflare` says to run
-`connect-github` again, which gives previews the new one. `connect-github --off` deletes them (an R2 bucket only once it's empty).
+Cloudflare makes previews none of what `08-deploy` makes (only Durable Objects and Containers), and `wrangler preview`
+creates none. So `connect-github` and `preview` make `<worker>-previews-<binding>` for each KV, D1, R2, Queue and
+Flagship binding the previews block leaves out, once, and put them in the Worker's Previews Base on Cloudflare, the
+settings every new preview starts from. Nothing goes into the repo. All previews share them; production's and
+staging's stay theirs. After adding one of those bindings, `mise run cloudflare` says to run `connect-github` again,
+which gives previews the new one. `connect-github --off` and `13-delete` delete them (an R2 bucket only once it's
+empty).
 
 ## CI
 

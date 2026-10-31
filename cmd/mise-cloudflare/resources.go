@@ -11,34 +11,38 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/joeblew999/mise-cloudflare/internal/cfapi"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
-// resource is one of a Worker's own KV namespaces, D1s or R2 buckets, or one of its previews' own.
+// resource is one of a Worker's own KV namespaces, D1s, R2 buckets, Queues or Flagship apps, or one of its previews' own.
 type resource struct {
 	Binding string `json:"binding"`
-	Type    string `json:"type"` // wrangler's: kv_namespace, d1 or r2_bucket
-	Kind    string `json:"kind"` // KV, D1 or R2
+	Type    string `json:"type"` // wrangler's: kv_namespace, d1, r2_bucket, queue or flagship
+	Kind    string `json:"kind"` // KV, D1, R2, Queue or Flagship
 	Name    string `json:"name"`
-	ID      string `json:"id,omitempty"` // a KV namespace's or a D1's; an R2 bucket goes by its name
+	ID      string `json:"id,omitempty"` // a KV namespace's, a D1's, a Queue's or a Flagship app's; an R2 bucket goes by its name
 	Done    string `json:"done"`         // made, there already, deleted
 	Gone    bool   `json:"gone"`         // off: deleted, or not there
 }
 
-// previewResources gives previews their own KV, D1 and R2 (<worker>-previews-<binding>), which Cloudflare doesn't, and puts them
-// in the Worker's Previews Base. Nothing goes into the repo. --off deletes them. The Worker must be deployed first.
+// previewResources gives previews their own KV, D1, R2, Queue and Flagship app (<worker>-previews-<binding>), which
+// Cloudflare doesn't, and puts them in the Worker's Previews Base. Nothing goes into the repo. --off deletes them. The Worker must be deployed first.
 func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resource {
 	out := r.previewNeeds()
 	if len(out) == 0 {
 		if !jsonOut {
-			fmt.Printf("✓ %s has no KV, D1 or R2 binding for its previews to get their own of\n", r.wc.Name)
+			fmt.Printf("✓ %s has no KV, D1, R2, Queue or Flagship binding for its previews to get their own of\n", r.wc.Name)
 		}
 		return []resource{}
 	}
 	token, account := r.cloudflareAPI(ctx)
+	if off {
+		out = withIDs(out, r.previewsBase(ctx, token, account))
+	}
 	env := map[string]any{}
 	for i, p := range out {
 		var err error
@@ -49,9 +53,9 @@ func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resourc
 		if out[i].ID, out[i].Done, err = r.makeResource(ctx, p, token, account); err != nil {
 			fail(err)
 		}
-		// In a preview's bindings, as wrangler sends them: R2 by its bucket's name, KV and D1 by id.
+		// In a preview's bindings, as wrangler sends them: R2 and a Queue by name, the others by id.
 		id := out[i].ID
-		if id == "" {
+		if byName[p.Type] {
 			id = p.Name
 		}
 		env[p.Binding] = map[string]string{"type": p.Type, previewsBaseField[p.Type]: id}
@@ -91,10 +95,14 @@ func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resourc
 	return out
 }
 
-// previewsBaseField is the field a binding names its resource by in the Previews Base, as Cloudflare's API takes it.
-var previewsBaseField = map[string]string{"kv_namespace": "namespace_id", "d1": "database_id", "r2_bucket": "bucket_name"}
+// previewsBaseField is the field a binding names its resource by in the Previews Base, as Cloudflare's API takes it;
+// byName the kinds it names by name, not id.
+var (
+	previewsBaseField = map[string]string{"kv_namespace": "namespace_id", "d1": "database_id", "r2_bucket": "bucket_name", "queue": "queue_name", "flagship": "app_id"}
+	byName            = map[string]bool{"r2_bucket": true, "queue": true}
+)
 
-// previewNeeds is the previews' own KV, D1 and R2 the Worker needs: one for each of its bindings of those kinds
+// previewNeeds is the previews' own KV, D1, R2, Queues and Flagship apps the Worker needs: one for each of its bindings of those kinds
 // (wconfig.PreviewsOwn, by wrangler's own types) that its previews block leaves out.
 func (r repo) previewNeeds() []resource {
 	var out []resource
@@ -108,29 +116,55 @@ func (r repo) previewNeeds() []resource {
 	return out
 }
 
-// previewsMissing is what the Previews Base lacks: KV, D1 or R2 added since, and the Worker's required secrets. Nil if
-// it can't tell.
+// previewsMissing is what the Previews Base lacks: a KV, D1, R2, Queue or Flagship binding added since, and the Worker's
+// required secrets. Nil if it can't tell.
 func (r repo) previewsMissing(ctx context.Context, token, account string) (resources, secrets []string) {
-	got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil, "")
-	var res struct {
-		Base struct {
-			Env map[string]any `json:"env"`
-		} `json:"previews_base_config"`
-	}
-	if err != nil || !got.OK() || json.Unmarshal(got.Result, &res) != nil {
+	base := r.previewsBase(ctx, token, account)
+	if base == nil {
 		return nil, nil
 	}
 	for _, p := range r.previewNeeds() {
-		if _, ok := res.Base.Env[p.Binding]; !ok {
+		if _, ok := base[p.Binding]; !ok {
 			resources = append(resources, p.Kind+" "+p.Binding)
 		}
 	}
 	for _, s := range r.wc.Secrets {
-		if _, ok := res.Base.Env[s]; !ok {
+		if _, ok := base[s]; !ok {
 			secrets = append(secrets, s)
 		}
 	}
 	return resources, secrets
+}
+
+// previewsBase is the bindings of the Worker's Previews Base on Cloudflare, by name, as its API gives them; nil if it
+// can't tell (the Worker isn't deployed).
+func (r repo) previewsBase(ctx context.Context, token, account string) map[string]map[string]any {
+	got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil, "")
+	var res struct {
+		Base struct {
+			Env map[string]map[string]any `json:"env"`
+		} `json:"previews_base_config"`
+	}
+	if err != nil || !got.OK() || json.Unmarshal(got.Result, &res) != nil {
+		return nil
+	}
+	if res.Base.Env == nil {
+		return map[string]map[string]any{}
+	}
+	return res.Base.Env
+}
+
+// withIDs is resources with each one's id from bindings (by name, as Cloudflare's API gives them: the Worker's own, or
+// its Previews Base's) where a binding of its kind has one: what delete deletes it by. A list can lag what was just
+// made (Flagship's does, for minutes), so the one it would find it in otherwise may not have it yet.
+func withIDs(rs []resource, bindings map[string]map[string]any) []resource {
+	for i, p := range rs {
+		b := bindings[p.Binding]
+		if id, ok := b[previewsBaseField[p.Type]].(string); ok && id != "" && b["type"] == p.Type && !byName[p.Type] {
+			rs[i].ID = id
+		}
+	}
+	return rs
 }
 
 // previewName is the name of the previews' own resource for a binding: <worker>-previews-<binding>, lowercase, with
@@ -186,32 +220,52 @@ func (r repo) findResource(ctx context.Context, p resource, token, account strin
 	return false, "", nil
 }
 
-// makeResource finds or makes the previews' own KV namespace, D1 or R2 bucket, and returns its id and what it did.
+// makeResource finds or makes the previews' own KV namespace, D1, R2 bucket, Queue or Flagship app, and returns its id and
+// what it did.
 func (r repo) makeResource(ctx context.Context, p resource, token, account string) (string, string, error) {
 	if there, id, err := r.findResource(ctx, p, token, account); err != nil || there {
 		return id, "there already", err
 	}
-	create := map[string][]string{"kv_namespace": {"kv", "namespace", "create", p.Name}, "d1": {"d1", "create", p.Name}, "r2_bucket": {"r2", "bucket", "create", p.Name}}
-	if _, err := wrangler.Output(r.w.Cmd(ctx, create[p.Type]...)); err != nil {
+	create := map[string][]string{"kv_namespace": {"kv", "namespace", "create", p.Name}, "d1": {"d1", "create", p.Name}, "r2_bucket": {"r2", "bucket", "create", p.Name},
+		"queue": {"queues", "create", p.Name}, "flagship": {"flagship", "apps", "create", p.Name, "--json"}}
+	out, err := wrangler.Output(r.w.Cmd(ctx, create[p.Type]...))
+	if err != nil {
 		return "", "", fmt.Errorf("making the previews' %s %s: %w", p.Kind, p.Name, err)
 	}
-	there, id, err := r.findResource(ctx, p, token, account)
-	if err == nil && !there {
-		err = fmt.Errorf("made the previews' %s %s, then couldn't find it", p.Kind, p.Name)
+	// A Flagship app's id is what its create prints (--json): Cloudflare's list of them lags, for minutes.
+	var made struct{ ID string }
+	if i := regexp.MustCompile(`(?m)^\{`).FindIndex(out); i != nil && json.Unmarshal(out[i[0]:], &made) == nil && made.ID != "" {
+		return made.ID, "made", nil
 	}
-	return id, "made", err
+	// Cloudflare's list can lag what was just made (Flagship's does): it looks again every few seconds, for up to a minute.
+	for until := time.Now().Add(time.Minute); ; time.Sleep(5 * time.Second) {
+		there, id, err := r.findResource(ctx, p, token, account)
+		switch {
+		case err != nil:
+			return "", "", err
+		case there:
+			return id, "made", nil
+		case time.Now().After(until):
+			return "", "", fmt.Errorf("made the previews' %s %s, then couldn't find it in Cloudflare's list for a minute", p.Kind, p.Name)
+		}
+	}
 }
 
 // deleteResource deletes a resource of a kind delete deletes with Cloudflare's API, and says how it went, by the API's
 // status: deleted (2xx), not there (404), still holding objects (409, an R2 bucket's), else Cloudflare's own words; and
 // whether it's gone.
+// One whose id it has already (withIDs) it deletes by that id, finding nothing first.
 func (r repo) deleteResource(ctx context.Context, p resource, token, account string) (done string, gone bool) {
-	there, id, err := r.findResource(ctx, p, token, account)
-	switch {
-	case err != nil:
-		return "not deleted: " + err.Error(), false
-	case !there:
-		return "not there", true
+	id := p.ID
+	if id == "" {
+		there, found, err := r.findResource(ctx, p, token, account)
+		switch {
+		case err != nil:
+			return "not deleted: " + err.Error(), false
+		case !there:
+			return "not there", true
+		}
+		id = found
 	}
 	path := map[string]string{
 		"kv_namespace": "/storage/kv/namespaces/" + url.PathEscape(id),
@@ -287,8 +341,8 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 }
 
 // deletes is the binding kinds, by wrangler's own types, whose resources delete deletes when wrangler deploy made them:
-// the previews' own kinds, Queues and Flagship apps. wrangler deploy makes a few kinds more; delete names a binding of one as left.
-var deletes = map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2", "queue": "Queue", "flagship": "Flagship"}
+// the kinds previews get their own of. wrangler deploy makes a few kinds more; delete names a binding of one as left.
+var deletes = wconfig.PreviewsOwn
 
 // ownResources is the resources wrangler deploy made for the Worker of the kinds delete deletes: its bindings of those
 // kinds that name no resource, which deploy makes as <worker>-<binding>. kept is the ones the config names (an id, a database_name, a

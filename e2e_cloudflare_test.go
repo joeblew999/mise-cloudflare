@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -151,7 +152,7 @@ func (r repo) leftOnCloudflare() []string {
 func (r repo) leftWith(token, account string) []string {
 	left := append(r.left(token, account), r.durableObjectsLeft(token, account)...)
 	if withExtras() {
-		left = append(left, r.extrasSettle(token, account, false)...)
+		left = append(append(left, r.extrasSettle(token, account, r.worker, false)...), r.extrasSettle(token, account, r.worker+"-previews", false)...)
 	}
 	return left
 }
@@ -218,7 +219,7 @@ func (r repo) nothingOnCloudflare() {
 func (r repo) buildOutcome(branch string, limit time.Duration) string {
 	r.t.Helper()
 	cfJSON := func(v any, args ...string) error {
-		cmd := exec.Command("cf", append(args, "--profile", r.worker)...)
+		cmd := exec.Command("cf", append(args, "--profile", r.login)...)
 		cmd.Dir = r.dir
 		out, err := cmd.Output()
 		if err != nil {
@@ -253,13 +254,44 @@ func (r repo) buildOutcome(branch string, limit time.Duration) string {
 		for _, b := range builds {
 			if b.Trigger.Branch == branch && b.Outcome != "" {
 				if b.Outcome != "success" {
-					r.run(nil, "cf", "builds", "logs", "get", b.UUID, "--profile", r.worker)
+					r.run(nil, "cf", "builds", "logs", "get", b.UUID, "--profile", r.login)
 				}
 				return b.Outcome
 			}
 		}
 	}
 	return "no build in " + limit.String()
+}
+
+// previewOn is the preview Cloudflare has of the Worker by name: its URL, and its latest deployment's bindings (env), as
+// Cloudflare's API gives them.
+func (r repo) previewOn(token, account, name string) (string, map[string]any) {
+	r.t.Helper()
+	base := "/accounts/" + account + "/workers/workers/" + r.worker + "/previews"
+	got, err := cfapi.Call(context.Background(), token, http.MethodGet, base+"?name="+name, nil, "")
+	var previews []struct {
+		ID   string   `json:"id"`
+		Name string   `json:"name"`
+		URLs []string `json:"urls"`
+	}
+	if err != nil || !got.OK() || json.Unmarshal(got.Result, &previews) != nil || len(previews) != 1 || len(previews[0].URLs) == 0 {
+		r.t.Fatalf("Cloudflare's preview %s of %s: %v %s", name, r.worker, err, got.Said())
+	}
+	got, err = cfapi.Call(context.Background(), token, http.MethodGet, base+"/"+previews[0].ID+"/deployments", nil, "")
+	var deployments []struct {
+		Number int            `json:"number"`
+		Env    map[string]any `json:"env"`
+	}
+	if err != nil || !got.OK() || json.Unmarshal(got.Result, &deployments) != nil || len(deployments) == 0 {
+		r.t.Fatalf("the preview %s's deployments: %v %s", name, err, got.Said())
+	}
+	latest := slices.MaxFunc(deployments, func(a, b struct {
+		Number int            `json:"number"`
+		Env    map[string]any `json:"env"`
+	}) int {
+		return a.Number - b.Number
+	})
+	return previews[0].URLs[0], latest.Env
 }
 
 // previewAlias is a branch name as Cloudflare names its preview: lowercase letters, digits and dashes.

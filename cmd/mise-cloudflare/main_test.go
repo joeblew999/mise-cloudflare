@@ -193,6 +193,22 @@ func TestOwnResources(t *testing.T) {
 	}
 }
 
+// TestPreviewNeeds: previews get their own of every kind wrangler deploy makes and delete deletes (KV, D1, R2, a Queue,
+// a Flagship app), each <worker>-previews-<binding>, unless the previews block declares the binding itself; nothing of
+// another kind.
+func TestPreviewNeeds(t *testing.T) {
+	r := repo{wc: wconfig.Config{Name: "w", PreviewBindings: map[string]string{"CACHE": "kv_namespace"},
+		Bindings: map[string]string{"CACHE": "kv_namespace", "DB": "d1", "BUCKET": "r2_bucket", "JOBS": "queue", "FLAGS": "flagship",
+			"PG": "hyperdrive", "AI": "ai"}}}
+	var got []string
+	for _, p := range r.previewNeeds() {
+		got = append(got, p.Kind+" "+p.Name)
+	}
+	if want := []string{"R2 w-previews-bucket", "D1 w-previews-db", "Flagship w-previews-flags", "Queue w-previews-jobs"}; !slices.Equal(got, want) {
+		t.Errorf("previewNeeds: %q, want %q", got, want)
+	}
+}
+
 // TestDeleting: delete's question names what goes besides the Worker: its own Durable Objects, and what deploy and the
 // previews made, by name. A Worker with none of them is asked about alone.
 func TestDeleting(t *testing.T) {
@@ -263,5 +279,57 @@ func TestInit(t *testing.T) {
 	initRepo(dir)
 	if b, _ := os.ReadFile(config); !bytes.Contains(b, []byte(`= "0.0.1"`)) {
 		t.Errorf("init wrote over the repo's own pin:\n%s", b)
+	}
+}
+
+// TestOlder: releases compare by number, part by part (0.1.7 is older than 0.1.36), never as text.
+func TestOlder(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"0.1.7", "0.1.36", true}, {"0.1.36", "0.1.7", false}, {"0.1.36", "0.1.36", false}, {"0.9.0", "1.0.0", true}, {"local", "0.1.36", false}} {
+		if got := older(c.a, c.b); got != c.want {
+			t.Errorf("older(%s, %s) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+// TestMovePin: a release's init moves an older release's pin forward to itself, and only that line; a newer pin, the
+// same one, local, or any pin under a checkout's build, stays.
+func TestMovePin(t *testing.T) {
+	defer func(v string) { version = v }(version)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	for _, c := range []struct{ build, pin, want string }{
+		{"v0.1.36", "0.1.7", "0.1.36"}, {"v0.1.36", "0.1.40", "0.1.40"}, {"v0.1.36", "0.1.36", "0.1.36"}, {"v0.1.36", "local", "local"}, {"", "0.1.7", "0.1.7"},
+	} {
+		version = c.build
+		b := []byte("[tools]\n\"" + self + "\" = \"" + c.pin + "\"\nnode = \"26\"\n")
+		os.WriteFile(path, b, 0o644)
+		movePin(path, b)
+		if got, _ := os.ReadFile(path); string(got) != "[tools]\n\""+self+"\" = \""+c.want+"\"\nnode = \"26\"\n" {
+			t.Errorf("build %q, pin %s: %q, want the pin %s", c.build, c.pin, got, c.want)
+		}
+	}
+}
+
+// TestNewestRelease: GitHub names the newest release, on its own page for it, as x.y.z.
+func TestNewestRelease(t *testing.T) {
+	if n := newestRelease(); !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(n) || older(n, "0.1.36") {
+		t.Errorf("newestRelease: %q", n)
+	}
+}
+
+// TestWithIDs: a resource takes its id from the binding of its name and kind that Cloudflare's API gives (a Flagship
+// app's app_id, a KV's namespace_id), so delete needs no list; one named by name (a Queue, R2) or of another kind doesn't.
+func TestWithIDs(t *testing.T) {
+	rs := withIDs([]resource{{Binding: "FLAGS", Type: "flagship"}, {Binding: "KV", Type: "kv_namespace"}, {Binding: "JOBS", Type: "queue"}, {Binding: "DB", Type: "d1"}},
+		map[string]map[string]any{"FLAGS": {"type": "flagship", "app_id": "a1"}, "KV": {"type": "kv_namespace", "namespace_id": "k1"},
+			"JOBS": {"type": "queue", "queue_name": "w-jobs"}, "DB": {"type": "kv_namespace", "namespace_id": "x"}})
+	var ids []string
+	for _, p := range rs {
+		ids = append(ids, p.ID)
+	}
+	if want := []string{"a1", "k1", "", ""}; !slices.Equal(ids, want) {
+		t.Errorf("withIDs: %q, want %q", ids, want)
 	}
 }

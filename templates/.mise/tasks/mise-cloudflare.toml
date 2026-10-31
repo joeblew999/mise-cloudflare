@@ -51,7 +51,7 @@ description = "10. The secrets the Worker's previews require, which they don't i
 run = "mise-cloudflare set-preview-secrets"
 
 ["cloudflare:11-preview"]
-description = "11. A preview of what's here now, at its own URL, with its own KV, D1 and R2 (--name my-test)"
+description = "11. A preview of what's here now, at its own URL, with its own KV, D1, R2, Queues and Flagship apps (--name my-test)"
 usage = 'arg "[args]..." help="passed on to wrangler preview as they are: --name my-test"'
 run = 'mise-cloudflare preview{% for a in usage.args %} "{{a}}"{% endfor %}'
 
@@ -61,7 +61,7 @@ usage = 'flag "--json" help="one JSON document on stdout, instead of text"'
 run = 'mise-cloudflare login{% if usage.json %} --json{% endif %}'
 
 ["cloudflare:13-delete"]
-description = "13. Deploy undone: the Worker deleted, then its own KV, D1 and R2 and its previews' own (it asks first; --yes doesn't)"
+description = "13. Deploy undone: the Worker deleted, then its own KV, D1, R2, Queues and Flagship apps and its previews' own (it asks first; --yes doesn't)"
 usage = 'flag "--yes" help="do not ask first"'
 run = 'mise-cloudflare delete{% if usage.yes %} --yes{% endif %}'
 

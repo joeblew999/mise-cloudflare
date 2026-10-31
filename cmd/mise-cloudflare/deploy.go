@@ -12,8 +12,11 @@ import (
 	"time"
 )
 
-// deploy deploys the Worker (wrangler deploy) on the repo's login, writing its URL where show reads it.
+// deploy deploys the Worker (wrangler deploy) on the repo's login, after the package's own build when it has one,
+// writing its URL where show reads it.
 func (r repo) deploy(ctx context.Context, args []string) {
+	r.ensureLogin(ctx)
+	r.build(ctx)
 	if os.Getenv("WRANGLER_OUTPUT_FILE_PATH") == "" {
 		os.Setenv("WRANGLER_OUTPUT_FILE_PATH", filepath.Join(".wrangler", "output.json"))
 	}

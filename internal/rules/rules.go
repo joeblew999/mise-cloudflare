@@ -142,6 +142,19 @@ func Lockfile(dir string) (file, install string) {
 	return "", "npm install"
 }
 
+// Build is the command that runs the package's own build script (package.json's "build", in dir), with the package
+// manager its lockfile is for (npm run build, pnpm run build, …), or "" when it has none. A Worker built first
+// (Cloudflare's Vite plugin writes the config wrangler then deploys, its own deploy script being "npm run build &&
+// wrangler deploy") is run, deployed and previewed after it.
+func Build(dir string) string {
+	var pkg struct{ Scripts map[string]string }
+	if b, err := os.ReadFile(filepath.Join(dir, "package.json")); err != nil || json.Unmarshal(b, &pkg) != nil || pkg.Scripts["build"] == "" {
+		return ""
+	}
+	_, install := Lockfile(dir)
+	return strings.Fields(install)[0] + " run build"
+}
+
 // wranglerPin is the wrangler version the nearest package.json at or above dir, in its git repo, depends on, or "".
 func wranglerPin(dir string) string {
 	for d := range upward(dir) {

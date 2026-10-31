@@ -34,6 +34,7 @@ type repo struct {
 	name    string
 	dir     string
 	worker  string
+	login   string   // the repo's login: named after its top level's Worker, whichever environment the walk deploys
 	secrets []string // the Worker's required secrets
 	adopted bool     // a third-party Worker adopted (adoptedCopy), not the template's
 }
@@ -118,6 +119,9 @@ func (r repo) stampedCopy(version string) repo {
 	if withExtras() {
 		r.addExtras()
 	}
+	if env := withEnv(); env != "" {
+		r.addEnv(env)
+	}
 	return r
 }
 
@@ -136,7 +140,7 @@ func (r *repo) miseSetUp() {
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	r.worker, r.secrets = c.Name, c.Secrets
+	r.worker, r.login, r.secrets = c.Name, cmp.Or(c.Login, c.Name), c.Secrets
 	r.pass("%s is set up: %s; its Worker is %s", r.name, setUp, r.worker)
 	r.pass("%s runs %s", r.name, r.versions())
 }
@@ -458,7 +462,7 @@ func (r repo) miseServeLocally(onLogin bool) (answer []byte, stopped string) {
 func (r repo) miseDeleteEverythingOnCloudflare() {
 	r.t.Helper()
 	r.heading("Nothing of %s on Cloudflare: what a stopped walk left, deleted", r.worker)
-	if out, _ := r.run(nil, "cf", "auth", "whoami", "--profile", r.worker); strings.Contains(out, `"authenticated": true`) {
+	if out, _ := r.run(nil, "cf", "auth", "whoami", "--profile", r.login); strings.Contains(out, `"authenticated": true`) {
 		r.mustRunMiseTask(nil, "cloudflare:09-connect-github", "--off")
 	}
 	heads, err := r.runIn(r.top, nil, "", "git", "ls-remote", "--heads", "origin")

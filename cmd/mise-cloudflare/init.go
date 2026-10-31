@@ -5,16 +5,20 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joeblew999/mise-cloudflare/templates"
 )
 
 // theirs are the template's files a repo may have of its own already: init writes them only when it has none.
-// .mise/config.toml is mise-cloudflare's pin: written once, then the repo's (cloudflare:update moves it).
+// .mise/config.toml is mise-cloudflare's pin: written once, then the repo's (cloudflare:update moves it, and so does a
+// newer release's init, run by hand: forward only).
 var theirs = map[string]bool{".gitignore": true, ".claude/settings.json": true, ".mise/config.toml": true}
 
 // pinLine is mise-cloudflare's pin in .mise/config.toml.
@@ -40,7 +44,10 @@ func initRepo(dir string) {
 			return err
 		}
 		to := filepath.Join(dir, filepath.FromSlash(p))
-		if _, err := os.Stat(to); err == nil && theirs[p] {
+		if b, err := os.ReadFile(to); err == nil && theirs[p] {
+			if p == ".mise/config.toml" && movePin(to, b) {
+				return nil
+			}
 			fmt.Printf("✓ %s is the repo's own: left as it is\n", p)
 			return nil
 		}
@@ -56,6 +63,65 @@ func initRepo(dir string) {
 		}
 		return err
 	}))
+}
+
+// movePin moves the repo's pin of mise-cloudflare in its .mise/config.toml (b) forward to this release, when it pins
+// an older one: init at a newer release, run by hand, is the move to it. The rest of the file stays as it is; a pin
+// of local, or of this release or a newer one, stays too, as does every pin when this is a checkout's build.
+func movePin(path string, b []byte) bool {
+	m := pinLine.Find(b)
+	at := strings.TrimSuffix(strings.TrimPrefix(string(m), `"`+self+`" = "`), `"`)
+	if version == "" || m == nil || at == "local" || !older(at, buildVersion()) {
+		return false
+	}
+	must(os.WriteFile(path, pinLine.ReplaceAll(b, []byte(`"`+self+`" = "`+buildVersion()+`"`)), 0o644))
+	fmt.Printf("wrote %s: mise-cloudflare %s → %s\n", path, at, buildVersion())
+	return true
+}
+
+// older reports whether release a is older than release b, both x.y.z.
+func older(a, b string) bool {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		x, errx := strconv.Atoi(pa[i])
+		y, erry := strconv.Atoi(pb[i])
+		if errx != nil || erry != nil {
+			return false
+		}
+		if x != y {
+			return x < y
+		}
+	}
+	return len(pa) < len(pb)
+}
+
+// newestRelease is mise-cloudflare's newest release, as GitHub's page for it names it (…/releases/latest redirects to
+// its tag), or "" if GitHub can't say.
+func newestRelease() string {
+	c := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := c.Get("https://github.com/joeblew999/mise-cloudflare/releases/latest")
+	if err != nil {
+		return ""
+	}
+	resp.Body.Close()
+	_, tag, _ := strings.Cut(resp.Header.Get("Location"), "/releases/tag/")
+	return strings.TrimPrefix(tag, "v")
+}
+
+// sayNewest says, of a release, when GitHub has a newer one, and how to set the repo up at it: mise takes a release as
+// latest only once it's a day old, so @latest can run an older one than the newest.
+func sayNewest() {
+	if version == "" {
+		return
+	}
+	switch n := newestRelease(); {
+	case n == "":
+		fmt.Printf("· this is mise-cloudflare %s; GitHub didn't say what its newest release is\n", buildVersion())
+	case older(buildVersion(), n):
+		fmt.Printf("· this is mise-cloudflare %s, and the newest release is %s: mise takes a release as latest only once it's a day old. For it, which moves the repo's pin to it:\n  mise exec %s@%s -- mise-cloudflare init\n", buildVersion(), n, self, n)
+	default:
+		fmt.Printf("✓ mise-cloudflare %s, the newest release\n", buildVersion())
+	}
 }
 
 // stale names the files init wrote that this version would write differently, and a .claude/settings.json of the

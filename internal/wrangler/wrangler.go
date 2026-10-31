@@ -222,9 +222,9 @@ func (w W) Login(ctx context.Context, scopes []string, device bool) error {
 		}
 		return w.Activate(ctx)
 	}
-	fmt.Printf("Logging in %s: your browser opens. Click Allow and pick the account.\n", w.Profile)
+	fmt.Printf("Logging in %s: your browser opens. Click Allow and pick the account, within wrangler's two minutes.\n", w.Profile)
 	if err := Interactive(w.Plain(ctx, append([]string{"auth", "create", w.Profile, "--scopes"}, scopes...)...)); err != nil {
-		return fmt.Errorf("wrangler auth create %s: %w", w.Profile, err)
+		return fmt.Errorf("wrangler auth create %s: %w: what wrangler said is above (with no Allow in time, it stops waiting). Run this again; or, with CLOUDFLARE_LOGIN=device, a link to open on any device, which waits longer", w.Profile, err)
 	}
 	return w.Activate(ctx)
 }

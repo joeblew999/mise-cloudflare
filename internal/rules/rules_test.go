@@ -132,3 +132,19 @@ func TestLockfile(t *testing.T) {
 		t.Errorf("a ^ range with a committed lockfile is pinned: %q, %v", p, err)
 	}
 }
+
+// TestBuild: a package with a build script is built with its package manager first; one with none, or no package, isn't.
+func TestBuild(t *testing.T) {
+	dir := t.TempDir()
+	if got := Build(dir); got != "" {
+		t.Errorf("no package.json: %q", got)
+	}
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts": {"dev": "wrangler dev"}}`), 0o644)
+	if got := Build(dir); got != "" {
+		t.Errorf("no build script: %q", got)
+	}
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts": {"build": "vite build", "deploy": "npm run build && wrangler deploy"}}`), 0o644)
+	if got := Build(dir); got != "npm run build" {
+		t.Errorf("a build script: %q, want npm run build", got)
+	}
+}

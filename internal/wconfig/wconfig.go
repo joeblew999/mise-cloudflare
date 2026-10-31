@@ -19,6 +19,7 @@ import (
 type Config struct {
 	Path    string   `json:"path"`    // the file wrangler read
 	Name    string   `json:"name"`    // the Worker's name, as wrangler resolves it (CLOUDFLARE_ENV included)
+	Login   string   `json:"login"`   // the top level's name, whichever environment: the repo's one login is named after it
 	Secrets []string `json:"secrets"` // secrets.required
 	Envs    []string `json:"envs"`    // the environments the file defines (env.<name>)
 	// The Worker's bindings and its previews block's, name → type, as wrangler itself converts them (kv_namespace, d1,
@@ -43,7 +44,7 @@ type Config struct {
 
 // PreviewsOwn is the binding kinds, by wrangler's own types, whose resources previews get of their own from mise-cloudflare
 // (wrangler deploy makes them by name for production, wrangler preview makes none): their labels.
-var PreviewsOwn = map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2"}
+var PreviewsOwn = map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2", "queue": "Queue", "flagship": "Flagship"}
 
 // script reads the config with the repo's own wrangler and prints it as one marked line, or wrangler's own error.
 const script = `const w = await import('wrangler');
@@ -64,7 +65,7 @@ try {
   const session = { ready: Promise.resolve(), updateBindings: async () => {}, dispose: async () => {} };
   const picked = await w.maybeStartOrUpdateRemoteProxySession({ name: c.name ?? 'worker', bindings: conv(c) }, { session, remoteBindings: {} });
   console.log('WCONFIG ' + JSON.stringify({ path: c.configPath, name: c.name, secrets: c.secrets?.required ?? [],
-    envs: Object.keys(r.rawConfig.env ?? {}), previews: c.previews !== undefined,
+    login: r.rawConfig.name ?? c.name, envs: Object.keys(r.rawConfig.env ?? {}), previews: c.previews !== undefined,
     compatibilityDate: c.compatibility_date ?? '', devDate: w.unstable_getDevCompatibilityDate?.() ?? '',
     bindings: types(c), previewBindings: types(c.previews), named: named(c), previewNamed: named(c.previews),
     remote: Object.keys(picked?.remoteBindings ?? {}).sort() }));

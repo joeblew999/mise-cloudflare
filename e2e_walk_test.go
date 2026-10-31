@@ -93,6 +93,7 @@ type walk struct {
 	upTo       stage
 	before     map[string][32]byte // the repo's files before the steps that deploy, which must change none of them
 	url        string              // the Worker's, once 08-deploy has deployed it
+	preview    string              // its preview's, once 11-preview has made it
 	prod, prev string              // the throwaway branches connect-github's steps push
 }
 

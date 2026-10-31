@@ -4,6 +4,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,7 @@ The steps, in order (mise run cloudflare says which is next):
   mise run cloudflare:10-set-preview-secrets   the secrets its previews require, which they don't inherit
   mise run cloudflare:11-preview               a preview of what's here now, at its own URL (--name my-test)
   mise run cloudflare:12-login                 the repo's Cloudflare login (the others make it when they need it)
-  mise run cloudflare:13-delete                deploy undone: the Worker, its KV, D1 and R2, its previews' own (--yes: don't ask)
+  mise run cloudflare:13-delete                deploy undone: the Worker and what deploy made, its previews' own (--yes: don't ask)
   mise run cloudflare:14-logout                the repo's logins logged out and deleted
   mise run cloudflare:15-clean                 the local state undone: .wrangler/ and .dev.vars (--yes: don't ask)
 
@@ -85,6 +86,7 @@ func main() {
 	case "init":
 		initRepo(dir)
 		trustConfig(dir, ".mise/config.toml")
+		sayNewest()
 		return
 	case "template": // a repo with no Worker yet; it never writes over a file, so it runs in CI too (the walk there makes a new repo with it)
 		if templateRepo(dir) {
@@ -167,7 +169,9 @@ func openRepo(ctx context.Context, dir string) repo {
 	if wc.Name == "" {
 		fail(fmt.Errorf("%s has no name: add one (\"name\"), which wrangler deploy needs and the repo's login is named after", filepath.Base(wc.Path)))
 	}
-	w.Profile = wc.Name // the login is named after the Worker
+	// The login is named after the Worker at the config's top level: one login for the repo, whichever environment
+	// wrangler deploys (CLOUDFLARE_ENV), as they're all on its account.
+	w.Profile = cmp.Or(wc.Login, wc.Name)
 	return repo{dir: dir, wc: wc, w: w}
 }
 

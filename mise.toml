@@ -17,6 +17,7 @@
 #     mise run new-repo:e2e-serve      TestWalk on a new repo, as far as the stage serve (E2E_STAMPED=true; --version runs a release, -args -version)
 #     mise run new-repo:e2e-deploy     TestWalk on a new repo, as far as the stage deploy, on Cloudflare (E2E_STAGE=deploy)
 #     mise run new-repo:e2e-extras     the same, with bindings beyond the template's added first, as a developer would (E2E_EXTRAS)
+#     mise run new-repo:e2e-env        the same, deploying a wrangler environment the developer adds, env.staging (E2E_ENV)
 #   tool: mise-cloudflare itself
 #     mise run tool:build              its build, bin/mise-cloudflare (.exe on Windows)
 #     mise run tool:install            that build as the mise version local, the template's on this machine (and any repo's)
@@ -96,6 +97,12 @@ run = 'go test . -run "^TestWalk$" -count=1 -v -timeout 30m{% if usage.version %
 description = "new-repo:e2e-deploy with extras: the new repo's developer adds bindings beyond the template's KV, D1 and R2 first (e2e_bindings_test.go: a Queue, a Flagship app, and Workers AI, which wrangler runs on Cloudflare even locally), which wrangler deploy makes and cloudflare:13-delete must delete, and cloudflare:06-serve must stop before wrangler dev with no login (in CI) and run on the repo's login, all checked on Cloudflare. The template stays as minimal as it is. After tool:install"
 depends = ["tool:install"]
 env = { REPO_PATH = "templates", E2E_STAMPED = "true", E2E_STAGE = "deploy", E2E_EXTRAS = "true" }
+run = 'go test . -run "^TestWalk$" -count=1 -v -timeout 30m'
+
+[tasks."new-repo:e2e-env"]
+description = "new-repo:e2e-deploy in a wrangler environment: the new repo's developer adds env.staging (its own D1, KV, R2 and secret, which wrangler doesn't inherit), and every step runs with CLOUDFLARE_ENV=staging, as the docs say: its Worker, mise-cloudflare-new-staging, deployed on the repo's one login (mise-cloudflare-new, named after the top level's Worker), its preview, then deleted, the top level's Worker never deployed, all checked on Cloudflare. After tool:install"
+depends = ["tool:install"]
+env = { REPO_PATH = "templates", E2E_STAMPED = "true", E2E_STAGE = "deploy", E2E_ENV = "staging" }
 run = 'go test . -run "^TestWalk$" -count=1 -v -timeout 30m'
 
 [tasks."repos:e2e-adopt"]

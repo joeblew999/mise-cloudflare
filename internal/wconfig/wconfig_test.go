@@ -56,7 +56,7 @@ func link(t *testing.T, target, at string) {
 }
 
 // TestAdopted: a project mise-cloudflare didn't make, read as wrangler reads it: production in env.production under its
-// own name, its resources named by ID (the developer's), a Durable Object and a Workflow, and no warnings.
+// own name (its login the top level's, the repo's one), its resources named by ID (the developer's), a Durable Object and a Workflow, and no warnings.
 func TestAdopted(t *testing.T) {
 	for _, c := range []struct {
 		env, name string
@@ -66,8 +66,8 @@ func TestAdopted(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if w.Name != c.name || !w.HasEnv("production") || w.HasEnv("staging") || w.Previews || w.Warnings != "" {
-			t.Errorf("env %q: name %q, envs %q, previews %v, warnings %q", c.env, w.Name, w.Envs, w.Previews, w.Warnings)
+		if w.Name != c.name || w.Login != "adopted-dev" || !w.HasEnv("production") || w.HasEnv("staging") || w.Previews || w.Warnings != "" {
+			t.Errorf("env %q: name %q, login %q, envs %q, previews %v, warnings %q", c.env, w.Name, w.Login, w.Envs, w.Previews, w.Warnings)
 		}
 		want := map[string]string{"DB": "hyperdrive", "CACHE": "kv_namespace", "LIMITER": "durable_object_namespace", "INDEX": "workflow"}
 		for n, typ := range want {

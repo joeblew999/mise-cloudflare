@@ -75,24 +75,25 @@ wrangler does the work for every kind of binding; mise-cloudflare adds only what
 | Step | For every kind, by wrangler | Kind by kind, by mise-cloudflare |
 |---|---|---|
 | `04-check` | wrangler's own validation of the config: its warnings are problems | |
+| Every step that runs the Worker | | The package's own `build` script first, when it has one (`npm run build`, with its lockfile's package manager): `06-serve`, `08-deploy`, `11-preview` and Workers Builds. wrangler then runs what it wrote: Cloudflare's Vite plugin writes the config it deploys, as such a repo's own `deploy` script (`npm run build && wrangler deploy`) does |
 | `06-serve` | `wrangler dev`. What wrangler simulates runs locally; what it runs on Cloudflare even locally (its own pick: Workers AI, an AI Search namespace, a binding marked `remote`, …) runs on the repo's login, which it makes first, and needs its resource there | |
 | `08-deploy` | `wrangler deploy`, which makes what a binding uses when the config names nothing, of the kinds it can: KV, D1, R2, Queues, Flagship apps, Dispatch Namespaces | |
 | `13-delete` | `wrangler delete`, which deletes the Worker's own Durable Objects with it, all their data too, and leaves what deploy made | It says which Durable Objects go when it asks, and checks they went. It deletes what deploy made and named after the Worker: KV, D1, R2, Queues, Flagship apps. What the config names is yours and stays (an AI Search or Agent Memory namespace always is). It names every binding it leaves |
-| Previews | `wrangler preview` | Their own KV, D1 and R2; not yet a Queue or a Flagship app of their own |
+| Previews | `wrangler preview` | Their own of what deploy makes: KV, D1, R2, Queues and Flagship apps, in the Worker's Previews Base |
+| Environments | The one `CLOUDFLARE_ENV` names (wrangler's own pick), or the top level | One login for the repo, named after the top level's Worker, whichever environment deploys |
 
 What's proven and where:
 
 - **On Cloudflare, every step:** KV, D1, R2 and a secret (the template); a Queue, a Flagship app and Workers AI (the
-  extras, below).
+  extras, below), each with the previews' own; a wrangler environment, `env.staging` (`new-repo:e2e-env`).
 - **A third-party Worker, every step:** cloudflare/realtime-examples' `video-to-jpeg` (a Durable Object, static
   assets, vars), adopted as its owner would, on its own wrangler (`repos:e2e-adopt`).
 - **On third-party configs, `check` only:** every config in [repos.txt](repos.txt)'s repos, with Durable Objects,
   Workflows, Hyperdrive, rate limits, containers, Workers AI and static assets among them.
-- **Not handled yet:** a Worker that has to be built first, as with Cloudflare's Vite plugin or a Python Worker:
-  `08-deploy` runs `wrangler deploy` alone, which would very likely deploy it without its build (#17).
-- **Not yet run:** previews' own Queue or Flagship app (#19); `--env` environments
-  and monorepos (#20); a Dispatch Namespace, which needs Workers for Platforms (#23). The open work is the repo's
-  [issues](https://github.com/joeblew999/mise-cloudflare/issues).
+- **Not handled yet:** a Python Worker, which deploys with pywrangler, not wrangler (#17); a repo of several Workers,
+  a monorepo (#20).
+- **Not yet run:** Workers Builds deploying a named environment (#20); a Dispatch Namespace, which needs Workers for
+  Platforms (#23). The open work is the repo's [issues](https://github.com/joeblew999/mise-cloudflare/issues).
 
 The repo's login is a wrangler auth profile, which older wranglers (4.49.0) don't have: on one, `06-serve` still runs
 its local bindings, and `04-check` says to move it (`mise run cloudflare:update` moves every pin).
@@ -147,7 +148,8 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 | `template:update` | The template's pins at their newest, by its own `cloudflare:update`: each moved one before → after | To move its pins; then the walks | No |
 | `new-repo:e2e-serve` | The walk on a new repo, as far as `serve` (`--version` pins a release) | After every change | No |
 | `new-repo:e2e-deploy` | The walk on a new repo, as far as `deploy` | After a change to how it deploys | Yes |
-| `new-repo:e2e-extras` | `new-repo:e2e-deploy` with the extras | After a change to `13-delete` or `06-serve` | Yes |
+| `new-repo:e2e-extras` | `new-repo:e2e-deploy` with the extras | After a change to `13-delete`, `06-serve` or previews | Yes |
+| `new-repo:e2e-env` | `new-repo:e2e-deploy` in a wrangler environment, `env.staging`, on the repo's one login | After a change to environments or the login | Yes |
 | `repos:check [owner/repo]` | The corpus: every wrangler config in third-party repos, read and checked | After a change to how the tool reads a config or what `check` asks of a repo | No |
 | `repos:e2e-adopt <path>` | The walk on one of the corpus's Workers, adopted as its owner would (below), as far as `deploy` | After a change to how the tool works on a repo it didn't make | Yes |
 | `tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
@@ -169,10 +171,10 @@ stage:
 | Stage | As far as | Needs |
 |---|---|---|
 | `serve` | `06-serve`: the Worker locally, with local D1, KV and R2; on the way, `04-check`'s rules and what the repo's GitHub workflow runs (`cloudflare:verify`) | Nothing |
-| `deploy` | `08-deploy` on the repo's own login, the live D1, KV, R2 and secret, stray tokens refused, then `13-delete` | A Cloudflare account; the first time, an Allow |
+| `deploy` | `08-deploy` on the repo's own login, the live D1, KV, R2 and secret, stray tokens refused; `11-preview`, the preview's own; then `13-delete` | A Cloudflare account; the first time, an Allow |
 | `connect-github` | `09-connect-github`: Workers Builds builds production from a throwaway branch and a preview for a pull request's branch, gone with its branch | GitHub too |
 
-It walks four kinds of repo:
+It walks five kinds of repo:
 
 - **The template**, [templates/](templates/), in place; for `connect-github`, in a checkout of this repo at HEAD, as
   Cloudflare builds it from GitHub.
@@ -183,8 +185,13 @@ It walks four kinds of repo:
 - **A new repo with extras**: the same, whose developer first adds bindings beyond the template's
   ([e2e_bindings_test.go](e2e_bindings_test.go), one row a kind: a Queue, a Flagship app and Workers AI; it says why
   other kinds aren't rows). wrangler deploy must make each one and `13-delete` delete it, checked through Cloudflare's
-  API. Workers AI runs on Cloudflare even locally: with no login, in CI, `06-serve` must stop before `wrangler dev`
-  and say it needs the repo's login, and after `08-deploy` run on it.
+  API, and `11-preview` make the previews' own and bind it in the preview. Workers AI runs on Cloudflare even locally:
+  with no login, in CI, `06-serve` must stop before `wrangler dev` and say it needs the repo's login, and after
+  `08-deploy` run on it.
+- **A new repo in a wrangler environment** (`new-repo:e2e-env`): the same, whose developer adds `env.staging` (its own
+  D1, KV, R2 and secret, which wrangler doesn't inherit); every step runs with `CLOUDFLARE_ENV=staging`. Its Worker,
+  `mise-cloudflare-new-staging`, deploys on the repo's one login, named after the top level's Worker, which is never
+  deployed.
 - **A third-party Worker, adopted** (`repos:e2e-adopt repos/cloudflare/realtime-examples/video-to-jpeg`): its folder,
   as `repos:check` cloned it, copied into a repo of its own with its own git, then `mise-cloudflare init`, its own
   install by its lockfile, and its wrangler moved as the tool says when it has no auth profiles (`mise use aube`,

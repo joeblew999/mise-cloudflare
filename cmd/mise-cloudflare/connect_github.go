@@ -149,6 +149,9 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	rep.Repository = gh.Owner.Login + "/" + gh.Name
 	rep.Root = gh.root
 	_, install := rules.Lockfile(r.dir)
+	if run := rules.Build(r.dir); run != "" {
+		install += " && " + run // the package's own build, before wrangler deploys what it writes
+	}
 	rep.Build = orDefault(b.Build, install)
 	prodBranch := gh.DefaultBranch
 	if b.Staging != "" {

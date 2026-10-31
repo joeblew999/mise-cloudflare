@@ -34,6 +34,7 @@ type statusReport struct {
 	CompatibilityDate string   `json:"compatibilityDate"`
 	DevDate           string   `json:"devDate"`
 	Remote            []string `json:"remote"` // the bindings wrangler runs on Cloudflare even locally: 06-serve needs the login
+	Build             string   `json:"build"`  // the package's own build, which runs before wrangler does (rules.Build), or ""
 	StrayTokens       []string `json:"strayTokens"`
 	Problems          []string `json:"problems"` // cloudflare check's: a deploy would fail on them, or leak
 	Next              string   `json:"next"`
@@ -42,7 +43,7 @@ type statusReport struct {
 // show is mise-cloudflare with no command or show (mise run cloudflare, cloudflare:05-show): the steps in order, which are done for this repo, and the
 // next one. It never logs in.
 func (r repo) show(ctx context.Context, jsonOut bool) {
-	rep := statusReport{Worker: r.wc.Name, Profile: r.w.Profile, CompatibilityDate: r.wc.CompatibilityDate, DevDate: r.wc.DevDate, Remote: append([]string{}, r.wc.Remote...), Accounts: []wrangler.Account{}, Scopes: []string{},
+	rep := statusReport{Worker: r.wc.Name, Profile: r.w.Profile, CompatibilityDate: r.wc.CompatibilityDate, DevDate: r.wc.DevDate, Remote: append([]string{}, r.wc.Remote...), Build: rules.Build(r.dir), Accounts: []wrangler.Account{}, Scopes: []string{},
 		Needs: r.wanted(ctx), StrayTokens: tokenEnvFiles(r.dir), Problems: []string{}}
 	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" {
 		rep.StrayTokens = append([]string{"this shell"}, rep.StrayTokens...)
@@ -128,6 +129,9 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 	} else if len(r.wc.Envs) > 0 {
 		fmt.Printf("  %s's top level; it also has %s: CLOUDFLARE_ENV=%s mise run cloudflare shows that one, and the steps deploy it\n",
 			filepath.Base(r.wc.Path), "env."+strings.Join(r.wc.Envs, ", env."), r.wc.Envs[0])
+	}
+	if rep.Build != "" {
+		fmt.Printf("  built first: %s (package.json's build script), before 06-serve, 08-deploy, 11-preview and Cloudflare's builds\n", rep.Build)
 	}
 	file := filepath.Base(r.wc.Path)
 	// wrangler itself says when the date is later than its local runtime has (wrangler dev falls back, and says so).

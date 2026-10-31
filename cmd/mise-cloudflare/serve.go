@@ -16,8 +16,9 @@ import (
 // on the repo's own login (--profile), never another login on the machine; an older wrangler has no logins of a repo's
 // own, and runs it with no --profile, which local bindings never use. Local bindings need no login. One
 // wrangler runs on Cloudflare even here (wrangler's own pick: Workers AI, an AI Search namespace, one marked remote, …)
-// needs the repo's login, which serve makes first, as deploy does, and its resource there. wrangler dev itself names
-// the required secrets it has no value for.
+// needs the repo's login, which serve makes first, as deploy does, and its resource there. The package's own build runs
+// first, when it has one: wrangler dev then runs what it wrote (Cloudflare's Vite plugin's config, say). wrangler dev
+// itself names the required secrets it has no value for.
 func (r repo) serve(ctx context.Context, args []string) {
 	devVars(r.dir)
 	remote := strings.Join(r.wc.Remote, ", ")
@@ -31,6 +32,7 @@ func (r repo) serve(ctx context.Context, args []string) {
 		}
 		r.ensureLogin(ctx)
 	}
+	r.build(ctx)
 	dev := r.w.Plain(ctx, append([]string{"dev"}, args...)...)
 	if r.w.HasProfiles(ctx) {
 		dev = r.w.Cmd(ctx, append([]string{"dev"}, args...)...)

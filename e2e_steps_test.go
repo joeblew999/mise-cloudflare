@@ -87,8 +87,8 @@ var steps = []step{
 	{task: "08-deploy", stage: deploy, check: func(w *walk) {
 		w.mustRunMiseTask(nil, "cloudflare:08-deploy")
 		s := w.miseShowJSON()
-		if !s.LoggedIn || !s.Deployed {
-			w.t.Fatalf("not deployed on the login %s: %+v", w.worker, s)
+		if !s.LoggedIn || !s.Deployed || s.Profile != w.login {
+			w.t.Fatalf("not deployed on the login %s: %+v", w.login, s)
 		}
 		w.url = s.URL
 		if w.adopted {
@@ -100,11 +100,17 @@ var steps = []step{
 		}
 		if withExtras() {
 			token, account := w.api()
-			if on := w.extrasSettle(token, account, true); len(on) != made() {
+			if on := w.extrasSettle(token, account, w.worker, true); len(on) != made() {
 				w.t.Fatalf("wrangler deploy made %d of the %d extras it makes: %q", len(on), made(), on)
 			} else {
 				w.pass("wrangler deploy made the extras too: %s", strings.Join(on, ", "))
 			}
+		}
+		if env := withEnv(); env != "" {
+			top := w.repo
+			top.worker = w.login
+			top.nothingOnCloudflare()
+			w.pass("deployed env.%s alone, as %s, on the repo's one login: nothing of the top level's Worker, %s", env, w.worker, w.login)
 		}
 		if changed := diff(w.before, w.snapshot()); len(changed) > 0 {
 			w.t.Fatalf("deploying changed %s", strings.Join(changed, ", "))
@@ -174,7 +180,34 @@ var steps = []step{
 		}
 		w.pass("%s is gone", preview)
 	}},
-	{task: "11-preview", stage: deploy, skip: "shown working by Cloudflare's own checks on a pull request's preview (10-set-preview-secrets): no harness of our own"},
+	{task: "11-preview", stage: deploy, check: func(w *walk) {
+		if w.adopted {
+			w.pass("cloudflare:11-preview: an adopted Worker's previews aren't walked: they need a previews block and secrets of its developer's")
+			return
+		}
+		if w.upTo < connectGithub && len(w.secrets) > 0 {
+			// Without connect-github's steps, its previews have no secrets yet: 10-set-preview-secrets first, as the docs say.
+			if _, err := w.runMiseTask(nil, strings.Repeat("set-by-deploy\n", len(w.secrets)), "cloudflare:10-set-preview-secrets"); err != nil {
+				w.t.Fatalf("cloudflare:10-set-preview-secrets: %v", err)
+			}
+			w.pass("cloudflare:10-set-preview-secrets set the previews' %s, which a preview from here needs too", strings.Join(w.secrets, ", "))
+		}
+		w.mustRunMiseTask(nil, "cloudflare:11-preview", "--name", "e2e")
+		token, account := w.api()
+		var env map[string]any
+		w.preview, env = w.previewOn(token, account, "e2e")
+		waitTillItWorks(w.t, w.preview, 5*time.Minute)
+		w.pass("%s: a preview from here, on the repo's login; its D1, KV, R2 and secret work", w.preview)
+		if withExtras() {
+			if on := w.extrasSettle(token, account, w.worker+"-previews", true); len(on) != made() {
+				w.t.Fatalf("cloudflare:11-preview made %d of the previews' own %d extras: %q", len(on), made(), on)
+			} else if wrong := w.previewBindsOwn(token, account, env); len(wrong) > 0 {
+				w.t.Fatalf("the preview doesn't bind the previews' own: %s", strings.Join(wrong, "; "))
+			} else {
+				w.pass("the previews' own extras, made and bound in the preview: %s", strings.Join(on, ", "))
+			}
+		}
+	}},
 	{task: "12-login", stage: serve, check: func(w *walk) {
 		if out, err := w.runMiseTask([]string{"CI=true"}, "", "cloudflare:12-login"); err == nil || !strings.Contains(out, "in CI there's no one to log in") {
 			w.t.Fatalf("in CI, a login didn't stop at once: %s", out)
@@ -182,7 +215,7 @@ var steps = []step{
 		w.pass("in CI, cloudflare:12-login stops at once: no one is there to click Allow")
 		if w.upTo >= deploy {
 			w.mustRunMiseTask(nil, "cloudflare:12-login")
-			w.pass("cloudflare:12-login: the repo's own login, %s", w.worker)
+			w.pass("cloudflare:12-login: the repo's own login, %s", w.login)
 		}
 	}},
 	{task: "13-delete", stage: deploy, check: func(w *walk) {
@@ -195,15 +228,21 @@ var steps = []step{
 			w.pass("the branch %s is deleted from GitHub", w.prod)
 		}
 		w.mustRunMiseTask(nil, "cloudflare:13-delete", "--yes")
-		if !gone(w.url, time.Minute) {
-			w.t.Fatalf("%s still answers", w.url)
+		urls := []string{w.url}
+		if w.preview != "" {
+			urls = append(urls, w.preview)
 		}
-		w.pass("%s no longer answers", w.url)
+		for _, u := range urls {
+			if !gone(u, time.Minute) {
+				w.t.Fatalf("%s still answers", u)
+			}
+		}
+		w.pass("no longer answering: %s", strings.Join(urls, ", "))
 		if left := w.leftOnCloudflare(); len(left) > 0 {
 			w.t.Fatalf("left on the account: %s", strings.Join(left, ", "))
 		}
 		if withExtras() {
-			w.pass("no D1, KV, R2 or Durable Object left, nor the extras' Queue or Flagship app")
+			w.pass("no D1, KV, R2 or Durable Object left, nor the extras' Queue or Flagship app, nor the previews' own")
 		} else {
 			w.pass("no D1, KV, R2 or Durable Object left")
 		}
