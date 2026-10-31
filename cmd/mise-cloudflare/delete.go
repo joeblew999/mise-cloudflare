@@ -60,11 +60,7 @@ func (r repo) delete(ctx context.Context, yes bool) {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			fail(errors.New("delete asks first, and there's no terminal to ask on: run it with --yes"))
 		}
-		with := ""
-		if len(classes) > 0 {
-			with = " with its Durable Objects (" + strings.Join(classes, ", ") + ") and all their data,"
-		}
-		fmt.Printf("Delete the Worker %s,%s its KV, D1 and R2 and its previews' own, with their data? Type its name: ", r.wc.Name, with)
+		fmt.Printf("Delete the Worker %s%s? Type its name: ", r.wc.Name, r.deleting(classes))
 		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 		if strings.TrimSpace(line) != r.wc.Name {
 			fail(errors.New("not deleted"))
@@ -110,6 +106,23 @@ func (r repo) delete(ctx context.Context, yes bool) {
 	if len(left) > 0 {
 		fail(fmt.Errorf("not all deleted: %s is still on Cloudflare (what Cloudflare said is above)", strings.Join(left, "; ")))
 	}
+}
+
+// deleting is what delete deletes besides the Worker, for its question: the Worker's own Durable Objects (classes) and
+// what deploy and the previews made for it, by name, all with their data.
+func (r repo) deleting(classes []string) string {
+	var what []string
+	if len(classes) > 0 {
+		what = append(what, "its Durable Objects ("+strings.Join(classes, ", ")+")")
+	}
+	own, _ := r.ownResources()
+	for _, p := range append(own, r.previewNeeds()...) {
+		what = append(what, p.Kind+" "+p.Name)
+	}
+	if len(what) == 0 {
+		return ""
+	}
+	return ", with " + strings.Join(what, ", ") + " and all their data"
 }
 
 // goesWithWorker is the binding kinds that are the Worker's own, in what it uploads: its vars, secrets and static

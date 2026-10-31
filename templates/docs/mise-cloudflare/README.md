@@ -215,6 +215,7 @@ there to click Allow, and Cloudflare's Workers Builds deploys.
 | `refusing: CLOUDFLARE_API_TOKEN is set in this shell` | Unset it: a token overrides every login, and the repo uses none |
 | `refusing: .env sets CLOUDFLARE_API_TOKEN` | Remove that line from the file |
 | `wrangler isn't installed here` | Install the repo's dependencies: `package.json` pins wrangler |
+| `npm warn install-scripts` (npm 11) | npm holds back packages' install scripts until you approve them (`npm install-scripts ls`); wrangler ran without its own (workerd's, esbuild's), dev and deploy both |
 | `the repo's wrangler, … has no auth profiles` | An older wrangler (4.49.0 is one) can't hold the repo's login: move it to a newer one, `mise run cloudflare:update` (it moves every pin; `mise use aube` first if it says so). `06-serve` still runs local bindings on it |
 | `… still don't match the repo's` | The person approved other permissions or another account: `mise run cloudflare:14-logout`, then log in again |
 | A `mise run cloudflare:04-check` problem | Fix the repo; never weaken the rule |

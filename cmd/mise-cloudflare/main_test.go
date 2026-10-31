@@ -62,18 +62,22 @@ func TestCI(t *testing.T) {
 
 // TestMoved: update ends with every pin it read, the moved ones before → after, in the order of their file and name.
 func TestMoved(t *testing.T) {
-	before := map[string]string{"mise.toml node": "26.12.1", "mise.toml aube": "2.8.4", "package.json wrangler": "4.151.3", "go.mod example.com/old": "v1.0.0"}
-	after := map[string]string{"mise.toml node": "26.13.0", "mise.toml aube": "2.8.4", "package.json wrangler": "4.155.0", "go.mod example.com/new": "v2.0.0"}
+	before := map[string]string{"mise.toml node": "26.12.1", "mise.toml aube": "2.8.4", "package.json wrangler": "4.151.3", "go.mod example.com/old": "v1.0.0",
+		"package.json typescript": "^5.5.2", "package.json esbuild": "^0.19.0"}
+	after := map[string]string{"mise.toml node": "26.13.0", "mise.toml aube": "2.8.4", "package.json wrangler": "4.155.0", "go.mod example.com/new": "v2.0.0",
+		"package.json typescript": "^7.0.2", "package.json esbuild": "^0.28.2"}
 	lines, n := moved(before, after)
 	want := []string{
 		"example.com/new none → v2.0.0 (go.mod)",
 		"example.com/old v1.0.0 → none (go.mod)",
 		"aube 2.8.4 (mise.toml)",
 		"node 26.12.1 → 26.13.0 (mise.toml)",
+		"esbuild ^0.19.0 → ^0.28.2 (package.json), a major move",
+		"typescript ^5.5.2 → ^7.0.2 (package.json), a major move",
 		"wrangler 4.151.3 → 4.155.0 (package.json)",
 	}
-	if !slices.Equal(lines, want) || n != 4 {
-		t.Errorf("moved: %d\n%q\nwant 4\n%q", n, lines, want)
+	if !slices.Equal(lines, want) || n != 6 {
+		t.Errorf("moved: %d\n%q\nwant 6\n%q", n, lines, want)
 	}
 }
 
@@ -186,6 +190,18 @@ func TestOwnResources(t *testing.T) {
 	}
 	if !slices.Equal(names, []string{"w-db", "w-flags", "w-jobs", "w-kv"}) || !slices.Equal(kept, []string{"KV CACHE"}) {
 		t.Errorf("own %q, kept %q", names, kept)
+	}
+}
+
+// TestDeleting: delete's question names what goes besides the Worker: its own Durable Objects, and what deploy and the
+// previews made, by name. A Worker with none of them is asked about alone.
+func TestDeleting(t *testing.T) {
+	r := repo{wc: wconfig.Config{Name: "w", Bindings: map[string]string{"KV": "kv_namespace", "PG": "hyperdrive"}, Previews: true}}
+	if got, want := r.deleting([]string{"Room"}), ", with its Durable Objects (Room), KV w-kv, KV "+previewName("w", "KV")+" and all their data"; got != want {
+		t.Errorf("deleting: %q, want %q", got, want)
+	}
+	if got := (repo{wc: wconfig.Config{Name: "w", Bindings: map[string]string{"MODE": "plain_text"}}}).deleting(nil); got != "" {
+		t.Errorf("a Worker with nothing besides: %q", got)
 	}
 }
 

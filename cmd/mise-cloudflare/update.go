@@ -52,7 +52,7 @@ func (r repo) update(ctx context.Context) {
 	if n == 0 {
 		fmt.Println("✓ nothing moved: each pin is its newest release (mise and aube skip one younger than their minimum age)")
 	} else {
-		fmt.Printf("✓ %d moved (git diff shows them; run the steps to prove them):\n", n)
+		fmt.Printf("✓ %d of %d pins moved (git diff shows them; run the steps to prove them; a major move can break):\n", n, len(lines))
 	}
 	for _, l := range lines {
 		fmt.Println("  " + l)
@@ -121,10 +121,27 @@ func moved(before, after map[string]string) ([]string, int) {
 			lines = append(lines, fmt.Sprintf("%s %s (%s)", name, a, file))
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("%s %s → %s (%s)", name, cmp.Or(b, "none"), cmp.Or(a, "none"), file))
+		major := ""
+		if b != "" && a != "" && breaking(b, a) {
+			major = ", a major move"
+		}
+		lines = append(lines, fmt.Sprintf("%s %s → %s (%s)%s", name, cmp.Or(b, "none"), cmp.Or(a, "none"), file, major))
 		n++
 	}
 	return lines, n
+}
+
+// breaking reports whether moving from version b to a is a major move, as semver counts one: its major number, or for a
+// 0.x version its minor number (esbuild 0.19 → 0.28). The versions are as their files write them (^5.5.2, v1.2.3).
+func breaking(b, a string) bool {
+	parts := func(v string) []string {
+		return strings.SplitN(strings.TrimLeft(v, "^~=<>v "), ".", 3)
+	}
+	pb, pa := parts(b), parts(a)
+	if pb[0] != pa[0] {
+		return true
+	}
+	return pb[0] == "0" && len(pb) > 1 && len(pa) > 1 && pb[1] != pa[1]
 }
 
 // exists reports whether the repo has the file f.
