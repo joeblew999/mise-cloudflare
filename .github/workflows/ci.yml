@@ -65,6 +65,9 @@ jobs:
           mise run template:check-mise
           mise run root:check-mise
 
+      - name: Every wrangler config in the third-party repos of repos.txt, read and checked as the tasks do (mise run repos:check)
+        run: mise run repos:check
+
       - name: The template, templates - the walk as far as the stage serve, which needs no account, what its own workflow runs included (mise run template:e2e-serve)
         run: mise run template:e2e-serve
 
