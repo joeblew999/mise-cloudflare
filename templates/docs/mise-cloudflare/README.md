@@ -10,7 +10,7 @@ Written by `mise-cloudflare init`, for the version this repo's `.mise/config.tom
 ## Set up and upgrade
 
 Step by step, at the repository's root (GitHub and Claude Code read `.github/` and `.claude/` only there), in a repo
-that's new or has a Worker of its own (a `wrangler.jsonc`, and wrangler in its `package.json`):
+that's new or has a Worker of its own (a wrangler config, and wrangler in its `package.json`):
 
 1. **Install mise**, once on each machine: [mise's getting started](https://mise.jdx.dev/getting-started.html)
    (`curl https://mise.run | sh`, or `brew install mise`).
@@ -84,6 +84,15 @@ After step 09 there's nothing to run: push a branch and open a pull request, and
 its link on the pull request; merge it, and Cloudflare deploys production. For staging too,
 `mise run cloudflare:09-connect-github --staging main`: then merging into `main` deploys staging, and merging `main` into
 `production` deploys production.
+
+## Your Worker's bindings
+
+wrangler does the work for every kind: `06-serve` runs `wrangler dev`, and `08-deploy` runs `wrangler deploy`, which
+makes what a binding uses when the config names nothing. A binding wrangler runs on Cloudflare even locally (Workers AI,
+an AI Search namespace, one marked `remote`, …) needs the repo's login, which `06-serve` makes first, and its resource
+there. `13-delete` deletes what deploy made (KV, D1, R2, Queues, Flagship apps), never what the config names, and names
+every binding it leaves. Previews get their own KV, D1 and R2. What's proven, kind by kind:
+[mise-cloudflare's README](https://github.com/joeblew999/mise-cloudflare#what-it-does-with-your-workers-bindings).
 
 ## The commands
 
