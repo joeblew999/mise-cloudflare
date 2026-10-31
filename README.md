@@ -113,9 +113,9 @@ It walks two repos:
   (`local`), or at a release with `--version`, as the release tries it, and pins itself in `.mise/config.toml`. Not
   `connect-github`: it has no GitHub.
 - **A new repo with extras** (`new-repo:e2e-extras`): the same new repo, whose developer first adds bindings beyond the
-  template's KV, D1 and R2 ([e2e_bindings_test.go](e2e_bindings_test.go), one row a kind: a Queue). wrangler deploy
-  makes each one and `13-delete` must delete it, all checked on Cloudflare; the template itself stays as minimal as it
-  is.
+  template's KV, D1 and R2 ([e2e_bindings_test.go](e2e_bindings_test.go), one row a kind: a Queue and a Flagship app;
+  it says why other kinds aren't rows). wrangler deploy makes each one and `13-delete` must delete it, all checked on
+  Cloudflare; the template itself stays as minimal as it is.
 
 Each walk first says what it runs: the repo's mise tools, mise-cloudflare's build, the installed wrangler. It runs in
 the repo on that repo's own mise only (`MISE_CEILING_PATHS`). A walk that deploys starts by deleting whatever a stopped
@@ -134,7 +134,7 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 |---|---|---|---|
 | `mise run template:e2e-serve`, `mise run new-repo:e2e-serve` | The walk as far as `serve`, on the template or on a stamped copy (`--version` pins a release) | After every change | No |
 | `mise run template:e2e-deploy`, `mise run new-repo:e2e-deploy` | The walk as far as `deploy`, about 3 minutes | After a change to how it deploys | Yes |
-| `mise run new-repo:e2e-extras` | `new-repo:e2e-deploy` with extras: bindings beyond the template's added first (a Queue), made by wrangler deploy and deleted by `13-delete` | After a change to what `13-delete` deletes | Yes |
+| `mise run new-repo:e2e-extras` | `new-repo:e2e-deploy` with extras: bindings beyond the template's added first (a Queue and a Flagship app), made by wrangler deploy and deleted by `13-delete` | After a change to what `13-delete` deletes | Yes |
 | `mise run template:e2e-connect-github` | The walk on the template as far as `connect-github`, about 7 minutes (it waits on Cloudflare's builds) | After a change to `connect-github` | Yes, and GitHub |
 | `mise run template:check-mise` | `TestMise` on the template's mise file and the tool's Go (below) | After a change to a task or a command | No |
 | `mise run root:check-mise` | `TestMise` on this repo's own `mise.toml`, its mise side: one line each, the Go it runs there, its `usage` passed by name, no POSIX shell syntax, so every task here runs on Windows too | After a change to this repo's tasks | No |

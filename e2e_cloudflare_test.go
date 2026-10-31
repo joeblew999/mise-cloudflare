@@ -136,7 +136,7 @@ func (r repo) leftOnCloudflare() []string {
 func (r repo) leftWith(token, account string) []string {
 	left := r.left(token, account)
 	if withExtras() {
-		left = append(left, r.extrasOn(token, account)...)
+		left = append(left, r.extrasSettle(token, account, false)...)
 	}
 	return left
 }

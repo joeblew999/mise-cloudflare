@@ -92,7 +92,7 @@ env = { REPO_PATH = "templates", E2E_STAMPED = "true", E2E_STAGE = "deploy" }
 run = 'go test . -run "^TestWalk$" -count=1 -v -timeout 30m{% if usage.version %} -args -version "{{usage.version}}"{% endif %}'
 
 [tasks."new-repo:e2e-extras"]
-description = "new-repo:e2e-deploy with extras: the new repo's developer adds bindings beyond the template's KV, D1 and R2 first (e2e_bindings_test.go: a Queue), which wrangler deploy makes and cloudflare:13-delete must delete, all checked on Cloudflare. The template stays as minimal as it is. After tool:install"
+description = "new-repo:e2e-deploy with extras: the new repo's developer adds bindings beyond the template's KV, D1 and R2 first (e2e_bindings_test.go: a Queue and a Flagship app), which wrangler deploy makes and cloudflare:13-delete must delete, all checked on Cloudflare. The template stays as minimal as it is. After tool:install"
 depends = ["tool:install"]
 env = { REPO_PATH = "templates", E2E_STAMPED = "true", E2E_STAGE = "deploy", E2E_EXTRAS = "true" }
 run = 'go test . -run "^TestWalk$" -count=1 -v -timeout 30m'

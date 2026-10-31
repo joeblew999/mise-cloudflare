@@ -12,18 +12,25 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/joeblew999/mise-cloudflare/internal/cfapi"
 )
 
-// extra is one binding the walk adds: what the developer writes at the config's top level, and where Cloudflare's
-// API lists what wrangler deploy makes for it, <worker>-<suffix>, by which field of each item.
+// extra is one binding the walk adds: what the developer writes at the config's top level ({worker} is the Worker's
+// name), and where Cloudflare's API lists what wrangler deploy makes for it, <worker>-<suffix>, by which field of each
+// item.
 type extra struct {
 	add, list, field, suffix string
 }
 
+// Only kinds wrangler runs locally: the walk's 06-serve has no login on purpose, which a binding wrangler runs on
+// Cloudflare even locally (an AI Search namespace) needs, with its resource made first. Kinds this account can't make
+// aren't here: Dispatch Namespaces (Workers for Platforms, 403) and Agent Memory (401).
 var extras = []extra{
 	{add: `"queues": { "producers": [{ "binding": "JOBS" }] }`, list: "/queues", field: "queue_name", suffix: "jobs"},
+	{add: `"flagship": [{ "binding": "FLAGS" }]`, list: "/flagship/apps", field: "name", suffix: "flags"},
 }
 
 // withExtras reports whether this walk adds the extras (mise run new-repo:e2e-extras).
@@ -39,7 +46,7 @@ func (r repo) addExtras() {
 	}
 	out := bytes.TrimRight(b[:end], " \n")
 	for _, e := range extras {
-		out = append(out, ",\n  "+e.add...)
+		out = append(out, ",\n  "+strings.ReplaceAll(e.add, "{worker}", stampedWorker)...)
 	}
 	if err := os.WriteFile(path, append(append(out, '\n'), b[end:]...), 0o644); err != nil {
 		r.t.Fatal(err)
@@ -63,4 +70,18 @@ func (r repo) extrasOn(token, account string) []string {
 		}
 	}
 	return on
+}
+
+// extrasSettle is extrasOn once Cloudflare's lists say what the walk expects, all of the extras (all) or none, looking
+// again every few seconds for up to a minute, as a person would: a list can lag what was just made or deleted
+// (Flagship's does).
+func (r repo) extrasSettle(token, account string, all bool) []string {
+	until := time.Now().Add(time.Minute)
+	for {
+		on := r.extrasOn(token, account)
+		if all && len(on) == len(extras) || !all && len(on) == 0 || time.Now().After(until) {
+			return on
+		}
+		time.Sleep(5 * time.Second)
+	}
 }

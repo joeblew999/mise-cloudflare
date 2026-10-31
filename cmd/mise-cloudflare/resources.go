@@ -25,6 +25,7 @@ type resource struct {
 	Name    string `json:"name"`
 	ID      string `json:"id,omitempty"` // a KV namespace's or a D1's; an R2 bucket goes by its name
 	Done    string `json:"done"`         // made, there already, deleted
+	Gone    bool   `json:"gone"`         // off: deleted, or not there
 }
 
 // previewResources gives previews their own KV, D1 and R2 (<worker>-previews-<binding>), which Cloudflare doesn't, and puts them
@@ -61,15 +62,30 @@ func (r repo) previewResources(ctx context.Context, off, jsonOut bool) []resourc
 	}
 	if off {
 		for i, p := range out {
-			out[i].Done = r.deleteResource(ctx, p, token, account)
+			out[i].Done, out[i].Gone = r.deleteResource(ctx, p, token, account)
 		}
 	}
 	if !jsonOut {
 		for _, p := range out {
-			fmt.Printf("✓ %s's previews: %s %s is %s (%s)\n", r.wc.Name, p.Kind, p.Binding, p.Name, p.Done)
+			mark := "✓"
+			if off && !p.Gone {
+				mark = "✗"
+			}
+			fmt.Printf("%s %s's previews: %s %s is %s (%s)\n", mark, r.wc.Name, p.Kind, p.Binding, p.Name, p.Done)
 		}
 		if !off {
 			fmt.Printf("  in its Previews Base on Cloudflare, which every new preview starts from\n")
+		}
+	}
+	if off {
+		var left []string
+		for _, p := range out {
+			if !p.Gone {
+				left = append(left, p.Kind+" "+p.Binding+", "+p.Name)
+			}
+		}
+		if len(left) > 0 {
+			fail(fmt.Errorf("not all deleted: the previews' %s is still on Cloudflare (what Cloudflare said is above)", strings.Join(left, "; ")))
 		}
 	}
 	return out
@@ -126,9 +142,9 @@ func slug(s string) string {
 	return strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
-// findResource finds a KV namespace, D1, R2 bucket or Queue by its name, KV and D1 in the repo's wrangler's lists, an R2
-// bucket by Cloudflare's API (200 there, 404 not), a Queue in the API's list: whether it's there, and its id (a KV
-// namespace's, a D1's or a Queue's; an R2 bucket has none but its name).
+// findResource finds a resource of a kind delete deletes by its name, KV and D1 in the repo's wrangler's lists, the
+// others through Cloudflare's API: an R2 bucket by its own address (200 there, 404 not), a Queue or a Flagship app in
+// the API's list. It says whether it's there, and its id (none for an R2 bucket: its name is its address).
 func (r repo) findResource(ctx context.Context, p resource, token, account string) (bool, string, error) {
 	switch p.Type {
 	case "kv_namespace":
@@ -152,22 +168,9 @@ func (r repo) findResource(ctx context.Context, p resource, token, account strin
 			}
 		}
 	case "queue":
-		got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/queues", nil, "")
-		var list []struct {
-			ID   string `json:"queue_id"`
-			Name string `json:"queue_name"`
-		}
-		switch {
-		case err != nil:
-			return false, "", err
-		case !got.OK() || json.Unmarshal(got.Result, &list) != nil:
-			return false, "", fmt.Errorf("queues: %s", got.Said())
-		}
-		for _, q := range list {
-			if q.Name == p.Name {
-				return true, q.ID, nil
-			}
-		}
+		return inList(ctx, token, "/accounts/"+account+"/queues", "queue_name", "queue_id", p.Name)
+	case "flagship":
+		return inList(ctx, token, "/accounts/"+account+"/flagship/apps", "name", "id", p.Name)
 	case "r2_bucket":
 		got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/r2/buckets/"+url.PathEscape(p.Name), nil, "")
 		switch {
@@ -199,34 +202,56 @@ func (r repo) makeResource(ctx context.Context, p resource, token, account strin
 	return id, "made", err
 }
 
-// deleteResource deletes a KV namespace, D1 or R2 bucket with Cloudflare's API, and says how it went, by the API's
-// status: deleted (2xx), not there (404), still holding objects (409, an R2 bucket's), else Cloudflare's own words.
-func (r repo) deleteResource(ctx context.Context, p resource, token, account string) string {
+// deleteResource deletes a resource of a kind delete deletes with Cloudflare's API, and says how it went, by the API's
+// status: deleted (2xx), not there (404), still holding objects (409, an R2 bucket's), else Cloudflare's own words; and
+// whether it's gone.
+func (r repo) deleteResource(ctx context.Context, p resource, token, account string) (done string, gone bool) {
 	there, id, err := r.findResource(ctx, p, token, account)
 	switch {
 	case err != nil:
-		return "not deleted: " + err.Error()
+		return "not deleted: " + err.Error(), false
 	case !there:
-		return "not there"
+		return "not there", true
 	}
 	path := map[string]string{
 		"kv_namespace": "/storage/kv/namespaces/" + url.PathEscape(id),
 		"d1":           "/d1/database/" + url.PathEscape(id),
 		"r2_bucket":    "/r2/buckets/" + url.PathEscape(p.Name),
 		"queue":        "/queues/" + url.PathEscape(id),
+		"flagship":     "/flagship/apps/" + url.PathEscape(id),
 	}[p.Type]
 	got, err := cfapi.Call(ctx, token, http.MethodDelete, "/accounts/"+account+path, nil, "")
 	switch {
 	case err != nil:
-		return "not deleted: " + err.Error()
+		return "not deleted: " + err.Error(), false
 	case got.OK():
-		return "deleted"
+		return "deleted", true
 	case got.Status == http.StatusNotFound:
-		return "not there"
+		return "not there", true
 	case got.Status == http.StatusConflict:
-		return "not deleted: it still holds objects; delete them, then this again"
+		return "not deleted: it still holds objects; delete them, then this again", false
 	}
-	return "not deleted: " + got.Said()
+	return "not deleted: " + got.Said(), false
+}
+
+// inList finds name in the list Cloudflare's API gives at path, by each item's nameField: whether it's there, and its
+// idField.
+func inList(ctx context.Context, token, path, nameField, idField, name string) (bool, string, error) {
+	got, err := cfapi.Call(ctx, token, http.MethodGet, path, nil, "")
+	var list []map[string]any
+	switch {
+	case err != nil:
+		return false, "", err
+	case !got.OK() || json.Unmarshal(got.Result, &list) != nil:
+		return false, "", fmt.Errorf("%s: %s", path, got.Said())
+	}
+	for _, it := range list {
+		if it[nameField] == name {
+			id, _ := it[idField].(string)
+			return true, id, nil
+		}
+	}
+	return false, "", nil
 }
 
 // cloudflareAPI is the repo's login's OAuth token (wrangler renews it) and its account, for Cloudflare's API.
@@ -262,8 +287,8 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 }
 
 // deletes is the binding kinds, by wrangler's own types, whose resources delete deletes when wrangler deploy made them:
-// the previews' own kinds, and Queues. wrangler deploy makes a few kinds more; delete names a binding of one as left.
-var deletes = map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2", "queue": "Queue"}
+// the previews' own kinds, Queues and Flagship apps. wrangler deploy makes a few kinds more; delete names a binding of one as left.
+var deletes = map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2", "queue": "Queue", "flagship": "Flagship"}
 
 // ownResources is the resources wrangler deploy made for the Worker of the kinds delete deletes: its bindings of those
 // kinds that name no resource, which deploy makes as <worker>-<binding>. kept is the ones the config names (an id, a database_name, a

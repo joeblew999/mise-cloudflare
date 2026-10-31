@@ -177,13 +177,14 @@ func TestLastDeployURL(t *testing.T) {
 // <worker>-<binding>); one the config names is the developer's, kept; other kinds aren't resources deploy makes.
 func TestOwnResources(t *testing.T) {
 	r := repo{wc: wconfig.Config{Name: "w", Named: []string{"CACHE", "HYPERDRIVE"},
-		Bindings: map[string]string{"CACHE": "kv_namespace", "KV": "kv_namespace", "DB": "d1", "HYPERDRIVE": "hyperdrive", "LIMITER": "durable_object_namespace", "JOBS": "queue"}}}
+		Bindings: map[string]string{"CACHE": "kv_namespace", "KV": "kv_namespace", "DB": "d1", "HYPERDRIVE": "hyperdrive", "LIMITER": "durable_object_namespace", "JOBS": "queue",
+			"FLAGS": "flagship", "SEARCH": "ai_search_namespace"}}}
 	own, kept := r.ownResources()
 	var names []string
 	for _, p := range own {
 		names = append(names, p.Name)
 	}
-	if !slices.Equal(names, []string{"w-db", "w-jobs", "w-kv"}) || !slices.Equal(kept, []string{"KV CACHE"}) {
+	if !slices.Equal(names, []string{"w-db", "w-flags", "w-jobs", "w-kv"}) || !slices.Equal(kept, []string{"KV CACHE"}) {
 		t.Errorf("own %q, kept %q", names, kept)
 	}
 }

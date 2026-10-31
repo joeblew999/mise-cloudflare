@@ -69,7 +69,8 @@ var steps = []step{
 		waitTillItWorks(w.t, w.url, 2*time.Minute)
 		w.pass("%s: deployed on the repo's own login, %s; its D1, KV, R2 and secret work", w.url, s.Profile)
 		if withExtras() {
-			if on := w.extrasOn(w.api()); len(on) != len(extras) {
+			token, account := w.api()
+			if on := w.extrasSettle(token, account, true); len(on) != len(extras) {
 				w.t.Fatalf("wrangler deploy made %d of the %d extras: %q", len(on), len(extras), on)
 			} else {
 				w.pass("wrangler deploy made the extras too: %s", strings.Join(on, ", "))

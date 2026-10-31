@@ -52,14 +52,23 @@ func (r repo) delete(ctx context.Context, yes bool) {
 		fmt.Printf("✓ the Worker %s is deleted\n", r.wc.Name)
 	}
 	own, kept := r.ownResources()
+	var left []string
 	for _, p := range append(own, r.previewNeeds()...) {
-		fmt.Printf("✓ %s %s, %s: %s\n", p.Kind, p.Binding, p.Name, r.deleteResource(ctx, p, token, account))
+		done, gone := r.deleteResource(ctx, p, token, account)
+		mark := "✓"
+		if !gone {
+			mark, left = "✗", append(left, p.Kind+" "+p.Binding+", "+p.Name)
+		}
+		fmt.Printf("%s %s %s, %s: %s\n", mark, p.Kind, p.Binding, p.Name, done)
 	}
 	for _, k := range kept {
 		fmt.Printf("· %s is the one %s names: yours, so it stays\n", k, filepath.Base(r.wc.Path))
 	}
 	if left := r.notDeleted(); len(left) > 0 {
 		fmt.Printf("· not deleted here, left as they are: %s (whatever any of them is on Cloudflare, it's still there)\n", strings.Join(left, ", "))
+	}
+	if len(left) > 0 {
+		fail(fmt.Errorf("not all deleted: %s is still on Cloudflare (what Cloudflare said is above)", strings.Join(left, "; ")))
 	}
 }
 
