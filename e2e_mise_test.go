@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"net"
 	"net/http"
@@ -21,17 +22,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joeblew999/mise-cloudflare/internal/rules"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 )
 
 // repo is a Worker repo that uses mise-cloudflare: this repo (top, whose GitHub the throwaway branches go to), the
 // repo's name (REPO_PATH, its folder here: templates), its full path, and its Worker's name.
 type repo struct {
-	t      *testing.T
-	top    string
-	name   string
-	dir    string
-	worker string
+	t       *testing.T
+	top     string
+	name    string
+	dir     string
+	worker  string
+	secrets []string // the Worker's required secrets
+	adopted bool     // a third-party Worker adopted (adoptedCopy), not the template's
 }
 
 // repoAt is the repo at path, a folder of this repo.
@@ -100,17 +104,7 @@ func (r repo) stampedCopy(version string) repo {
 		r.t.Fatalf("git init: %v\n%s", err, out)
 	}
 	at := cmp.Or(version, "local")
-	cmd := exec.Command("mise", "exec", "github:joeblew999/mise-cloudflare@"+at, "--", "mise-cloudflare", "init")
-	cmd.Dir = to
-	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+tmp, "MISE_TRUSTED_CONFIG_PATHS="+to, "MISE_YES=1")
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		r.t.Fatalf("mise-cloudflare init: %v", err)
-	}
-	want := `"github:joeblew999/mise-cloudflare" = "` + at + `"`
-	if b, _ := os.ReadFile(filepath.Join(to, ".mise", "config.toml")); !bytes.Contains(b, []byte(want)) {
-		r.t.Fatalf("mise-cloudflare %s's init didn't pin itself in .mise/config.toml (%s): a release from before it did can't make a new repo", at, want)
-	}
+	r.miseInit(tmp, to, at)
 	if b, _ := os.ReadFile(filepath.Join(to, ".mise", "tasks", "mise-cloudflare.toml")); !bytes.Contains(b, []byte(`["cloudflare:template"]`)) {
 		r.t.Fatalf("mise-cloudflare %s has no cloudflare:template: a release from before it can't make a new repo", at)
 	}
@@ -132,13 +126,18 @@ func (r repo) stampedCopy(version string) repo {
 func (r *repo) miseSetUp() {
 	r.t.Helper()
 	r.must(nil, "mise", "install")
-	r.must(nil, "mise", "run", "setup")
+	setUp := "mise install, mise run setup"
+	if r.adopted {
+		setUp = "mise install (its packages are its own install's)"
+	} else {
+		r.must(nil, "mise", "run", "setup")
+	}
 	c, err := wconfig.Read(context.Background(), r.dir)
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	r.worker = c.Name
-	r.pass("%s is set up: mise install, mise run setup; its Worker is %s", r.name, r.worker)
+	r.worker, r.secrets = c.Name, c.Secrets
+	r.pass("%s is set up: %s; its Worker is %s", r.name, setUp, r.worker)
 	r.pass("%s runs %s", r.name, r.versions())
 }
 
@@ -189,6 +188,100 @@ func (r repo) stdoutOf(name string, args ...string) []byte {
 
 func (r repo) heading(format string, a ...any) { fmt.Printf("\n=== %s\n", fmt.Sprintf(format, a...)) }
 func (r repo) pass(format string, a ...any)    { fmt.Printf("PASS %s\n", fmt.Sprintf(format, a...)) }
+
+// miseInit runs mise-cloudflare init at the release at (local: this checkout's build) in the repo at to, on its own mise
+// only (tmp its ceiling), as a person runs it, and checks it pinned itself.
+func (r repo) miseInit(tmp, to, at string) {
+	r.t.Helper()
+	cmd := exec.Command("mise", "exec", "github:joeblew999/mise-cloudflare@"+at, "--", "mise-cloudflare", "init")
+	cmd.Dir = to
+	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+tmp, "MISE_TRUSTED_CONFIG_PATHS="+to, "MISE_YES=1")
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		r.t.Fatalf("mise-cloudflare init: %v", err)
+	}
+	want := `"github:joeblew999/mise-cloudflare" = "` + at + `"`
+	if b, _ := os.ReadFile(filepath.Join(to, ".mise", "config.toml")); !bytes.Contains(b, []byte(want)) {
+		r.t.Fatalf("mise-cloudflare %s's init didn't pin itself in .mise/config.toml (%s): a release from before it did can't make a new repo", at, want)
+	}
+}
+
+// adoptedCopy is a third-party Worker of the corpus (its folder in a repos:check clone) adopted as its owner would: a
+// copy in a repo of its own (its own git, in a folder that goes when the walk ends), mise-cloudflare init at this
+// checkout's build, its dependencies installed its own way (its lockfile's command), and its wrangler moved as the tool
+// says when it has no auth profiles (mise use aube, then cloudflare:update).
+func (r repo) adoptedCopy() repo {
+	r.t.Helper()
+	if _, err := os.Stat(filepath.Join(r.dir, "package.json")); err != nil {
+		r.t.Fatalf("%s isn't a Worker's folder (mise run repos:check clones the corpus into repos/): %v", r.name, err)
+	}
+	tmp, err := filepath.EvalSymlinks(longPath(r.t.TempDir())) // the real path, in long names: mise stops only at a ceiling given as one
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	to := filepath.Join(tmp, filepath.Base(r.dir))
+	if err := copyRepo(r.dir, to); err != nil {
+		r.t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=walk", "-c", "user.email=walk@example.invalid", "commit", "-qm", "the repo as its owner has it"}} {
+		if out, err := exec.Command("git", append([]string{"-C", to}, args...)...).CombinedOutput(); err != nil {
+			r.t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	r.miseInit(tmp, to, "local")
+	from := r.name
+	r.name, r.dir, r.adopted = filepath.Base(to)+" (adopted)", to, true
+	_, install := rules.Lockfile(to)
+	f := strings.Fields(install)
+	r.must(nil, f[0], f[1:]...)
+	r.pass("%s: %s copied into a repo of its own with its own git, mise-cloudflare init at local, then its own install (%s)", r.name, from, install)
+	if !r.miseShowJSON().Profiles {
+		r.must(nil, "mise", "use", "aube")
+		r.mustRunMiseTask(nil, "cloudflare:update")
+		if !r.miseShowJSON().Profiles {
+			r.t.Fatal("cloudflare:update didn't move its wrangler to one with auth profiles")
+		}
+		r.pass("its wrangler had no auth profiles, as 04-check says: moved as the tool says (mise use aube, cloudflare:update)")
+	}
+	return r
+}
+
+// copyRepo copies a repo's files from src into dst as its owner has them: not its git, installed packages, what
+// wrangler left (.wrangler) or local secrets (.dev.vars), nor a link (repos:check links node_modules).
+func copyRepo(src, dst string) error {
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		switch d.Name() {
+		case ".git", "node_modules", ".wrangler", ".dev.vars":
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		out := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(out, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(out, b, info.Mode().Perm())
+	})
+}
 
 // runIn runs a command in dir, with input on its stdin, its output shown as it goes (a login's link included) and
 // returned.
@@ -267,6 +360,7 @@ func (r repo) miseWranglerStdout(args ...string) string {
 type shown struct {
 	Profile  string   `json:"profile"`
 	LoggedIn bool     `json:"loggedIn"`
+	Profiles bool     `json:"profiles"`
 	Needs    []string `json:"needs"`
 	Deployed bool     `json:"deployed"`
 	URL      string   `json:"url"`
@@ -304,7 +398,8 @@ func (r repo) miseShowSaysNext(want string) {
 
 // miseServeLocally runs the Worker as a person does, with the repo's cloudflare:06-serve (which makes .dev.vars from
 // .dev.vars.example): with no Cloudflare login anywhere it could see unless onLogin (a home of its own, with mise's own
-// folders kept, so its tools are still there). It returns the Worker's answer, or, when 06-serve stopped without one,
+// folders kept, its config among them, so this machine's tools are still there: a repo of someone else's often pins
+// no node of its own). It returns the Worker's answer, or, when 06-serve stopped without one,
 // what it printed.
 func (r repo) miseServeLocally(onLogin bool) (answer []byte, stopped string) {
 	r.t.Helper()
@@ -315,7 +410,7 @@ func (r repo) miseServeLocally(onLogin bool) (answer []byte, stopped string) {
 	port := fmt.Sprint(l.Addr().(*net.TCPAddr).Port)
 	l.Close()
 	var doctor struct {
-		Dirs struct{ Data, Cache, State string }
+		Dirs struct{ Data, Cache, State, Config string }
 	}
 	if out, err := exec.Command("mise", "doctor", "--json").Output(); err != nil || json.Unmarshal(out, &doctor) != nil {
 		r.t.Fatalf("mise doctor --json: %v", err)
@@ -327,7 +422,7 @@ func (r repo) miseServeLocally(onLogin bool) (answer []byte, stopped string) {
 	if !onLogin {
 		home := r.t.TempDir()
 		cmd.Env = append(cmd.Env, "HOME="+home, "XDG_CONFIG_HOME="+home,
-			"MISE_DATA_DIR="+doctor.Dirs.Data, "MISE_CACHE_DIR="+doctor.Dirs.Cache, "MISE_STATE_DIR="+doctor.Dirs.State)
+			"MISE_DATA_DIR="+doctor.Dirs.Data, "MISE_CACHE_DIR="+doctor.Dirs.Cache, "MISE_STATE_DIR="+doctor.Dirs.State, "MISE_CONFIG_DIR="+doctor.Dirs.Config)
 	}
 	ownGroup(cmd)
 	var logs bytes.Buffer

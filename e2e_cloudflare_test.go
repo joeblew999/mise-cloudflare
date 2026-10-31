@@ -53,6 +53,21 @@ func waitTillItWorks(t *testing.T, url string, limit time.Duration) {
 	t.Fatalf("%s doesn't work: %s", url, body)
 }
 
+// answers waits, for up to limit, until url answers with anything but a server's error: a third-party Worker says what
+// it says.
+func answers(t *testing.T, url string, limit time.Duration) {
+	t.Helper()
+	for end := time.Now().Add(limit); time.Now().Before(end); time.Sleep(5 * time.Second) {
+		if resp, err := (&http.Client{Timeout: 20 * time.Second}).Get(url); err == nil {
+			resp.Body.Close()
+			if resp.StatusCode < 500 {
+				return
+			}
+		}
+	}
+	t.Fatalf("%s doesn't answer", url)
+}
+
 // gone waits, for up to limit, until url no longer answers 200.
 func gone(url string, limit time.Duration) bool {
 	for end := time.Now().Add(limit); time.Now().Before(end); time.Sleep(5 * time.Second) {
@@ -134,9 +149,26 @@ func (r repo) leftOnCloudflare() []string {
 }
 
 func (r repo) leftWith(token, account string) []string {
-	left := r.left(token, account)
+	left := append(r.left(token, account), r.durableObjectsLeft(token, account)...)
 	if withExtras() {
 		left = append(left, r.extrasSettle(token, account, false)...)
+	}
+	return left
+}
+
+// durableObjectsLeft names the Worker's own Durable Objects Cloudflare still has: the namespaces whose script is the
+// Worker, which wrangler delete deletes with it.
+func (r repo) durableObjectsLeft(token, account string) []string {
+	got, err := cfapi.Call(context.Background(), token, http.MethodGet, "/accounts/"+account+"/workers/durable_objects/namespaces?per_page=1000", nil, "")
+	var list []struct{ Class, Script string }
+	if err != nil || !got.OK() || json.Unmarshal(got.Result, &list) != nil {
+		r.t.Fatalf("Cloudflare's Durable Object namespaces: %v %s", err, got.Said())
+	}
+	var left []string
+	for _, n := range list {
+		if n.Script == r.worker {
+			left = append(left, "Durable Object "+n.Class)
+		}
 	}
 	return left
 }

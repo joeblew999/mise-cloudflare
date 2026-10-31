@@ -105,7 +105,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 |---|---|---|
 | `cloudflare:05-show` | Where the Worker is, step by step, and what to run next; `--json` for a program | Nothing |
 | `cloudflare:04-check` | The repo's rules (below), and whether init's files are current | Nothing |
-| `cloudflare:verify` | What the repo's GitHub workflow runs: its own `setup` and `test` tasks, if it has them, then `check`. The same on your machine as on GitHub | Nothing |
+| `cloudflare:verify` | What the repo's GitHub workflow runs: its own `setup` task, or with none its lockfile's install (`npm ci`, `pnpm install --frozen-lockfile`, …) when wrangler isn't installed yet, then its `test` task if it has one, then `check`. The same on your machine as on GitHub | Nothing |
 | `cloudflare:07-set-secrets` | The secrets the Worker requires (`secrets.required`) that Cloudflare doesn't have yet: it asks for each, unseen; `--previews` sets the ones the Worker's Previews Base lacks, which previews don't inherit | Each value |
 | `cloudflare:06-serve` | `wrangler dev`: the Worker locally, with local D1, KV and R2 and `.dev.vars` | Nothing |
 | `cloudflare:08-deploy` | `wrangler deploy` on the repo's login (wrangler's flags follow: `--env staging`) | Allow, the first time |
@@ -204,7 +204,7 @@ previews share them; production's and staging's stay theirs. After adding a KV, 
 ## CI
 
 init's workflow runs on every push and pull request: it checks the commit out, installs mise and the pinned tools,
-then runs `mise run cloudflare:verify` (the repo's own `setup` and `test` tasks, then `check`). Run that task on your
+then runs `mise run cloudflare:verify` (the repo's own `setup` task or its lockfile's install, its `test` task, then `check`). Run that task on your
 machine and it does what GitHub does. It needs no Cloudflare account. In CI the commands that need a login stop at once: no one is
 there to click Allow, and Cloudflare's Workers Builds deploys.
 

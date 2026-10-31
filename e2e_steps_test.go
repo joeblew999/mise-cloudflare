@@ -45,7 +45,13 @@ var steps = []step{
 		w.mustRunMiseTask(nil, "cloudflare:verify")
 		w.pass("cloudflare:verify: what the repo's GitHub workflow runs passes, from nothing installed, as a fresh checkout is (its setup and test tasks, then 04-check's)")
 	}},
-	{task: "05-show", stage: serve, check: func(w *walk) { w.miseShowSaysNext("mise run cloudflare:07-set-secrets") }},
+	{task: "05-show", stage: serve, check: func(w *walk) {
+		if len(w.secrets) == 0 {
+			w.miseShowSaysNext("mise run cloudflare:08-deploy")
+		} else {
+			w.miseShowSaysNext("mise run cloudflare:07-set-secrets")
+		}
+	}},
 	{task: "06-serve", stage: serve, check: func(w *walk) {
 		body, stopped := w.miseServeLocally(false)
 		if remoteExtras() {
@@ -55,16 +61,27 @@ var steps = []step{
 			w.pass("cloudflare:06-serve with no Cloudflare login, in CI, stops before wrangler dev at the extra wrangler runs on Cloudflare even locally, and says it needs the repo's login")
 			return
 		}
+		if w.adopted {
+			if body == nil {
+				w.t.Fatalf("the local Worker never answered: %s", stopped)
+			}
+			w.pass("the local Worker answers, with no Cloudflare login: %.80q", body)
+			return
+		}
 		if !allWork(body) {
 			w.t.Fatalf("the local Worker: %s%s", body, stopped)
 		}
 		w.pass("the local Worker's D1, KV, R2 and secret work, with no Cloudflare login")
 	}},
 	{task: "07-set-secrets", stage: deploy, check: func(w *walk) {
-		if _, err := w.runMiseTask(nil, "set-by-deploy\n", "cloudflare:07-set-secrets"); err != nil {
+		if len(w.secrets) == 0 {
+			w.pass("cloudflare:07-set-secrets: the Worker requires no secrets")
+			return
+		}
+		if _, err := w.runMiseTask(nil, strings.Repeat("set-by-deploy\n", len(w.secrets)), "cloudflare:07-set-secrets"); err != nil {
 			w.t.Fatalf("cloudflare:07-set-secrets: %v", err)
 		}
-		w.pass("cloudflare:07-set-secrets set GREETING")
+		w.pass("cloudflare:07-set-secrets set %s", strings.Join(w.secrets, ", "))
 		w.miseShowSaysNext("mise run cloudflare:08-deploy")
 	}},
 	{task: "08-deploy", stage: deploy, check: func(w *walk) {
@@ -74,8 +91,13 @@ var steps = []step{
 			w.t.Fatalf("not deployed on the login %s: %+v", w.worker, s)
 		}
 		w.url = s.URL
-		waitTillItWorks(w.t, w.url, 2*time.Minute)
-		w.pass("%s: deployed on the repo's own login, %s; its D1, KV, R2 and secret work", w.url, s.Profile)
+		if w.adopted {
+			answers(w.t, w.url, 2*time.Minute)
+			w.pass("%s: deployed on the repo's own login, %s; it answers", w.url, s.Profile)
+		} else {
+			waitTillItWorks(w.t, w.url, 2*time.Minute)
+			w.pass("%s: deployed on the repo's own login, %s; its D1, KV, R2 and secret work", w.url, s.Profile)
+		}
 		if withExtras() {
 			token, account := w.api()
 			if on := w.extrasSettle(token, account, true); len(on) != made() {
@@ -181,9 +203,9 @@ var steps = []step{
 			w.t.Fatalf("left on the account: %s", strings.Join(left, ", "))
 		}
 		if withExtras() {
-			w.pass("no D1, KV or R2 left, nor the extras' Queue or Flagship app")
+			w.pass("no D1, KV, R2 or Durable Object left, nor the extras' Queue or Flagship app")
 		} else {
-			w.pass("no D1, KV or R2 left")
+			w.pass("no D1, KV, R2 or Durable Object left")
 		}
 	}},
 	{task: "14-logout", stage: deploy, check: func(w *walk) {

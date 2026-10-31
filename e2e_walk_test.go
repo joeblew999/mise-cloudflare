@@ -41,9 +41,17 @@ func TestWalk(t *testing.T) {
 	if upTo < 0 {
 		t.Fatalf("E2E_STAGE=%s: the stages are %s", name, strings.Join(stageNames, ", "))
 	}
-	r := repoAt(t, os.Getenv("REPO_PATH"))
+	path, adopt := os.Getenv("REPO_PATH"), *adoptFlag != ""
+	if adopt {
+		path = *adoptFlag
+	}
+	r := repoAt(t, path)
 	stamped, pin := os.Getenv("E2E_STAMPED") == "true", *releaseFlag
 	switch {
+	case adopt && (stamped || pin != "" || stage(upTo) == connectGithub):
+		t.Fatal("an adopted copy is the third-party repo's own, with its own git, not on GitHub: walk it alone, as far as deploy")
+	case adopt:
+		r = r.adoptedCopy()
 	case pin != "" && !stamped:
 		t.Fatalf("-version %s pins a stamped copy's mise-cloudflare: E2E_STAMPED=true too", pin)
 	case stamped && stage(upTo) == connectGithub:
@@ -60,6 +68,10 @@ func TestWalk(t *testing.T) {
 // releaseFlag is the release a stamped copy runs at, the test's flag -version: mise run new-repo:e2e-serve --version
 // v0.1.17 passes it (go test … -args -version v0.1.17). Without it, this checkout's build (local).
 var releaseFlag = flag.String("version", "", "the release a stamped copy runs at (default this checkout's build)")
+
+// adoptFlag is a third-party Worker's folder in repos/, as repos:check cloned it, to adopt and walk instead, the test's
+// flag -adopt: mise run repos:e2e-adopt repos/cloudflare/realtime-examples/video-to-jpeg passes it.
+var adoptFlag = flag.String("adopt", "", "a third-party Worker's folder in repos/ to adopt and walk (repos:e2e-adopt)")
 
 // stage is how far a walk goes. Each runs the steps the stages before it run, and the steps that need it.
 type stage int

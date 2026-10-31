@@ -11,6 +11,7 @@
 #     mise run template:setup          its own setup (mise run setup there): its pinned wrangler, which tool:test reads configs with
 #   repos: third-party repos with wrangler configs, repos.txt's, cloned into repos/ (git-ignored)
 #     mise run repos:check             every wrangler config in them read by the bridge, with our wrangler (or the repos named)
+#     mise run repos:e2e-adopt <path>  TestWalk on one of their Workers, adopted as its owner would, as far as deploy (-args -adopt)
 #     mise run template:check-mise     TestMise on its mise file and the tool's Go (MISE_FILE, GO_CMD, GO_LAYOUT=file, GO_CALLERS=.)
 #   new-repo: a new repo, made as a person makes one (init, then cloudflare:template), by the walk and gone after it
 #     mise run new-repo:e2e-serve      TestWalk on a new repo, as far as the stage serve (E2E_STAMPED=true; --version runs a release, -args -version)
@@ -96,6 +97,13 @@ description = "new-repo:e2e-deploy with extras: the new repo's developer adds bi
 depends = ["tool:install"]
 env = { REPO_PATH = "templates", E2E_STAMPED = "true", E2E_STAGE = "deploy", E2E_EXTRAS = "true" }
 run = 'go test . -run "^TestWalk$" -count=1 -v -timeout 30m'
+
+[tasks."repos:e2e-adopt"]
+description = "TestWalk on a third-party Worker of the corpus, adopted as its owner would: its folder (as repos:check cloned it, repos/<owner>/<repo>/...) copied into a repo of its own with its own git, mise-cloudflare init at this checkout's build, its own install by its lockfile, its wrangler moved as the tool says when it has no auth profiles, then its numbered tasks as far as the stage deploy: deployed on its own login, checked live, then deleted, nothing of it left on Cloudflare. The first time, an Allow. After tool:install and repos:check"
+usage = 'arg "<path>" help="the Worker folder in repos/, as repos:check cloned it: repos/cloudflare/realtime-examples/video-to-jpeg"'
+depends = ["tool:install"]
+env = { E2E_STAGE = "deploy" }
+run = 'go test . -run "^TestWalk$" -count=1 -v -timeout 30m -args -adopt "{{usage.path}}"'
 
 [tasks."tool:build"]
 description = "This repo's build, bin/mise-cloudflare (mise-cloudflare.exe on Windows: go build names it for the OS)"

@@ -84,14 +84,13 @@ What's proven and where:
 
 - **On Cloudflare, every step:** KV, D1, R2 and a secret (the template); a Queue, a Flagship app and Workers AI (the
   extras, below).
-- **A third-party Worker, every step, by hand:** cloudflare/realtime-examples' `video-to-jpeg` (a Durable Object,
-  static assets, vars), adopted as its owner would: `init`, its own install, then each step as the tool said, on its
-  own wrangler.
+- **A third-party Worker, every step:** cloudflare/realtime-examples' `video-to-jpeg` (a Durable Object, static
+  assets, vars), adopted as its owner would, on its own wrangler (`repos:e2e-adopt`).
 - **On third-party configs, `check` only:** every config in [repos.txt](repos.txt)'s repos, with Durable Objects,
   Workflows, Hyperdrive, rate limits, containers, Workers AI and static assets among them.
 - **Not handled yet:** a Worker that has to be built first, as with Cloudflare's Vite plugin or a Python Worker:
   `08-deploy` runs `wrangler deploy` alone, which would very likely deploy it without its build (#17).
-- **Not yet run:** a third-party Worker as a walk (#18); previews' own Queue or Flagship app (#19); `--env` environments
+- **Not yet run:** previews' own Queue or Flagship app (#19); `--env` environments
   and monorepos (#20); a Dispatch Namespace, which needs Workers for Platforms (#23). The open work is the repo's
   [issues](https://github.com/joeblew999/mise-cloudflare/issues).
 
@@ -150,6 +149,7 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 | `new-repo:e2e-deploy` | The walk on a new repo, as far as `deploy` | After a change to how it deploys | Yes |
 | `new-repo:e2e-extras` | `new-repo:e2e-deploy` with the extras | After a change to `13-delete` or `06-serve` | Yes |
 | `repos:check [owner/repo]` | The corpus: every wrangler config in third-party repos, read and checked | After a change to how the tool reads a config or what `check` asks of a repo | No |
+| `repos:e2e-adopt <path>` | The walk on one of the corpus's Workers, adopted as its owner would (below), as far as `deploy` | After a change to how the tool works on a repo it didn't make | Yes |
 | `tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
 | `tool:install` | That build as the mise version `local`, for any repo on this machine (`mise use github:joeblew999/mise-cloudflare@local` there) and the template's (`templates/.mise/config.local.toml`, never committed) | To try a change in another repo, never by waiting on a release | No |
 | `tool:test` | `go vet`, the Go tests, the release config | After every change | No |
@@ -172,7 +172,7 @@ stage:
 | `deploy` | `08-deploy` on the repo's own login, the live D1, KV, R2 and secret, stray tokens refused, then `13-delete` | A Cloudflare account; the first time, an Allow |
 | `connect-github` | `09-connect-github`: Workers Builds builds production from a throwaway branch and a preview for a pull request's branch, gone with its branch | GitHub too |
 
-It walks three repos:
+It walks four kinds of repo:
 
 - **The template**, [templates/](templates/), in place; for `connect-github`, in a checkout of this repo at HEAD, as
   Cloudflare builds it from GitHub.
@@ -185,6 +185,11 @@ It walks three repos:
   other kinds aren't rows). wrangler deploy must make each one and `13-delete` delete it, checked through Cloudflare's
   API. Workers AI runs on Cloudflare even locally: with no login, in CI, `06-serve` must stop before `wrangler dev`
   and say it needs the repo's login, and after `08-deploy` run on it.
+- **A third-party Worker, adopted** (`repos:e2e-adopt repos/cloudflare/realtime-examples/video-to-jpeg`): its folder,
+  as `repos:check` cloned it, copied into a repo of its own with its own git, then `mise-cloudflare init`, its own
+  install by its lockfile, and its wrangler moved as the tool says when it has no auth profiles (`mise use aube`,
+  `cloudflare:update`). Then the steps on its own wrangler, its checks being what a stranger's Worker can be held to:
+  it answers, locally and live, and nothing of it, its Durable Objects among them, is left on Cloudflare.
 
 Each walk first says what it runs: the repo's mise tools, mise-cloudflare's build, the installed wrangler. It runs in
 the repo on that repo's own mise only (`MISE_CEILING_PATHS`). A walk that deploys starts by deleting whatever a stopped
