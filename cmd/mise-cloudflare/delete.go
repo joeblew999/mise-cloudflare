@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
+	"github.com/joeblew999/mise-cloudflare/internal/cfapi"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
@@ -37,7 +37,7 @@ func (r repo) delete(ctx context.Context, yes bool) {
 	}
 	token, account := r.cloudflareAPI(ctx)
 	// Whether the Worker is there is Cloudflare's API's to say, by its status: 404 is not there.
-	got, err := callAPI(ctx, token, http.MethodGet, "/accounts/"+account+"/workers/scripts/"+url.PathEscape(r.wc.Name)+"/settings", nil, "")
+	got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/workers/scripts/"+url.PathEscape(r.wc.Name)+"/settings", nil, "")
 	switch {
 	case err != nil:
 		fail(err)
@@ -67,13 +67,13 @@ func (r repo) delete(ctx context.Context, yes bool) {
 // assets, deleted with it.
 var goesWithWorker = map[string]bool{"plain_text": true, "json": true, "secret_text": true, "assets": true}
 
-// notDeleted is every binding delete leaves as it is, by wrangler's types: all but the KV, D1 and R2 it deletes or
-// keeps (and says so), and what goes with the Worker. Delete is never silent about one.
+// notDeleted is every binding delete leaves as it is, by wrangler's types: all but the kinds it deletes or keeps (and
+// says so), and what goes with the Worker. Delete is never silent about one.
 func (r repo) notDeleted() []string {
 	var out []string
 	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
 		typ := r.wc.Bindings[n]
-		if _, own := wconfig.PreviewsOwn[typ]; own || goesWithWorker[typ] {
+		if _, own := deletes[typ]; own || goesWithWorker[typ] {
 			continue
 		}
 		out = append(out, n+" ("+typ+")")

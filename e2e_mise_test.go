@@ -121,6 +121,9 @@ func (r repo) stampedCopy(version string) repo {
 		r.t.Fatalf("cloudflare:template didn't name the Worker for its folder, %s: the walk would walk %s's", stampedWorker, from)
 	}
 	r.pass("%s, %s: an empty folder, its own git, mise-cloudflare init at %s, then cloudflare:template (the template's Worker, named for the folder)", r.name, stampedWorker, at)
+	if withExtras() {
+		r.addExtras()
+	}
 	return r
 }
 
@@ -242,12 +245,6 @@ func (r repo) mustRunMiseTask(env []string, task string, args ...string) string 
 		r.t.Fatalf("%s %s: %v", task, strings.Join(args, " "), err)
 	}
 	return out
-}
-
-// runMiseWrangler runs a wrangler command on the repo's login, with the repo's task cloudflare:run-wrangler: its output,
-// and its error.
-func (r repo) runMiseWrangler(args ...string) (string, error) {
-	return r.runMiseTask(nil, "", "cloudflare:run-wrangler", args...)
 }
 
 // miseWranglerStdout is what a wrangler command prints on stdout, on the repo's login (cloudflare:run-wrangler): the JSON

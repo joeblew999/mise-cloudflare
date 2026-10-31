@@ -1,4 +1,6 @@
-package main
+// Package cfapi calls Cloudflare's API, with a login's OAuth token: what's decided on is the HTTP status, never its
+// words.
+package cfapi
 
 import (
 	"bytes"
@@ -10,13 +12,13 @@ import (
 	"time"
 )
 
-// apiBase is Cloudflare's API.
-var apiBase = "https://api.cloudflare.com/client/v4"
+// Base is Cloudflare's API.
+var Base = "https://api.cloudflare.com/client/v4"
 
-// apiResult is a call to Cloudflare's API as it answered: its HTTP status, which is what's decided on (404 not there,
+// Result is a call to Cloudflare's API as it answered: its HTTP status, which is what's decided on (404 not there,
 // 409 a conflict, …: the same for every product), and the envelope its OpenAPI gives every product, whose words are
 // only ever shown.
-type apiResult struct {
+type Result struct {
 	Status int
 	Errors []struct {
 		Code             int    `json:"code"`
@@ -27,11 +29,11 @@ type apiResult struct {
 }
 
 // OK reports whether the call succeeded (2xx).
-func (a apiResult) OK() bool { return a.Status/100 == 2 }
+func (a Result) OK() bool { return a.Status/100 == 2 }
 
 // Said is Cloudflare's own words for a call that didn't succeed: its status, messages and codes, and their
 // documentation links when it gives them.
-func (a apiResult) Said() string {
+func (a Result) Said() string {
 	var out []string
 	for _, e := range a.Errors {
 		s := fmt.Sprintf("%s (code %d)", e.Message, e.Code)
@@ -43,10 +45,10 @@ func (a apiResult) Said() string {
 	return fmt.Sprintf("HTTP %d: %s", a.Status, strings.Join(out, "; "))
 }
 
-// callAPI calls Cloudflare's API at path (/accounts/…) with token: body, if any, as contentType.
-func callAPI(ctx context.Context, token, method, path string, body []byte, contentType string) (apiResult, error) {
-	var a apiResult
-	req, err := http.NewRequestWithContext(ctx, method, apiBase+path, bytes.NewReader(body))
+// Call calls Cloudflare's API at path (/accounts/…) with token: body, if any, as contentType.
+func Call(ctx context.Context, token, method, path string, body []byte, contentType string) (Result, error) {
+	var a Result
+	req, err := http.NewRequestWithContext(ctx, method, Base+path, bytes.NewReader(body))
 	if err != nil {
 		return a, err
 	}

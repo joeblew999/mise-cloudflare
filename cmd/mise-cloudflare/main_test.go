@@ -177,23 +177,24 @@ func TestLastDeployURL(t *testing.T) {
 // <worker>-<binding>); one the config names is the developer's, kept; other kinds aren't resources deploy makes.
 func TestOwnResources(t *testing.T) {
 	r := repo{wc: wconfig.Config{Name: "w", Named: []string{"CACHE", "HYPERDRIVE"},
-		Bindings: map[string]string{"CACHE": "kv_namespace", "KV": "kv_namespace", "DB": "d1", "HYPERDRIVE": "hyperdrive", "LIMITER": "durable_object_namespace"}}}
+		Bindings: map[string]string{"CACHE": "kv_namespace", "KV": "kv_namespace", "DB": "d1", "HYPERDRIVE": "hyperdrive", "LIMITER": "durable_object_namespace", "JOBS": "queue"}}}
 	own, kept := r.ownResources()
 	var names []string
 	for _, p := range own {
 		names = append(names, p.Name)
 	}
-	if !slices.Equal(names, []string{"w-db", "w-kv"}) || !slices.Equal(kept, []string{"KV CACHE"}) {
+	if !slices.Equal(names, []string{"w-db", "w-jobs", "w-kv"}) || !slices.Equal(kept, []string{"KV CACHE"}) {
 		t.Errorf("own %q, kept %q", names, kept)
 	}
 }
 
-// TestNotDeleted: delete names every binding it leaves, whatever its kind (a Queue, a Hyperdrive, a Durable Object, …),
-// but for the KV, D1 and R2 it says of itself, and the vars, secrets and assets that go with the Worker.
+// TestNotDeleted: delete names every binding it leaves, whatever its kind (a Hyperdrive, a Durable Object, …), but for
+// the kinds it deletes (KV, D1, R2, a Queue), which it says of itself, and the vars, secrets and assets that go with the
+// Worker.
 func TestNotDeleted(t *testing.T) {
 	r := repo{wc: wconfig.Config{Bindings: map[string]string{"KV": "kv_namespace", "DB": "d1", "JOBS": "queue", "PG": "hyperdrive",
 		"ROOMS": "durable_object_namespace", "MODE": "plain_text", "LIMITS": "json", "KEY": "secret_text", "ASSETS": "assets"}}}
-	if got, want := r.notDeleted(), []string{"JOBS (queue)", "PG (hyperdrive)", "ROOMS (durable_object_namespace)"}; !slices.Equal(got, want) {
+	if got, want := r.notDeleted(), []string{"PG (hyperdrive)", "ROOMS (durable_object_namespace)"}; !slices.Equal(got, want) {
 		t.Errorf("notDeleted: %q, want %q", got, want)
 	}
 	if got := (repo{wc: wconfig.Config{Bindings: map[string]string{"KV": "kv_namespace", "MODE": "plain_text"}}}).notDeleted(); got != nil {

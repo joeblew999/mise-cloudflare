@@ -4,6 +4,7 @@
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/joeblew999/mise-cloudflare/internal/cfapi"
 )
 
 // allWork is the template's Worker's answer when D1, KV, R2 and the secret all work.
@@ -97,18 +100,49 @@ func (r repo) kvID() string {
 
 // hasR2 reports whether the Worker's bucket (<worker>-bucket) exists. wrangler lists each as "name:" and the name,
 // padded.
-func (r repo) hasR2() bool {
-	for _, line := range strings.Split(r.miseWranglerStdout("r2", "bucket", "list"), "\n") {
-		if f := strings.Fields(line); len(f) == 2 && f[0] == "name:" && f[1] == r.worker+"-bucket" {
-			return true
-		}
+func (r repo) hasR2(token, account string) bool {
+	got, err := cfapi.Call(context.Background(), token, http.MethodGet, "/accounts/"+account+"/r2/buckets/"+r.worker+"-bucket", nil, "")
+	if err != nil || (!got.OK() && got.Status != http.StatusNotFound) {
+		r.t.Fatalf("Cloudflare's R2 bucket %s-bucket: %v %s", r.worker, err, got.Said())
 	}
-	return false
+	return got.OK()
 }
 
-// leftOnCloudflare names the Worker's D1, KV and R2 that exist, and its previews', which a walk that deploys must
-// start without and end without.
+// api is the repo's login's OAuth token, as wrangler gives it (cloudflare:run-wrangler), and its account, as
+// Cloudflare's API gives it, for Cloudflare's API. The token is never printed.
+func (r repo) api() (token, account string) {
+	var t struct {
+		Token string `json:"token"`
+	}
+	if json.Unmarshal([]byte(jsonPart(r.miseWranglerStdout("auth", "token", "--json"))), &t) != nil || t.Token == "" {
+		r.t.Fatal("wrangler auth token --json gave no token")
+	}
+	var accounts []struct {
+		ID string `json:"id"`
+	}
+	got, err := cfapi.Call(context.Background(), t.Token, http.MethodGet, "/accounts", nil, "")
+	if err != nil || !got.OK() || json.Unmarshal(got.Result, &accounts) != nil || len(accounts) != 1 {
+		r.t.Fatalf("the login's accounts, from Cloudflare's API: %d, want 1: %v %s", len(accounts), err, got.Said())
+	}
+	return t.Token, accounts[0].ID
+}
+
+// leftOnCloudflare names the Worker's D1, KV and R2 that exist, and its previews', and with the extras theirs, which a
+// walk that deploys must start without and end without.
 func (r repo) leftOnCloudflare() []string {
+	return r.leftWith(r.api())
+}
+
+func (r repo) leftWith(token, account string) []string {
+	left := r.left(token, account)
+	if withExtras() {
+		left = append(left, r.extrasOn(token, account)...)
+	}
+	return left
+}
+
+// left names the Worker's D1, KV and R2 that exist, and its previews'.
+func (r repo) left(token, account string) []string {
 	var left []string
 	if r.d1ID() != "" {
 		left = append(left, "D1 "+r.worker+"-db")
@@ -116,13 +150,13 @@ func (r repo) leftOnCloudflare() []string {
 	if r.kvID() != "" {
 		left = append(left, "KV "+r.worker+"-kv")
 	}
-	if r.hasR2() {
+	if r.hasR2(token, account) {
 		left = append(left, "R2 "+r.worker+"-bucket")
 	}
 	if !strings.HasSuffix(r.worker, "-previews") {
 		p := r
 		p.worker = r.worker + "-previews"
-		left = append(left, p.leftOnCloudflare()...)
+		left = append(left, p.left(token, account)...)
 	}
 	return left
 }
@@ -130,12 +164,18 @@ func (r repo) leftOnCloudflare() []string {
 // nothingOnCloudflare fails unless the Worker and its D1, KV and R2 (and its previews') aren't on the account.
 func (r repo) nothingOnCloudflare() {
 	r.t.Helper()
-	if out, err := r.runMiseWrangler("deployments", "list", "--json"); err == nil {
+	// Whether the Worker is there is Cloudflare's API's to say, by its status (404 not there), as the tool decides.
+	token, account := r.api()
+	got, err := cfapi.Call(context.Background(), token, http.MethodGet, "/accounts/"+account+"/workers/scripts/"+r.worker+"/settings", nil, "")
+	switch {
+	case err != nil:
+		r.t.Fatal(err)
+	case got.OK():
 		r.t.Fatalf("%s is still deployed", r.worker)
-	} else if !strings.Contains(out, "10007") && !strings.Contains(out, "10090") { // not there: 10090 for a Worker that never was
-		r.t.Fatalf("couldn't tell whether %s is deployed", r.worker)
+	case got.Status != http.StatusNotFound:
+		r.t.Fatalf("couldn't tell whether %s is deployed: %s", r.worker, got.Said())
 	}
-	if left := r.leftOnCloudflare(); len(left) > 0 {
+	if left := r.leftWith(token, account); len(left) > 0 {
 		r.t.Fatalf("%s is still on the account", strings.Join(left, ", "))
 	}
 	r.pass("nothing of %s is on the account", r.worker)

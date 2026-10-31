@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/joeblew999/mise-cloudflare/internal/cfapi"
 	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
@@ -94,7 +95,7 @@ func (r repo) previewNeeds() []resource {
 // previewsMissing is what the Previews Base lacks: KV, D1 or R2 added since, and the Worker's required secrets. Nil if
 // it can't tell.
 func (r repo) previewsMissing(ctx context.Context, token, account string) (resources, secrets []string) {
-	got, err := callAPI(ctx, token, http.MethodGet, "/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil, "")
+	got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/workers/workers/"+url.PathEscape(r.wc.Name), nil, "")
 	var res struct {
 		Base struct {
 			Env map[string]any `json:"env"`
@@ -125,9 +126,9 @@ func slug(s string) string {
 	return strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
-// findResource finds a KV namespace, D1 or R2 bucket by its name, KV and D1 in the repo's wrangler's lists, an R2
-// bucket by Cloudflare's API (200 there, 404 not): whether it's there, and its id (a KV namespace's or a D1's; an R2
-// bucket has none but its name).
+// findResource finds a KV namespace, D1, R2 bucket or Queue by its name, KV and D1 in the repo's wrangler's lists, an R2
+// bucket by Cloudflare's API (200 there, 404 not), a Queue in the API's list: whether it's there, and its id (a KV
+// namespace's, a D1's or a Queue's; an R2 bucket has none but its name).
 func (r repo) findResource(ctx context.Context, p resource, token, account string) (bool, string, error) {
 	switch p.Type {
 	case "kv_namespace":
@@ -150,8 +151,25 @@ func (r repo) findResource(ctx context.Context, p resource, token, account strin
 				return true, d.UUID, nil
 			}
 		}
+	case "queue":
+		got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/queues", nil, "")
+		var list []struct {
+			ID   string `json:"queue_id"`
+			Name string `json:"queue_name"`
+		}
+		switch {
+		case err != nil:
+			return false, "", err
+		case !got.OK() || json.Unmarshal(got.Result, &list) != nil:
+			return false, "", fmt.Errorf("queues: %s", got.Said())
+		}
+		for _, q := range list {
+			if q.Name == p.Name {
+				return true, q.ID, nil
+			}
+		}
 	case "r2_bucket":
-		got, err := callAPI(ctx, token, http.MethodGet, "/accounts/"+account+"/r2/buckets/"+url.PathEscape(p.Name), nil, "")
+		got, err := cfapi.Call(ctx, token, http.MethodGet, "/accounts/"+account+"/r2/buckets/"+url.PathEscape(p.Name), nil, "")
 		switch {
 		case err != nil:
 			return false, "", err
@@ -195,8 +213,9 @@ func (r repo) deleteResource(ctx context.Context, p resource, token, account str
 		"kv_namespace": "/storage/kv/namespaces/" + url.PathEscape(id),
 		"d1":           "/d1/database/" + url.PathEscape(id),
 		"r2_bucket":    "/r2/buckets/" + url.PathEscape(p.Name),
+		"queue":        "/queues/" + url.PathEscape(id),
 	}[p.Type]
-	got, err := callAPI(ctx, token, http.MethodDelete, "/accounts/"+account+path, nil, "")
+	got, err := cfapi.Call(ctx, token, http.MethodDelete, "/accounts/"+account+path, nil, "")
 	switch {
 	case err != nil:
 		return "not deleted: " + err.Error()
@@ -230,7 +249,7 @@ var errNotOnCloudflare = errors.New("isn't on Cloudflare yet")
 // merge patch of the Worker, so the base's other bindings and secrets stay).
 func patchPreviewsBase(ctx context.Context, token, account, worker string, env map[string]any) error {
 	body, _ := json.Marshal(map[string]any{"previews_base_config": map[string]any{"env": env}})
-	got, err := callAPI(ctx, token, http.MethodPatch, "/accounts/"+account+"/workers/workers/"+url.PathEscape(worker), body, "application/merge-patch+json")
+	got, err := cfapi.Call(ctx, token, http.MethodPatch, "/accounts/"+account+"/workers/workers/"+url.PathEscape(worker), body, "application/merge-patch+json")
 	switch {
 	case err != nil:
 		return err
@@ -242,13 +261,17 @@ func patchPreviewsBase(ctx context.Context, token, account, worker string, env m
 	return fmt.Errorf("Cloudflare refused %s's Previews Base: %s", worker, got.Said())
 }
 
-// ownResources is the KV, D1 and R2 wrangler deploy made for the Worker: its bindings of those kinds that name no
-// resource, which deploy makes as <worker>-<binding>. kept is the ones the config names (an id, a database_name, a
+// deletes is the binding kinds, by wrangler's own types, whose resources delete deletes when wrangler deploy made them:
+// the previews' own kinds, and Queues. wrangler deploy makes a few kinds more; delete names a binding of one as left.
+var deletes = map[string]string{"kv_namespace": "KV", "d1": "D1", "r2_bucket": "R2", "queue": "Queue"}
+
+// ownResources is the resources wrangler deploy made for the Worker of the kinds delete deletes: its bindings of those
+// kinds that name no resource, which deploy makes as <worker>-<binding>. kept is the ones the config names (an id, a database_name, a
 // bucket_name): the developer's, which nothing here deletes.
 func (r repo) ownResources() (own []resource, kept []string) {
 	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
 		typ := r.wc.Bindings[n]
-		kind, ok := wconfig.PreviewsOwn[typ]
+		kind, ok := deletes[typ]
 		switch {
 		case !ok:
 		case r.wc.Names(n):

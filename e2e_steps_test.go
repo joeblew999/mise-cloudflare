@@ -68,6 +68,13 @@ var steps = []step{
 		w.url = s.URL
 		waitTillItWorks(w.t, w.url, 2*time.Minute)
 		w.pass("%s: deployed on the repo's own login, %s; its D1, KV, R2 and secret work", w.url, s.Profile)
+		if withExtras() {
+			if on := w.extrasOn(w.api()); len(on) != len(extras) {
+				w.t.Fatalf("wrangler deploy made %d of the %d extras: %q", len(on), len(extras), on)
+			} else {
+				w.pass("wrangler deploy made the extras too: %s", strings.Join(on, ", "))
+			}
+		}
 		if changed := diff(w.before, w.snapshot()); len(changed) > 0 {
 			w.t.Fatalf("deploying changed %s", strings.Join(changed, ", "))
 		}
@@ -145,6 +152,8 @@ var steps = []step{
 		if w.upTo >= connectGithub {
 			w.mustRunMiseTask(nil, "cloudflare:09-connect-github", "--off")
 			w.pass("Workers Builds is off")
+			w.mustRunMiseTask(nil, "cloudflare:09-connect-github", "--off")
+			w.pass("Workers Builds is off again: cf's 404 for a connection that's gone is taken as gone (cf.NotFound)")
 			w.mustIn(w.top, "git", "push", "-q", "origin", "--delete", w.prod)
 			w.pass("the branch %s is deleted from GitHub", w.prod)
 		}
