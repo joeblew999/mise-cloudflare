@@ -5,21 +5,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/term"
 
+	"github.com/joeblew999/mise-cloudflare/internal/wconfig"
 	"github.com/joeblew999/mise-cloudflare/internal/wrangler"
 )
 
 // delete is deploy undone: the Worker deleted with wrangler, then the KV, D1 and R2 that deploy made for it and its
 // previews' own, each found by the name deploy and preview give it (wrangler delete leaves them). A resource the config
 // names is the developer's: it stays, and it says so. It never deletes what's in an R2 bucket: one that still holds
-// objects stays, and it says so. It asks first, unless yes.
+// objects stays, and it says so. Every other binding it names as left as it is: it's never silent about one. It asks
+// first, unless yes.
 func (r repo) delete(ctx context.Context, yes bool) {
 	if !yes {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
@@ -54,4 +58,25 @@ func (r repo) delete(ctx context.Context, yes bool) {
 	for _, k := range kept {
 		fmt.Printf("· %s is the one %s names: yours, so it stays\n", k, filepath.Base(r.wc.Path))
 	}
+	if left := r.notDeleted(); len(left) > 0 {
+		fmt.Printf("· not deleted here, left as they are: %s (whatever any of them is on Cloudflare, it's still there)\n", strings.Join(left, ", "))
+	}
+}
+
+// goesWithWorker is the binding kinds that are the Worker's own, in what it uploads: its vars, secrets and static
+// assets, deleted with it.
+var goesWithWorker = map[string]bool{"plain_text": true, "json": true, "secret_text": true, "assets": true}
+
+// notDeleted is every binding delete leaves as it is, by wrangler's types: all but the KV, D1 and R2 it deletes or
+// keeps (and says so), and what goes with the Worker. Delete is never silent about one.
+func (r repo) notDeleted() []string {
+	var out []string
+	for _, n := range slices.Sorted(maps.Keys(r.wc.Bindings)) {
+		typ := r.wc.Bindings[n]
+		if _, own := wconfig.PreviewsOwn[typ]; own || goesWithWorker[typ] {
+			continue
+		}
+		out = append(out, n+" ("+typ+")")
+	}
+	return out
 }

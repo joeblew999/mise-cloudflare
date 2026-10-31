@@ -188,6 +188,19 @@ func TestOwnResources(t *testing.T) {
 	}
 }
 
+// TestNotDeleted: delete names every binding it leaves, whatever its kind (a Queue, a Hyperdrive, a Durable Object, …),
+// but for the KV, D1 and R2 it says of itself, and the vars, secrets and assets that go with the Worker.
+func TestNotDeleted(t *testing.T) {
+	r := repo{wc: wconfig.Config{Bindings: map[string]string{"KV": "kv_namespace", "DB": "d1", "JOBS": "queue", "PG": "hyperdrive",
+		"ROOMS": "durable_object_namespace", "MODE": "plain_text", "LIMITS": "json", "KEY": "secret_text", "ASSETS": "assets"}}}
+	if got, want := r.notDeleted(), []string{"JOBS (queue)", "PG (hyperdrive)", "ROOMS (durable_object_namespace)"}; !slices.Equal(got, want) {
+		t.Errorf("notDeleted: %q, want %q", got, want)
+	}
+	if got := (repo{wc: wconfig.Config{Bindings: map[string]string{"KV": "kv_namespace", "MODE": "plain_text"}}}).notDeleted(); got != nil {
+		t.Errorf("the template's kinds only: %q, want none", got)
+	}
+}
+
 // TestInit: init writes the template's tool half into a repo exactly as the template has it, at the same paths, the
 // hook executable; a .gitignore of the repo's own it leaves as it is. Then nothing is stale. mise-cloudflare's pin it
 // writes once, for the build that ran it.
