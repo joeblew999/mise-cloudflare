@@ -91,7 +91,9 @@ wrangler does the work for every kind: `06-serve` runs `wrangler dev`, and `08-d
 makes what a binding uses when the config names nothing. A binding wrangler runs on Cloudflare even locally (Workers AI,
 an AI Search namespace, one marked `remote`, …) needs the repo's login, which `06-serve` makes first, and its resource
 there. `13-delete` deletes what deploy made (KV, D1, R2, Queues, Flagship apps), never what the config names, and names
-every binding it leaves. Previews get their own KV, D1 and R2. What's proven, kind by kind:
+every binding it leaves, and deletes the Worker's own Durable Objects with it, all their data too. Previews get their
+own KV, D1 and R2. A Worker that has to be built first (Cloudflare's Vite plugin, a Python Worker) isn't handled yet:
+`08-deploy` runs `wrangler deploy` alone. What's proven, kind by kind:
 [mise-cloudflare's README](https://github.com/joeblew999/mise-cloudflare#what-it-does-with-your-workers-bindings).
 
 ## The commands
@@ -110,7 +112,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:09-connect-github` | Cloudflare deploys every push (Workers Builds): production from the repository's default branch, a preview for every other; `--staging main` for staging; `--branch`, `--build` to change those; `--off` to stop. Run again with no flags, it keeps what's set | Allow for cf, the first time |
 | `cloudflare:11-preview` | A preview of what's here now (`wrangler preview`: `--name my-test`), with its own KV, D1 and R2 | Allow, the first time |
 | `cloudflare:run-wrangler <...>` | Any wrangler command on the repo's login: `wrangler d1 list`, `secret put`, `tail`, … | Allow, the first time |
-| `cloudflare:13-delete` | Deploy undone: the Worker deleted, then the KV, D1, R2, Queues and Flagship apps deploy made for it (a binding that names none) and its previews' own. One the config names is yours: it stays (an AI Search or Agent Memory namespace always is: wrangler requires its name). An R2 bucket that still holds objects stays: it never deletes what's in one. Every other binding it names as left as it is. One it can't delete it marks ✗, with Cloudflare's own words, and it then fails, naming what's still there. It asks first; `--yes` doesn't | The Worker's name, to be sure |
+| `cloudflare:13-delete` | Deploy undone: the Worker deleted, and with it its own Durable Objects and all their data (wrangler deletes them; it names them when it asks, and checks they went), then the KV, D1, R2, Queues and Flagship apps deploy made for it (a binding that names none) and its previews' own. One the config names is yours: it stays (an AI Search or Agent Memory namespace always is: wrangler requires its name). An R2 bucket that still holds objects stays: it never deletes what's in one. Every other binding it names as left as it is. One it can't delete it marks ✗, with Cloudflare's own words, and it then fails, naming what's still there. It asks first; `--yes` doesn't | The Worker's name, to be sure |
 | `cloudflare:12-login` / `cloudflare:14-logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
 | `cloudflare:15-clean` | The local state undone, as `13-delete` undoes Cloudflare's: `.wrangler/` (the local D1, KV and R2, and what deploys wrote) and `.dev.vars`, so the next `06-serve` starts from nothing. It asks first; `--yes` doesn't | y, to be sure |
 | `cloudflare:template` | The template's own Worker, in a repo with none yet, named for the repo's folder, with the `mise.toml` that installs its wrangler. It never writes over a file | Nothing |
@@ -213,6 +215,7 @@ there to click Allow, and Cloudflare's Workers Builds deploys.
 | `refusing: CLOUDFLARE_API_TOKEN is set in this shell` | Unset it: a token overrides every login, and the repo uses none |
 | `refusing: .env sets CLOUDFLARE_API_TOKEN` | Remove that line from the file |
 | `wrangler isn't installed here` | Install the repo's dependencies: `package.json` pins wrangler |
+| `the repo's wrangler, … has no auth profiles` | An older wrangler (4.49.0 is one) can't hold the repo's login: move it to a newer one, `mise run cloudflare:update` (it moves every pin; `mise use aube` first if it says so). `06-serve` still runs local bindings on it |
 | `… still don't match the repo's` | The person approved other permissions or another account: `mise run cloudflare:14-logout`, then log in again |
 | A `mise run cloudflare:04-check` problem | Fix the repo; never weaken the rule |
 

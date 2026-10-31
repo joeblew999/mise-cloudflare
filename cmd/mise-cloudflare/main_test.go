@@ -195,10 +195,14 @@ func TestOwnResources(t *testing.T) {
 func TestNotDeleted(t *testing.T) {
 	r := repo{wc: wconfig.Config{Bindings: map[string]string{"KV": "kv_namespace", "DB": "d1", "JOBS": "queue", "PG": "hyperdrive",
 		"ROOMS": "durable_object_namespace", "MODE": "plain_text", "LIMITS": "json", "KEY": "secret_text", "ASSETS": "assets"}}}
-	if got, want := r.notDeleted(), []string{"PG (hyperdrive)", "ROOMS (durable_object_namespace)"}; !slices.Equal(got, want) {
+	if got, want := r.notDeleted(nil), []string{"PG (hyperdrive)", "ROOMS (durable_object_namespace)"}; !slices.Equal(got, want) {
 		t.Errorf("notDeleted: %q, want %q", got, want)
 	}
-	if got := (repo{wc: wconfig.Config{Bindings: map[string]string{"KV": "kv_namespace", "MODE": "plain_text"}}}).notDeleted(); got != nil {
+	// A binding to the Worker's own Durable Object goes with it: delete says so of its own.
+	if got, want := r.notDeleted(map[string]bool{"ROOMS": true}), []string{"PG (hyperdrive)"}; !slices.Equal(got, want) {
+		t.Errorf("notDeleted, ROOMS the Worker's own: %q, want %q", got, want)
+	}
+	if got := (repo{wc: wconfig.Config{Bindings: map[string]string{"KV": "kv_namespace", "MODE": "plain_text"}}}).notDeleted(nil); got != nil {
 		t.Errorf("the template's kinds only: %q, want none", got)
 	}
 }

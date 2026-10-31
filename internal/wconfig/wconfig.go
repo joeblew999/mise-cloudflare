@@ -50,7 +50,10 @@ const script = `const w = await import('wrangler');
 try {
   const c = w.unstable_readConfig({ env: process.env.CLOUDFLARE_ENV || undefined });
   const r = await w.experimental_readRawConfig({});
-  const conv = (b) => w.unstable_convertConfigBindingsToStartWorkerBindings(b ?? {}) ?? {};
+  // Older wranglers (4.49) can't convert a block that isn't there, and list a binding with no name (assets without
+  // one) under "undefined": neither is a binding the Worker sees.
+  const conv = (b) => Object.fromEntries(Object.entries(b ? w.unstable_convertConfigBindingsToStartWorkerBindings(b) ?? {} : {})
+    .filter(([n]) => n !== 'undefined'));
   const types = (b) => Object.fromEntries(Object.entries(conv(b)).map(([n, v]) => [n, v.type]));
   // A binding names its resource when wrangler's converted binding has a value besides its type: the fields it was
   // given no value for are there too, undefined.

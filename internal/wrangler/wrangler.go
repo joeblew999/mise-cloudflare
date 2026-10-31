@@ -47,7 +47,8 @@ func (w W) bin() string {
 	}
 }
 
-// Plain is a wrangler command with no profile: the auth commands, which name the profile themselves.
+// Plain is a wrangler command with no profile: the auth commands, which name the profile themselves, and an older
+// wrangler's dev, which has no profiles.
 func (w W) Plain(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "node", append([]string{w.bin()}, args...)...)
 	cmd.Dir = w.Dir
@@ -100,6 +101,22 @@ func Output(cmd *exec.Cmd) ([]byte, error) {
 		return out, fmt.Errorf("wrangler %s: %w\n%s", cmd.Args[2], err, bytes.TrimSpace(stderr.Bytes()))
 	}
 	return out, nil
+}
+
+// HasProfiles reports whether the repo's wrangler has auth profiles (wrangler auth), which a repo's login is: an older
+// wrangler (4.49.0) has none, and refuses wrangler auth list.
+func (w W) HasProfiles(ctx context.Context) bool {
+	return w.Plain(ctx, "auth", "list").Run() == nil
+}
+
+// Version is the repo's installed wrangler's version, from its own package.json.
+func (w W) Version() string {
+	var p struct{ Version string }
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(w.bin())), "package.json"))
+	if err != nil || json.Unmarshal(b, &p) != nil || p.Version == "" {
+		return "not installed"
+	}
+	return p.Version
 }
 
 // LoggedIn reports whether the profile has a login on this machine, from wrangler's own list of them (wrangler auth

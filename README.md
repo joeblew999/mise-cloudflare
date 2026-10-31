@@ -77,17 +77,26 @@ wrangler does the work for every kind of binding; mise-cloudflare adds only what
 | `04-check` | wrangler's own validation of the config: its warnings are problems | |
 | `06-serve` | `wrangler dev`. What wrangler simulates runs locally; what it runs on Cloudflare even locally (its own pick: Workers AI, an AI Search namespace, a binding marked `remote`, …) runs on the repo's login, which it makes first, and needs its resource there | |
 | `08-deploy` | `wrangler deploy`, which makes what a binding uses when the config names nothing, of the kinds it can: KV, D1, R2, Queues, Flagship apps, Dispatch Namespaces | |
-| `13-delete` | `wrangler delete`, which leaves what deploy made | It deletes what deploy made and named after the Worker: KV, D1, R2, Queues, Flagship apps. What the config names is yours and stays (an AI Search or Agent Memory namespace always is). It names every binding it leaves |
+| `13-delete` | `wrangler delete`, which deletes the Worker's own Durable Objects with it, all their data too, and leaves what deploy made | It says which Durable Objects go when it asks, and checks they went. It deletes what deploy made and named after the Worker: KV, D1, R2, Queues, Flagship apps. What the config names is yours and stays (an AI Search or Agent Memory namespace always is). It names every binding it leaves |
 | Previews | `wrangler preview` | Their own KV, D1 and R2; not yet a Queue or a Flagship app of their own |
 
 What's proven and where:
 
 - **On Cloudflare, every step:** KV, D1, R2 and a secret (the template); a Queue, a Flagship app and Workers AI (the
   extras, below).
-- **On third-party configs, `check` only so far:** every config in [repos.txt](repos.txt)'s repos, with Durable
-  Objects, Workflows, Hyperdrive, rate limits, containers, Workers AI and static assets among them.
-- **Not yet run:** a third-party Worker deployed, served and deleted; a Dispatch Namespace (it needs Workers for
-  Platforms); `--env` environments; monorepos.
+- **A third-party Worker, every step, by hand:** cloudflare/realtime-examples' `video-to-jpeg` (a Durable Object,
+  static assets, vars), adopted as its owner would: `init`, its own install, then each step as the tool said, on its
+  own wrangler.
+- **On third-party configs, `check` only:** every config in [repos.txt](repos.txt)'s repos, with Durable Objects,
+  Workflows, Hyperdrive, rate limits, containers, Workers AI and static assets among them.
+- **Not handled yet:** a Worker that has to be built first, as with Cloudflare's Vite plugin or a Python Worker:
+  `08-deploy` runs `wrangler deploy` alone, which would very likely deploy it without its build (#17).
+- **Not yet run:** a third-party Worker as a walk (#18); previews' own Queue or Flagship app (#19); `--env` environments
+  and monorepos (#20); a Dispatch Namespace, which needs Workers for Platforms (#23). The open work is the repo's
+  [issues](https://github.com/joeblew999/mise-cloudflare/issues).
+
+The repo's login is a wrangler auth profile, which older wranglers (4.49.0) don't have: on one, `06-serve` still runs
+its local bindings, and `04-check` says to move it (`mise run cloudflare:update` moves every pin).
 
 ## Working on mise-cloudflare
 

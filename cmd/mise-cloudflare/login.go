@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,6 +35,9 @@ func (r repo) wanted(ctx context.Context) []string {
 // or removed), then checks they match. It refuses a stray token first: one would override every login.
 func (r repo) ensureLogin(ctx context.Context) wrangler.Who {
 	r.refuseStrayTokens()
+	if p := r.noProfiles(ctx); len(p) > 0 {
+		fail(errors.New(p[0]))
+	}
 	want := r.wanted(ctx)
 	device := wrangler.Device()
 	if !r.w.LoggedIn(ctx) {
@@ -65,6 +69,15 @@ func (r repo) ensureLogin(ctx context.Context) wrangler.Who {
 		fail(fmt.Errorf("the new login's scopes (%s) still don't match the repo's (%s)", strings.Join(who.Scopes, " "), strings.Join(want, " ")))
 	}
 	return who
+}
+
+// noProfiles is the problem when the repo's wrangler has no auth profiles, which the repo's login is: nothing that
+// needs the login runs on it.
+func (r repo) noProfiles(ctx context.Context) []string {
+	if r.w.HasProfiles(ctx) {
+		return nil
+	}
+	return []string{fmt.Sprintf("the repo's wrangler, %s, has no auth profiles (wrangler auth), which this repo's login is: move it to a newer one (mise run cloudflare:update moves every pin), then this again", r.w.Version())}
 }
 
 // refuseStrayTokens: a CLOUDFLARE_API_TOKEN beats every login, so outside CI one in the shell or in a .env is refused.

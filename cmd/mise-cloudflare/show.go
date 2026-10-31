@@ -21,6 +21,7 @@ type statusReport struct {
 	Worker         string             `json:"worker"`
 	Profile        string             `json:"profile"`
 	LoggedIn       bool               `json:"loggedIn"`
+	Profiles       bool               `json:"profiles"` // the repo's wrangler has auth profiles, which the login is
 	Accounts       []wrangler.Account `json:"accounts"`
 	Scopes         []string           `json:"scopes"` // what the login holds
 	Needs          []string           `json:"needs"`  // what it must hold: wrangler's own login's
@@ -50,6 +51,8 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 	if problems, err := rules.Check(r.dir, r.wc); err == nil {
 		rep.Problems = append(append([]string{}, problems...), r.stale(ctx)...)
 	}
+	noProfiles := r.noProfiles(ctx)
+	rep.Profiles, rep.Problems = len(noProfiles) == 0, append(rep.Problems, noProfiles...)
 	rep.LoggedIn = r.w.LoggedIn(ctx)
 	if rep.LoggedIn && len(rep.StrayTokens) == 0 {
 		must(r.w.Activate(ctx))
@@ -154,6 +157,8 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 		fmt.Printf("  · 09. Deploy every push  mise run cloudflare:09-connect-github   a preview for every pull request, then staging and production\n")
 	}
 	switch {
+	case !rep.Profiles:
+		fmt.Printf("  login: none; the repo's wrangler, %s, can't hold one (mise run cloudflare:04-check says why)\n", r.w.Version())
 	case !rep.LoggedIn:
 		fmt.Printf("  login: none yet; deploying makes it (you click Allow)\n")
 	case len(rep.Accounts) > 0:

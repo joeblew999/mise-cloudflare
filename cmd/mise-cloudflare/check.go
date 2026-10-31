@@ -13,7 +13,7 @@ func (r repo) check(ctx context.Context, jsonOut bool) {
 	if err != nil {
 		fail(err)
 	}
-	problems = append(problems, r.stale(ctx)...)
+	problems = append(append(problems, r.stale(ctx)...), r.noProfiles(ctx)...)
 	if jsonOut {
 		emit(struct {
 			OK       bool     `json:"ok"`

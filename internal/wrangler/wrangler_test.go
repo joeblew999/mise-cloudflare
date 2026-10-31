@@ -1,9 +1,31 @@
 package wrangler
 
 import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
+
+// TestHasProfiles: the template's wrangler has auth profiles, and its version is its package.json's.
+func TestHasProfiles(t *testing.T) {
+	dir, _ := filepath.Abs(filepath.Join("..", "..", "templates"))
+	b, err := os.ReadFile(filepath.Join(dir, "node_modules", "wrangler", "package.json"))
+	if err != nil {
+		t.Skip("the template's wrangler isn't installed: mise run template:setup")
+	}
+	var p struct{ Version string }
+	json.Unmarshal(b, &p)
+	w := W{Dir: dir, Profile: "mise-cloudflare-template"}
+	if !w.HasProfiles(context.Background()) || w.Version() != p.Version {
+		t.Errorf("profiles %v, version %q, want %q", w.HasProfiles(context.Background()), w.Version(), p.Version)
+	}
+	if v := (W{Dir: t.TempDir()}).Version(); v != "not installed" {
+		t.Errorf("no wrangler: version %q", v)
+	}
+}
 
 func TestScopes(t *testing.T) {
 	want := []string{"account:read", "workers:write", "d1:write"}
