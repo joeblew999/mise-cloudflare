@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -158,7 +157,8 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	workers[0].Branch = orDefault(b.Branch, prodBranch)
 	workers[0].Deploy = "npx wrangler deploy" + envFlag(env)
 	workers[0].Preview = "npx wrangler preview" + envFlag(env)
-	// Worker Previews (wrangler preview) need a previews block with every binding in it; Cloudflare's build fails without.
+	// Worker Previews (wrangler preview) need a previews block, and one whose KV, D1 or R2 names no resource Cloudflare
+	// refuses; wrangler preview itself names the bindings a preview lacks.
 	if problems := rules.Previews(r.wc, true); len(problems) > 0 {
 		fail(errors.New(strings.Join(problems, "\n")))
 	}
@@ -226,9 +226,7 @@ func (r repo) connectGithub(ctx context.Context, b builds, off, jsonOut bool) {
 	}
 	fmt.Printf("  previews   any other branch: %s, its URL on the pull request\n", workers[0].Preview)
 	fmt.Printf("  with the account's build token %q; GitHub holds no Cloudflare credential\n", tokenName)
-	if more := beyondBuildToken(r.wc.Bindings); len(more) > 0 {
-		fmt.Printf("  · if a build fails to deploy %s: give the build token %q that permission (Cloudflare's dashboard: Manage account, Account API tokens, %s, Edit)\n", strings.Join(more, ", "), tokenName, tokenName)
-	}
+	fmt.Printf("  · a build that fails for a permission says which in its log: give the build token %q it (Cloudflare's dashboard: Manage account, Account API tokens, %s, Edit)\n", tokenName, tokenName)
 	if rep.DeleteMergedBranches {
 		fmt.Printf("  GitHub deletes a pull request's branch when it merges, and Workers Builds its preview with it\n")
 	} else {
@@ -376,24 +374,6 @@ func githubToken(ctx context.Context) string {
 		return strings.TrimSpace(string(out))
 	}
 	return ""
-}
-
-// buildTokenCovers is the binding kinds a Workers Builds build token can deploy as Cloudflare makes it (Workers Scripts,
-// KV, R2, Workers Routes): a Worker's own code, its secrets and vars, and what lives in its script.
-var buildTokenCovers = map[string]bool{"kv_namespace": true, "r2_bucket": true, "durable_object_namespace": true, "service": true,
-	"plain_text": true, "secret_text": true, "json": true, "assets": true, "version_metadata": true}
-
-// beyondBuildToken is the Worker's bindings of a kind the build token may not cover (d1, queue, …), sorted: a build
-// that deploys one fails until the token has its permission.
-func beyondBuildToken(bindings map[string]string) []string {
-	var out []string
-	for name, kind := range bindings {
-		if !buildTokenCovers[kind] {
-			out = append(out, kind+" "+name)
-		}
-	}
-	slices.Sort(out)
-	return out
 }
 
 func cmpOrEnv(names ...string) string {

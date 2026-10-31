@@ -133,7 +133,7 @@ file: each choice is a command's flag, kept by Cloudflare's Workers Builds setup
 | No Cloudflare token in its files, and nothing calling `wrangler login` | A token in the repo leaks; `wrangler login` is the machine's, not the repo's |
 | No `.dev.vars`, `.env` or `.cloudflare/` that git would commit | They hold local secrets, and the account cf logged into; the steps that write them git-ignore them first |
 | wrangler pinned: exactly in `package.json`, or by the lockfile committed with it (a workspace's above it counts) | So everyone, CI and Cloudflare's builds run the same wrangler |
-| A `previews` block, if there is one, with every binding a preview uses but KV, D1 and R2 | A preview inherits nothing from production; KV, D1 and R2 it gets its own (below) |
+| A `previews` block before `09`, its KV, D1 or R2 naming the resource they use (or left out: they get their own, below) | Worker Previews need one, and Cloudflare refuses a preview's KV, D1 or R2 that names none; wrangler preview itself names the bindings a preview lacks |
 
 ## Logins and tokens
 

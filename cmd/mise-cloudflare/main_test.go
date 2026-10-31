@@ -155,14 +155,21 @@ func TestTemplate(t *testing.T) {
 	}
 }
 
-// TestBeyondBuildToken: the warning names only bindings a build token may not cover, as wrangler names their kinds.
-func TestBeyondBuildToken(t *testing.T) {
-	got := beyondBuildToken(map[string]string{"KV": "kv_namespace", "BUCKET": "r2_bucket", "DB": "d1", "GREETING": "secret_text", "Q": "queue"})
-	if want := []string{"d1 DB", "queue Q"}; !slices.Equal(got, want) {
-		t.Errorf("beyondBuildToken: %q, want %q", got, want)
+// TestLastDeployURL: the URL is the last deploy entry's in wrangler's output file (one JSON entry a line), its
+// workers.dev target first; anything else in the file is wrangler's, not a deploy.
+func TestLastDeployURL(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".wrangler"), 0o755)
+	out := `{"type":"wrangler-session","version":1,"wrangler_version":"4.155.0"}
+{"type":"deploy","version":1,"worker_name":"w","targets":["https://old.example.workers.dev"]}
+{"type":"deploy","version":1,"worker_name":"w","targets":["https://example.com","https://w.example.workers.dev"]}
+`
+	os.WriteFile(filepath.Join(dir, ".wrangler", "output.json"), []byte(out), 0o644)
+	if got := lastDeployURL(dir); got != "https://w.example.workers.dev" {
+		t.Errorf("lastDeployURL: %q", got)
 	}
-	if got := beyondBuildToken(map[string]string{"KV": "kv_namespace"}); got != nil {
-		t.Errorf("a Worker with only KV: %q, want no warning", got)
+	if got := lastDeployURL(t.TempDir()); got != "" {
+		t.Errorf("no output file: %q", got)
 	}
 }
 

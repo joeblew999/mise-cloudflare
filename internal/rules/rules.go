@@ -67,8 +67,8 @@ func Check(dir string, w wconfig.Config) ([]string, error) {
 	return problems, nil
 }
 
-// Previews returns the problems with the previews block (none without one, unless need): every binding but KV, D1 and
-// R2 must be in it, and a KV, D1 or R2 in it must name an existing resource.
+// Previews returns the problems with the previews block (none without one, unless need): a KV, D1 or R2 in it must name
+// an existing resource. The bindings a preview lacks, wrangler preview names itself.
 func Previews(w wconfig.Config, need bool) []string {
 	if !w.Previews {
 		if need {
@@ -77,9 +77,6 @@ func Previews(w wconfig.Config, need bool) []string {
 		return nil
 	}
 	var problems []string
-	if missing := previewBindings(w); len(missing) > 0 {
-		problems = append(problems, fmt.Sprintf("%s's previews block lacks the bindings %s: a preview inherits none from production (only KV, D1 and R2 come from its Previews Base), so it would fail on its first use of one; add them there, pointed at preview-safe resources (vars with preview values)", filepath.Base(w.Path), strings.Join(missing, ", ")))
-	}
 	if unnamed := unnamedResources(w); len(unnamed) > 0 {
 		problems = append(problems, fmt.Sprintf("%s's previews block has %s with no resource named, which wrangler preview sends as it is and Cloudflare refuses: leave it out, and mise run cloudflare:08-deploy gives previews their own, or name an existing one (a KV namespace's id, a D1's database_id, an R2 bucket's bucket_name)", filepath.Base(w.Path), strings.Join(unnamed, ", ")))
 	}
@@ -96,19 +93,6 @@ func unnamedResources(w wconfig.Config) []string {
 		}
 	}
 	return out
-}
-
-// previewBindings names the bindings the previews block lacks, but for KV, D1, R2 and static assets.
-func previewBindings(w wconfig.Config) []string {
-	var missing []string
-	for name, typ := range w.Bindings {
-		_, own := wconfig.PreviewsOwn[typ]
-		if _, ok := w.PreviewBindings[name]; !ok && !own && typ != "assets" {
-			missing = append(missing, name)
-		}
-	}
-	slices.Sort(missing)
-	return missing
 }
 
 // secretFiles is what holds local secrets (.dev.vars, .env) or cf's login cache (.cloudflare/: the account it logged

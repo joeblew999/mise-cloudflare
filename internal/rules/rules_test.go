@@ -80,14 +80,13 @@ func TestCheckFinds(t *testing.T) {
 	}
 }
 
-// TestPreviewBindings: a binding the previews block doesn't have is named, but for KV, D1 and R2, which the Previews Base
-// gives (cloudflare deploy, preview and github).
+// TestPreviewBindings: a binding the previews block doesn't have isn't check's to name: wrangler preview names the ones
+// a preview lacks itself.
 func TestPreviewBindings(t *testing.T) {
 	c := cfg()
 	c.PreviewBindings = map[string]string{"AI": "ai"}
 	c.Bindings = map[string]string{"DB": "d1", "KV": "kv_namespace", "BUCKET": "r2_bucket", "INDEX": "vectorize", "JOBS": "queue", "AI": "ai", "ASSETS": "assets"}
-	p, err := Check(repo(t, good()), c)
-	if err != nil || len(p) != 1 || !strings.Contains(p[0], "lacks the bindings INDEX, JOBS") {
+	if p, err := Check(repo(t, good()), c); err != nil || len(p) != 0 {
 		t.Errorf("problems %q, %v", p, err)
 	}
 }

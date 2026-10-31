@@ -105,7 +105,8 @@ each step with its check, as far as a stage:
 It walks two repos:
 
 - **The template**, [templates/](templates/), in place; for `connect-github`, in a checkout of this repo at HEAD, as
-  Cloudflare builds it from GitHub.
+  Cloudflare builds it from GitHub. The template is very minimal on purpose (one small Worker, one D1, KV and R2, one
+  secret), so that it's as fast as possible to use it for testing.
 - **A new repo**, made as a person makes one: an empty folder (`mise-cloudflare-new`) with its own git,
   `mise-cloudflare init`, then its own `cloudflare:template`, which writes the template's Worker named for the folder.
   The walk makes it in a folder of its own, and it goes when the walk ends. Its `init` runs at this checkout's build

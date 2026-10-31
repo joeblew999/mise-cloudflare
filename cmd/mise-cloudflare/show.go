@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -160,20 +161,33 @@ func (r repo) show(ctx context.Context, jsonOut bool) {
 	fmt.Printf("next: %s\n", rep.Next)
 }
 
-// lastDeployURL is the workers.dev URL of the last deploy wrangler wrote to .wrangler/output.json (cloudflare deploy
-// has it write there), or "".
+// lastDeployURL is the URL wrangler's last deploy reports in its output file, .wrangler/output.json (cloudflare deploy
+// has it write there): one JSON entry a line, the deploy's "targets" (its workers.dev one, else the first), or "".
 func lastDeployURL(dir string) string {
 	b, _ := os.ReadFile(filepath.Join(dir, ".wrangler", "output.json"))
-	urls := regexp.MustCompile(`https://[a-z0-9.-]+\.workers\.dev`).FindAll(b, -1)
-	if len(urls) == 0 {
-		return ""
+	url := ""
+	for _, line := range bytes.Split(b, []byte("\n")) {
+		var e struct {
+			Type    string   `json:"type"`
+			Targets []string `json:"targets"`
+		}
+		if json.Unmarshal(line, &e) != nil || e.Type != "deploy" {
+			continue
+		}
+		url = ""
+		for _, t := range e.Targets {
+			if strings.HasPrefix(t, "https://") && (url == "" || strings.HasSuffix(t, ".workers.dev")) {
+				url = t
+			}
+		}
 	}
-	return string(urls[len(urls)-1])
+	return url
 }
 
-// deployed reports whether the Worker's code is on Cloudflare: its current version has a compatibility date, as every
-// deploy's has. wrangler secret put on a Worker that isn't there yet makes a placeholder with none (createDraftWorker
-// in wrangler 4.151.3), which isn't the Worker deployed.
+// deployed reports whether the Worker's code is on Cloudflare: its current version has a compatibility date. That's
+// wrangler's own line between the two: it won't upload a Worker without one ("A compatibility_date is required when
+// uploading a Worker"), and the placeholder wrangler secret put makes for a Worker that isn't there yet has none
+// (createDraftWorker, still so in wrangler 4.155.0).
 func (r repo) deployed(ctx context.Context) bool {
 	var d struct {
 		Versions []struct {
