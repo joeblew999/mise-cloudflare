@@ -303,9 +303,10 @@ func (r repo) miseShowSaysNext(want string) {
 }
 
 // miseServeLocally runs the Worker as a person does, with the repo's cloudflare:06-serve (which makes .dev.vars from
-// .dev.vars.example), with no Cloudflare login anywhere it could see: a home of its own, with mise's own folders kept,
-// so its tools are still there. It returns the Worker's answer.
-func (r repo) miseServeLocally() []byte {
+// .dev.vars.example): with no Cloudflare login anywhere it could see unless onLogin (a home of its own, with mise's own
+// folders kept, so its tools are still there). It returns the Worker's answer, or, when 06-serve stopped without one,
+// what it printed.
+func (r repo) miseServeLocally(onLogin bool) (answer []byte, stopped string) {
 	r.t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -319,12 +320,15 @@ func (r repo) miseServeLocally() []byte {
 	if out, err := exec.Command("mise", "doctor", "--json").Output(); err != nil || json.Unmarshal(out, &doctor) != nil {
 		r.t.Fatalf("mise doctor --json: %v", err)
 	}
-	home := r.t.TempDir()
 	cmd := exec.Command("mise", "run", "cloudflare:06-serve", "--ip", "127.0.0.1", "--port", port)
 	cmd.Dir = r.dir
 	cmd.Env = append(os.Environ(), "MISE_CEILING_PATHS="+filepath.Dir(r.dir), "MISE_YES=1", "MISE_TRUSTED_CONFIG_PATHS="+r.dir,
-		"HOME="+home, "XDG_CONFIG_HOME="+home, "CLOUDFLARE_API_TOKEN=", "CI=1",
-		"MISE_DATA_DIR="+doctor.Dirs.Data, "MISE_CACHE_DIR="+doctor.Dirs.Cache, "MISE_STATE_DIR="+doctor.Dirs.State)
+		"CLOUDFLARE_API_TOKEN=", "CI=1")
+	if !onLogin {
+		home := r.t.TempDir()
+		cmd.Env = append(cmd.Env, "HOME="+home, "XDG_CONFIG_HOME="+home,
+			"MISE_DATA_DIR="+doctor.Dirs.Data, "MISE_CACHE_DIR="+doctor.Dirs.Cache, "MISE_STATE_DIR="+doctor.Dirs.State)
+	}
 	ownGroup(cmd)
 	var logs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &logs, &logs
@@ -332,16 +336,23 @@ func (r repo) miseServeLocally() []byte {
 		r.t.Fatal(err)
 	}
 	defer killGroup(cmd)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
 	for i := 0; i < 90; i++ {
+		select {
+		case <-done:
+			return nil, logs.String()
+		default:
+		}
 		if resp, err := http.Get("http://127.0.0.1:" + port + "/"); err == nil {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			return body
+			return body, ""
 		}
 		time.Sleep(time.Second)
 	}
 	r.t.Fatalf("cloudflare:06-serve never answered:\n%s", logs.String())
-	return nil
+	return nil, ""
 }
 
 // miseDeleteEverythingOnCloudflare deletes everything of the repo's Worker on Cloudflare, with the repo's own tasks, so a

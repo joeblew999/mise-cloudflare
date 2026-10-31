@@ -47,7 +47,7 @@ func (w W) bin() string {
 	}
 }
 
-// Plain is a wrangler command with no profile: local dev, and the auth commands, which name the profile themselves.
+// Plain is a wrangler command with no profile: the auth commands, which name the profile themselves.
 func (w W) Plain(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "node", append([]string{w.bin()}, args...)...)
 	cmd.Dir = w.Dir

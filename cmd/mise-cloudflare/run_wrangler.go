@@ -13,18 +13,14 @@ import (
 
 // runWrangler runs any wrangler command on the repo's login.
 func (r repo) runWrangler(ctx context.Context, args []string) {
-	r.wranglerHere(ctx, true, args)
+	r.wranglerHere(ctx, args)
 }
 
-// wranglerHere runs wrangler on this terminal, on the repo's login when onLogin (made first if needed); its exit code
-// is the command's.
-func (r repo) wranglerHere(ctx context.Context, onLogin bool, args []string) {
-	cmd := r.w.Plain(ctx, args...)
-	if onLogin {
-		r.ensureLogin(ctx)
-		cmd = r.w.Cmd(ctx, args...)
-	}
-	if err := wrangler.Interactive(cmd); err != nil {
+// wranglerHere runs wrangler on this terminal, on the repo's login (made first if needed); its exit code is the
+// command's.
+func (r repo) wranglerHere(ctx context.Context, args []string) {
+	r.ensureLogin(ctx)
+	if err := wrangler.Interactive(r.w.Cmd(ctx, args...)); err != nil {
 		os.Exit(exitCode(err))
 	}
 }

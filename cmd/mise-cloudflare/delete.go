@@ -65,7 +65,7 @@ func (r repo) delete(ctx context.Context, yes bool) {
 		fmt.Printf("· %s is the one %s names: yours, so it stays\n", k, filepath.Base(r.wc.Path))
 	}
 	if left := r.notDeleted(); len(left) > 0 {
-		fmt.Printf("· not deleted here, left as they are: %s (whatever any of them is on Cloudflare, it's still there)\n", strings.Join(left, ", "))
+		fmt.Printf("· not deleted here: %s. What any of them has on Cloudflare of its own (a Hyperdrive config, say; Workers AI has none) is still there\n", strings.Join(left, ", "))
 	}
 	if len(left) > 0 {
 		fail(fmt.Errorf("not all deleted: %s is still on Cloudflare (what Cloudflare said is above)", strings.Join(left, "; ")))

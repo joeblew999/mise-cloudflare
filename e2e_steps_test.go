@@ -47,8 +47,16 @@ var steps = []step{
 	}},
 	{task: "05-show", stage: serve, check: func(w *walk) { w.miseShowSaysNext("mise run cloudflare:07-set-secrets") }},
 	{task: "06-serve", stage: serve, check: func(w *walk) {
-		if body := w.miseServeLocally(); !allWork(body) {
-			w.t.Fatalf("the local Worker: %s", body)
+		body, stopped := w.miseServeLocally(false)
+		if remoteExtras() {
+			if body != nil || !strings.Contains(stopped, "mise run cloudflare:12-login") {
+				w.t.Fatalf("cloudflare:06-serve with no Cloudflare login and an extra wrangler runs on Cloudflare even locally: %s%s", body, stopped)
+			}
+			w.pass("cloudflare:06-serve with no Cloudflare login stops at the extra wrangler runs on Cloudflare even locally, and says to log in first")
+			return
+		}
+		if !allWork(body) {
+			w.t.Fatalf("the local Worker: %s%s", body, stopped)
 		}
 		w.pass("the local Worker's D1, KV, R2 and secret work, with no Cloudflare login")
 	}},
@@ -70,8 +78,8 @@ var steps = []step{
 		w.pass("%s: deployed on the repo's own login, %s; its D1, KV, R2 and secret work", w.url, s.Profile)
 		if withExtras() {
 			token, account := w.api()
-			if on := w.extrasSettle(token, account, true); len(on) != len(extras) {
-				w.t.Fatalf("wrangler deploy made %d of the %d extras: %q", len(on), len(extras), on)
+			if on := w.extrasSettle(token, account, true); len(on) != made() {
+				w.t.Fatalf("wrangler deploy made %d of the %d extras it makes: %q", len(on), made(), on)
 			} else {
 				w.pass("wrangler deploy made the extras too: %s", strings.Join(on, ", "))
 			}
@@ -80,6 +88,12 @@ var steps = []step{
 			w.t.Fatalf("deploying changed %s", strings.Join(changed, ", "))
 		}
 		w.pass("deploying wrote nothing into the repo: no IDs")
+		if remoteExtras() {
+			if body, stopped := w.miseServeLocally(true); !allWork(body) {
+				w.t.Fatalf("cloudflare:06-serve on the repo's login, the extras made: %s%s", body, stopped)
+			}
+			w.pass("cloudflare:06-serve on the repo's login runs the extra wrangler runs on Cloudflare even locally")
+		}
 		if out, err := w.runMiseTask([]string{"CLOUDFLARE_API_TOKEN=dummy-not-a-real-token"}, "", "cloudflare:08-deploy"); err == nil || !strings.Contains(out, "refusing:") {
 			w.t.Fatal("deployed with a token in the shell")
 		}
@@ -166,7 +180,11 @@ var steps = []step{
 		if left := w.leftOnCloudflare(); len(left) > 0 {
 			w.t.Fatalf("left on the account: %s", strings.Join(left, ", "))
 		}
-		w.pass("no D1, KV or R2 left")
+		if withExtras() {
+			w.pass("no D1, KV or R2 left, nor the extras' Queue or Flagship app")
+		} else {
+			w.pass("no D1, KV or R2 left")
+		}
 	}},
 	{task: "14-logout", stage: deploy, check: func(w *walk) {
 		if os.Getenv("DEPLOY_CLEAN") != "true" {

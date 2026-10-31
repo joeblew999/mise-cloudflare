@@ -9,5 +9,5 @@ func (r repo) preview(ctx context.Context, args []string) {
 		r.ensureLogin(ctx)
 		r.previewResources(ctx, false, false)
 	}
-	r.wranglerHere(ctx, true, append([]string{"preview"}, args...))
+	r.wranglerHere(ctx, append([]string{"preview"}, args...))
 }

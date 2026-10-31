@@ -76,7 +76,7 @@ next: mise run cloudflare:09-connect-github
 
 | Step | Run | You're asked |
 |---|---|---|
-| 06. Run it locally, with local D1, KV and R2 | `mise run cloudflare:06-serve` | Nothing: no account needed, unless a binding only runs on Cloudflare (wrangler's table marks it remote): then the repo's login, `12-login` |
+| 06. Run it locally, with local D1, KV and R2 | `mise run cloudflare:06-serve` | Nothing: no account needed, unless a binding runs on Cloudflare even here (wrangler's table marks it remote: Workers AI, an AI Search namespace, …). That one needs the repo's login, which it makes when there's none (in a terminal wrangler asks for it; otherwise it logs in as `08-deploy` does, then runs again), and its resource on Cloudflare, which `08-deploy` makes |
 | 08. Deploy it yourself | `mise run cloudflare:08-deploy` | **Allow**, the first time |
 | 09. Have Cloudflare deploy every push, once | `mise run cloudflare:09-connect-github` | **Allow** for Cloudflare's own CLI, the first time |
 
@@ -101,7 +101,7 @@ One name all the way through: each command is a task, `mise run cloudflare:<comm
 | `cloudflare:09-connect-github` | Cloudflare deploys every push (Workers Builds): production from the repository's default branch, a preview for every other; `--staging main` for staging; `--branch`, `--build` to change those; `--off` to stop. Run again with no flags, it keeps what's set | Allow for cf, the first time |
 | `cloudflare:11-preview` | A preview of what's here now (`wrangler preview`: `--name my-test`), with its own KV, D1 and R2 | Allow, the first time |
 | `cloudflare:run-wrangler <...>` | Any wrangler command on the repo's login: `wrangler d1 list`, `secret put`, `tail`, … | Allow, the first time |
-| `cloudflare:13-delete` | Deploy undone: the Worker deleted, then the KV, D1, R2, Queues and Flagship apps deploy made for it (a binding that names none) and its previews' own. One the config names is yours: it stays. An R2 bucket that still holds objects stays: it never deletes what's in one. Every other binding it names as left as it is. One it can't delete it marks ✗, with Cloudflare's own words, and it then fails, naming what's still there. It asks first; `--yes` doesn't | The Worker's name, to be sure |
+| `cloudflare:13-delete` | Deploy undone: the Worker deleted, then the KV, D1, R2, Queues and Flagship apps deploy made for it (a binding that names none) and its previews' own. One the config names is yours: it stays (an AI Search or Agent Memory namespace always is: wrangler requires its name). An R2 bucket that still holds objects stays: it never deletes what's in one. Every other binding it names as left as it is. One it can't delete it marks ✗, with Cloudflare's own words, and it then fails, naming what's still there. It asks first; `--yes` doesn't | The Worker's name, to be sure |
 | `cloudflare:12-login` / `cloudflare:14-logout` | The repo's login (the others make it when they need it); logout deletes it, and cf's | Allow, to log in |
 | `cloudflare:15-clean` | The local state undone, as `13-delete` undoes Cloudflare's: `.wrangler/` (the local D1, KV and R2, and what deploys wrote) and `.dev.vars`, so the next `06-serve` starts from nothing. It asks first; `--yes` doesn't | y, to be sure |
 | `cloudflare:template` | The template's own Worker, in a repo with none yet, named for the repo's folder, with the `mise.toml` that installs its wrangler. It never writes over a file | Nothing |

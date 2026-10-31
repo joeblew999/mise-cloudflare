@@ -27,7 +27,7 @@ usage = 'flag "--json" help="one JSON document on stdout, instead of text"'
 run = 'mise-cloudflare show{% if usage.json %} --json{% endif %}'
 
 ["cloudflare:06-serve"]
-description = "06. The Worker locally, with local D1, KV and R2: no Cloudflare account needed"
+description = "06. The Worker locally, with local D1, KV and R2: no Cloudflare account needed, but for a binding wrangler runs on Cloudflare even here (then it logs the repo in)"
 usage = 'arg "[args]..." help="passed on to wrangler dev as they are: --ip 127.0.0.1 --port 8787"'
 run = 'mise-cloudflare serve{% for a in usage.args %} "{{a}}"{% endfor %}'
 

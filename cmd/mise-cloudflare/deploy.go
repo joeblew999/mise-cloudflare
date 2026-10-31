@@ -17,7 +17,7 @@ func (r repo) deploy(ctx context.Context, args []string) {
 	if os.Getenv("WRANGLER_OUTPUT_FILE_PATH") == "" {
 		os.Setenv("WRANGLER_OUTPUT_FILE_PATH", filepath.Join(".wrangler", "output.json"))
 	}
-	r.wranglerHere(ctx, true, append([]string{"deploy"}, args...))
+	r.wranglerHere(ctx, append([]string{"deploy"}, args...))
 	if url := lastDeployURL(r.dir); url != "" && !slices.Contains(args, "--dry-run") {
 		waitTillItAnswers(ctx, url)
 	}

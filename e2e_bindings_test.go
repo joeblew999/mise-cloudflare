@@ -1,7 +1,7 @@
 // The extras: bindings of kinds beyond the template's KV, D1 and R2, which the walk adds to a new repo's wrangler
 // config as a developer would (mise run new-repo:e2e-extras, E2E_EXTRAS=true), to show on Cloudflare that wrangler
-// deploy makes each one and cloudflare:13-delete deletes it. The template itself stays as minimal as it is. A kind is
-// one row.
+// deploy makes each one and cloudflare:13-delete deletes it, and that cloudflare:06-serve runs one wrangler runs on
+// Cloudflare even locally, on the repo's login. The template itself stays as minimal as it is. A kind is one row.
 
 package e2e
 
@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,21 +21,40 @@ import (
 
 // extra is one binding the walk adds: what the developer writes at the config's top level ({worker} is the Worker's
 // name), and where Cloudflare's API lists what wrangler deploy makes for it, <worker>-<suffix>, by which field of each
-// item.
+// item (no list: it makes nothing); remote when wrangler runs it on Cloudflare even locally (its dev table marks it
+// remote), which needs the repo's login.
 type extra struct {
 	add, list, field, suffix string
+	remote                   bool
 }
 
-// Only kinds wrangler runs locally: the walk's 06-serve has no login on purpose, which a binding wrangler runs on
-// Cloudflare even locally (an AI Search namespace) needs, with its resource made first. Kinds this account can't make
-// aren't here: Dispatch Namespaces (Workers for Platforms, 403) and Agent Memory (401).
+// Of the kinds wrangler deploy makes, these aren't here: Dispatch Namespaces, which this account can't make (403:
+// Workers for Platforms, a purchase), and AI Search and Agent Memory namespaces, which wrangler requires the config to
+// name: the developer's, which 13-delete leaves (and says so), so a walk would leave them on the account.
 var extras = []extra{
 	{add: `"queues": { "producers": [{ "binding": "JOBS" }] }`, list: "/queues", field: "queue_name", suffix: "jobs"},
 	{add: `"flagship": [{ "binding": "FLAGS" }]`, list: "/flagship/apps", field: "name", suffix: "flags"},
+	{add: `"ai": { "binding": "AI" }`, remote: true}, // Workers AI: wrangler runs it on Cloudflare even locally
+}
+
+// made is how many of the extras wrangler deploy makes something for.
+func made() int {
+	n := 0
+	for _, e := range extras {
+		if e.list != "" {
+			n++
+		}
+	}
+	return n
 }
 
 // withExtras reports whether this walk adds the extras (mise run new-repo:e2e-extras).
 func withExtras() bool { return os.Getenv("E2E_EXTRAS") == "true" }
+
+// remoteExtras reports whether this walk adds an extra wrangler runs on Cloudflare even locally.
+func remoteExtras() bool {
+	return withExtras() && slices.ContainsFunc(extras, func(e extra) bool { return e.remote })
+}
 
 // addExtras writes the extras into the repo's wrangler.jsonc, as a developer adds bindings at its top level.
 func (r repo) addExtras() {
@@ -58,6 +78,9 @@ func (r repo) addExtras() {
 func (r repo) extrasOn(token, account string) []string {
 	var on []string
 	for _, e := range extras {
+		if e.list == "" {
+			continue
+		}
 		got, err := cfapi.Call(context.Background(), token, http.MethodGet, "/accounts/"+account+e.list, nil, "")
 		var items []map[string]any
 		if err != nil || !got.OK() || json.Unmarshal(got.Result, &items) != nil {
@@ -79,7 +102,7 @@ func (r repo) extrasSettle(token, account string, all bool) []string {
 	until := time.Now().Add(time.Minute)
 	for {
 		on := r.extrasOn(token, account)
-		if all && len(on) == len(extras) || !all && len(on) == 0 || time.Now().After(until) {
+		if all && len(on) == made() || !all && len(on) == 0 || time.Now().After(until) {
 			return on
 		}
 		time.Sleep(5 * time.Second)
