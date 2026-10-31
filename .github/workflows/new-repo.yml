@@ -1,6 +1,6 @@
 # A new repo on each of the three operating systems, from the release just made: the walk on a new repo made the
 # README's way (an empty folder, mise-cloudflare init at the new tag, then cloudflare:template), as far as the stage
-# serve, which needs no Cloudflare account: mise run example:e2e-serve --version <tag>. It runs after the release run
+# serve, which needs no Cloudflare account: mise run new-repo:e2e-serve --version <tag>. It runs after the release run
 # has passed, so releases stay as fast as before, and by hand for any release. Shell steps only, as ci.yml.
 name: new-repo
 
@@ -67,5 +67,5 @@ jobs:
 
       # The new repo's tasks run in each OS's own shell (cmd on Windows): they have no shell syntax. --skip-deps: the
       # release is what's tried, not a build of this checkout (tool:install).
-      - name: A new repo, made the README's way at the release, walked as far as serve (mise run example:e2e-serve --version)
-        run: mise run --skip-deps example:e2e-serve --version "$VERSION"
+      - name: A new repo, made the README's way at the release, walked as far as serve (mise run new-repo:e2e-serve --version)
+        run: mise run --skip-deps new-repo:e2e-serve --version "$VERSION"

@@ -112,7 +112,7 @@ It walks two repos:
   The walk makes it in a folder of its own, and it goes when the walk ends. Its `init` runs at this checkout's build
   (`local`), or at a release with `--version`, as the release tries it, and pins itself in `.mise/config.toml`. Not
   `connect-github`: it has no GitHub.
-- **A new repo with extras** (`example:e2e-extras`): the same new repo, whose developer first adds bindings beyond the
+- **A new repo with extras** (`new-repo:e2e-extras`): the same new repo, whose developer first adds bindings beyond the
   template's KV, D1 and R2 ([e2e_bindings_test.go](e2e_bindings_test.go), one row a kind: a Queue). wrangler deploy
   makes each one and `13-delete` must delete it, all checked on Cloudflare; the template itself stays as minimal as it
   is.
@@ -127,14 +127,14 @@ harness for those.
 ### This repo's tasks
 
 Every task is named noun:verb, what it acts on and then what it does, as a repo's own are (`cloudflare:08-deploy`):
-`template:` acts on the template, `example:` on a copy stamped out from it, `tool:` on mise-cloudflare itself, and
+`template:` acts on the template, `new-repo:` on a new repo made from it as a person makes one, `tool:` on mise-cloudflare itself, and
 `root:` on this repo itself.
 
 | Task | What | When | Cloudflare |
 |---|---|---|---|
-| `mise run template:e2e-serve`, `mise run example:e2e-serve` | The walk as far as `serve`, on the template or on a stamped copy (`--version` pins a release) | After every change | No |
-| `mise run template:e2e-deploy`, `mise run example:e2e-deploy` | The walk as far as `deploy`, about 3 minutes | After a change to how it deploys | Yes |
-| `mise run example:e2e-extras` | `example:e2e-deploy` with extras: bindings beyond the template's added first (a Queue), made by wrangler deploy and deleted by `13-delete` | After a change to what `13-delete` deletes | Yes |
+| `mise run template:e2e-serve`, `mise run new-repo:e2e-serve` | The walk as far as `serve`, on the template or on a stamped copy (`--version` pins a release) | After every change | No |
+| `mise run template:e2e-deploy`, `mise run new-repo:e2e-deploy` | The walk as far as `deploy`, about 3 minutes | After a change to how it deploys | Yes |
+| `mise run new-repo:e2e-extras` | `new-repo:e2e-deploy` with extras: bindings beyond the template's added first (a Queue), made by wrangler deploy and deleted by `13-delete` | After a change to what `13-delete` deletes | Yes |
 | `mise run template:e2e-connect-github` | The walk on the template as far as `connect-github`, about 7 minutes (it waits on Cloudflare's builds) | After a change to `connect-github` | Yes, and GitHub |
 | `mise run template:check-mise` | `TestMise` on the template's mise file and the tool's Go (below) | After a change to a task or a command | No |
 | `mise run root:check-mise` | `TestMise` on this repo's own `mise.toml`, its mise side: one line each, the Go it runs there, its `usage` passed by name, no POSIX shell syntax, so every task here runs on Windows too | After a change to this repo's tasks | No |
@@ -145,7 +145,7 @@ Every task is named noun:verb, what it acts on and then what it does, as a repo'
 | `mise run tool:build` | This checkout's build, `bin/mise-cloudflare` | Any task needs it | No |
 | `mise run tool:install` | That build as the mise version `local`, for any repo on this machine (`mise use github:joeblew999/mise-cloudflare@local` there), and the template's here: `templates/.mise/config.local.toml`, never committed, overrides the release its `.mise/config.toml` pins | To try a change in another repo, never by waiting on a release | No |
 | `mise run tool:test` | The tool's own checks: `go vet`, its Go tests, the release config | After every change | No |
-| `mise run tool:release` | A release from the commit checked out, as `release.yml` runs it: the commit's `v*` tag or the next patch version, goreleaser's binaries on the tag's release, a copy stamped out pinning it and walked (`example:e2e-serve --version`), the version on proxy.golang.org. `--dry-run` tags and publishes nothing | Never by hand: a merge to main runs it | GitHub |
+| `mise run tool:release` | A release from the commit checked out, as `release.yml` runs it: the commit's `v*` tag or the next patch version, goreleaser's binaries on the tag's release, a copy stamped out pinning it and walked (`new-repo:e2e-serve --version`), the version on proxy.golang.org. `--dry-run` tags and publishes nothing | Never by hand: a merge to main runs it | GitHub |
 
 [mise_test.go](mise_test.go), `TestMise`, checks a mise file against the Go it runs, both ways, for any repo (the
 caller says which: `template:check-mise` points it at the template's). Each task's command is a command's file in
@@ -176,14 +176,14 @@ then only runs the root mise, as on any machine:
   `mise run template:setup` (the template's wrangler, which the tool's tests read configs with), `mise run tool:test`,
   `mise run template:check-mise`, `mise run root:check-mise`, `mise run repos:check` (every wrangler config in
   [repos.txt](repos.txt)'s repos), then the walk as far as `serve` on the template
-  (`mise run template:e2e-serve`) and on a stamped copy (`mise run example:e2e-serve`).
+  (`mise run template:e2e-serve`) and on a stamped copy (`mise run new-repo:e2e-serve`).
 - [release.yml](.github/workflows/release.yml), on every change to the tool merged to main: `mise run tool:release`. It
   tags the next patch version, [goreleaser](.goreleaser.yaml) puts the `mise-cloudflare` binary for macOS, Linux and
-  Windows on the release, then a copy stamped out pinning that release is walked (`mise run example:e2e-serve
+  Windows on the release, then a copy stamped out pinning that release is walked (`mise run new-repo:e2e-serve
   --version`). So the release is always main. `mise run tool:release --dry-run` does it here without tagging or
   publishing anything.
 - [new-repo.yml](.github/workflows/new-repo.yml), once a release run has passed (or by hand, for any release): a new
-  repo made the README's way at that release, walked as far as `serve` (`mise run example:e2e-serve --version`), on
+  repo made the README's way at that release, walked as far as `serve` (`mise run new-repo:e2e-serve --version`), on
   Linux, macOS and Windows, the new repo's tasks in each one's own shell (`cmd` on Windows). It runs after the
   release, so releases stay as fast.
 

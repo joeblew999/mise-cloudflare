@@ -16,7 +16,7 @@ import (
 // TestToolRelease: mise run tool:release releases mise-cloudflare from the commit checked out (release.yml runs the
 // same on GitHub): the commit's v* tag, or the next patch version, tagged and pushed, when it has none; goreleaser's
 // binaries for every machine on that tag's GitHub release (.goreleaser.yaml); a new repo pinning the release, tried as a
-// person tries it (mise run example:e2e-serve --version: the walk on a copy stamped out pinning it); and the version fetched by
+// person tries it (mise run new-repo:e2e-serve --version: the walk on a copy stamped out pinning it); and the version fetched by
 // proxy.golang.org, so go get and pkg.go.dev have it at once. With --dry-run (the test's flag -dry-run) it tags and
 // publishes nothing: goreleaser builds a snapshot into dist/.
 func TestToolRelease(t *testing.T) {
@@ -41,7 +41,7 @@ func TestToolRelease(t *testing.T) {
 		fmt.Println("tagged", tag)
 	}
 	runShown(t, []string{"GORELEASER_CURRENT_TAG=" + tag}, "goreleaser", "release", "--clean")
-	runShown(t, nil, "mise", "run", "example:e2e-serve", "--version", tag)
+	runShown(t, nil, "mise", "run", "new-repo:e2e-serve", "--version", tag)
 	out, err := exec.Command("go", "list", "-m").Output()
 	if err != nil {
 		t.Fatalf("go list -m: %v", err)

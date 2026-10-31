@@ -71,5 +71,5 @@ jobs:
       - name: The template, templates - the walk as far as the stage serve, which needs no account, what its own workflow runs included (mise run template:e2e-serve)
         run: mise run template:e2e-serve
 
-      - name: A copy stamped out from it, as a person's repo is - the same walk, on it (mise run example:e2e-serve)
-        run: mise run example:e2e-serve
+      - name: A copy stamped out from it, as a person's repo is - the same walk, on it (mise run new-repo:e2e-serve)
+        run: mise run new-repo:e2e-serve

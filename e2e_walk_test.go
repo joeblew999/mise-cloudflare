@@ -57,7 +57,7 @@ func TestWalk(t *testing.T) {
 	walkSteps(t, r, stage(upTo))
 }
 
-// releaseFlag is the release a stamped copy runs at, the test's flag -version: mise run example:e2e-serve --version
+// releaseFlag is the release a stamped copy runs at, the test's flag -version: mise run new-repo:e2e-serve --version
 // v0.1.17 passes it (go test … -args -version v0.1.17). Without it, this checkout's build (local).
 var releaseFlag = flag.String("version", "", "the release a stamped copy runs at (default this checkout's build)")
 

@@ -1,5 +1,5 @@
 // The extras: bindings of kinds beyond the template's KV, D1 and R2, which the walk adds to a new repo's wrangler
-// config as a developer would (mise run example:e2e-extras, E2E_EXTRAS=true), to show on Cloudflare that wrangler
+// config as a developer would (mise run new-repo:e2e-extras, E2E_EXTRAS=true), to show on Cloudflare that wrangler
 // deploy makes each one and cloudflare:13-delete deletes it. The template itself stays as minimal as it is. A kind is
 // one row.
 
@@ -26,7 +26,7 @@ var extras = []extra{
 	{add: `"queues": { "producers": [{ "binding": "JOBS" }] }`, list: "/queues", field: "queue_name", suffix: "jobs"},
 }
 
-// withExtras reports whether this walk adds the extras (mise run example:e2e-extras).
+// withExtras reports whether this walk adds the extras (mise run new-repo:e2e-extras).
 func withExtras() bool { return os.Getenv("E2E_EXTRAS") == "true" }
 
 // addExtras writes the extras into the repo's wrangler.jsonc, as a developer adds bindings at its top level.
